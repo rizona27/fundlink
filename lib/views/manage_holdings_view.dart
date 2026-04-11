@@ -106,10 +106,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     final parts = key.split('|');
     final clientName = parts[0];
     final clientId = parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
+
+    // 应用隐私模式
+    final displayName = _dataManager.obscuredName(clientName);
     if (clientId != null && clientId.isNotEmpty) {
-      return '$clientName($clientId)';
+      return '$displayName($clientId)';
     }
-    return clientName;
+    return displayName;
   }
 
   Color _getClientColor(String name) {
@@ -174,17 +177,21 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('修改客户姓名'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            CupertinoTextField(
-              controller: _renameController,
-              placeholder: '新客户姓名',
-              autofocus: true,
-            ),
-          ],
+        title: null,
+        content: Container(
+          width: 280,
+          child: Row(
+            children: [
+              const Text('批量重命名: '),
+              Expanded(
+                child: CupertinoTextField(
+                  controller: _renameController,
+                  placeholder: '请输入新客户姓名',
+                  autofocus: true,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           CupertinoDialogAction(
@@ -258,18 +265,26 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final cardBackgroundColor = isDarkMode
+        ? CupertinoColors.systemGrey6.withOpacity(0.5)
+        : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final secondaryTextColor = isDarkMode
+        ? CupertinoColors.white.withOpacity(0.5)
+        : CupertinoColors.systemGrey;
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: const SizedBox(),
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(CupertinoIcons.back, size: 24),
-        ),
-        trailing: Row(
+        leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 返回按钮
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Icon(CupertinoIcons.back, size: 24),
+            ),
             CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: _toggleAllCards,
@@ -288,18 +303,34 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
             ),
           ],
         ),
+        trailing: const SizedBox(width: 44),
       ),
       child: SafeArea(
         child: Column(
           children: [
-            if (_isSearchVisible)
-              Padding(
-                padding: const EdgeInsets.all(12),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 250),
+              crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              firstChild: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
                 child: CupertinoSearchTextField(
                   placeholder: '搜索客户名、基金代码',
                   onChanged: (value) => setState(() => _searchText = value),
                 ),
               ),
+              secondChild: const SizedBox(height: 0),
+            ),
             Expanded(
               child: _dataManager.holdings.isEmpty
                   ? const Center(
@@ -314,14 +345,20 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
               )
                   : ListView.builder(
                 key: ValueKey(_dataVersion),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 itemCount: _sortedKeys.length,
                 itemBuilder: (context, index) {
                   final key = _sortedKeys[index];
-                  final holdings = _filteredGroupedHoldings[key]!;
+                  final holdings = _filteredGroupedHoldings[key];
+
+                  if (holdings == null || holdings.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
                   final isExpanded = _expandedClients.contains(key);
                   final gradientColor = _getClientColor(holdings.first.clientName);
                   final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
+                  final bool isLastClient = index == _sortedKeys.length - 1;
 
                   return Column(
                     children: [
@@ -349,14 +386,14 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                               padding: EdgeInsets.zero,
                               minSize: 0,
                               onPressed: () => _showRenameDialog(key),
-                              child: const Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
+                              child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
                             ),
                             const SizedBox(width: 12),
                             CupertinoButton(
                               padding: EdgeInsets.zero,
                               minSize: 0,
                               onPressed: () => _showDeleteClientDialog(key),
-                              child: const Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
+                              child: Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
                             ),
                           ],
                         )
@@ -372,18 +409,24 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                             children: holdings.asMap().entries.map((entry) {
                               final holding = entry.value;
                               final cardIndex = entry.key;
-                              return _FadeInCard(
-                                key: ValueKey('fade_${holding.id}_$cardIndex'),
-                                delay: Duration(milliseconds: 100 + (cardIndex * 50)),
-                                duration: const Duration(milliseconds: 400),
-                                child: _buildHoldingCard(holding),
+                              final isLastCard = cardIndex == holdings.length - 1;
+                              return Column(
+                                children: [
+                                  _FadeInCard(
+                                    key: ValueKey('fade_${holding.id}_$cardIndex'),
+                                    delay: Duration(milliseconds: 100 + (cardIndex * 50)),
+                                    duration: const Duration(milliseconds: 400),
+                                    child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
+                                  ),
+                                  if (!isLastCard) const SizedBox(height: 4),
+                                ],
                               );
                             }).toList(),
                           ),
                         )
                             : const SizedBox.shrink(),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: isLastClient ? 0 : 8),
                     ],
                   );
                 },
@@ -395,12 +438,12 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     );
   }
 
-  Widget _buildHoldingCard(FundHolding holding) {
+  Widget _buildHoldingCard(FundHolding holding, Color cardBackgroundColor, Color textColor, Color secondaryTextColor) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CupertinoColors.white,
+        color: cardBackgroundColor,
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
@@ -418,17 +461,17 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
               children: [
                 Text(
                   holding.fundName,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${holding.fundCode} | ${holding.purchaseAmount.toStringAsFixed(2)}元 | ${holding.purchaseShares.toStringAsFixed(2)}份',
-                  style: const TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+                  style: TextStyle(fontSize: 11, color: secondaryTextColor),
                 ),
                 if (holding.remarks.isNotEmpty)
                   Text(
                     '备注: ${holding.remarks}',
-                    style: const TextStyle(fontSize: 10, color: CupertinoColors.systemGrey),
+                    style: TextStyle(fontSize: 10, color: secondaryTextColor),
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
@@ -464,7 +507,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   }
 }
 
-// 淡入动画卡片组件
 class _FadeInCard extends StatefulWidget {
   final Widget child;
   final Duration delay;

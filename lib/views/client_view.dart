@@ -145,6 +145,11 @@ class _ClientViewState extends State<ClientView> {
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 刷新按钮放在最前面
+            RefreshButton(
+              dataManager: _dataManager,
+              fundService: _fundService,
+            ),
             CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: _areAnyCardsExpanded ? _collapseAll : _expandAll,
@@ -174,10 +179,7 @@ class _ClientViewState extends State<ClientView> {
             ),
           ],
         ),
-        trailing: RefreshButton(
-          dataManager: _dataManager,
-          fundService: _fundService,
-        ),
+        trailing: const SizedBox(width: 44),
       ),
       child: SafeArea(
         child: Column(
@@ -226,17 +228,23 @@ class _ClientViewState extends State<ClientView> {
   Widget _buildHoldingsList(bool isDarkMode) {
     return ListView.builder(
       key: ValueKey(_dataVersion),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       itemCount: _sortedClientNames.length,
       itemBuilder: (context, index) {
         final clientName = _sortedClientNames[index];
-        final holdings = _filteredGroupedHoldings[clientName]!;
+        final holdings = _filteredGroupedHoldings[clientName];
+
+        if (holdings == null || holdings.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
         final isExpanded = _expandedClients.contains(clientName);
         final gradient = _getGradientForName(clientName);
+        final bool isLastClient = index == _sortedClientNames.length - 1;
 
         return Container(
           key: ValueKey('client_${clientName}_$index'),
-          margin: const EdgeInsets.only(bottom: 6),
+          margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
           child: Column(
             children: [
               GradientCard(
@@ -254,7 +262,6 @@ class _ClientViewState extends State<ClientView> {
                   }
                 }),
               ),
-              // 展开区域 - 使用 AnimatedSize 实现高度动画
               AnimatedSize(
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
@@ -274,12 +281,10 @@ class _ClientViewState extends State<ClientView> {
     );
   }
 
-  // 构建带动画的基金卡片列表（逐个淡入）
   List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings) {
     final cards = <Widget>[];
     for (int i = 0; i < holdings.length; i++) {
       final holding = holdings[i];
-      // 每个卡片的延迟时间：基础延迟 + 每个卡片增加 80ms
       final delay = Duration(milliseconds: 100 + (i * 80));
 
       cards.add(
@@ -302,16 +307,18 @@ class _ClientViewState extends State<ClientView> {
           ),
         ),
       );
-      // 添加间距（最后一个不加）
+
       if (i < holdings.length - 1) {
         cards.add(const SizedBox(height: 8));
       }
+    }
+    if (holdings.isNotEmpty) {
+      cards.add(const SizedBox(height: 8));
     }
     return cards;
   }
 }
 
-// 自定义淡入动画组件
 class _FadeInWidget extends StatefulWidget {
   final Widget child;
   final Duration delay;
@@ -349,7 +356,6 @@ class _FadeInWidgetState extends State<_FadeInWidget> with SingleTickerProviderS
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
 
-    // 延迟后开始动画
     Future.delayed(widget.delay, () {
       if (mounted) {
         _controller.forward();

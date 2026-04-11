@@ -246,6 +246,11 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final backgroundColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.systemGrey6;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final secondaryTextColor = isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey;
+
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: const Text('编辑持仓'),
@@ -265,6 +270,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             children: [
               _buildSection(
                 title: '必填信息',
+                isDarkMode: isDarkMode,
                 children: [
                   _buildTextField(
                     title: '客户姓名',
@@ -273,6 +279,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     controller: _clientNameController,
                     error: _clientNameError,
                     icon: CupertinoIcons.person,
+                    isDarkMode: isDarkMode,
                     onChanged: _validateClientName,
                   ),
                   const SizedBox(height: 12),
@@ -284,6 +291,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _fundCodeError,
                     icon: CupertinoIcons.number,
                     keyboardType: TextInputType.number,
+                    isDarkMode: isDarkMode,
                     onChanged: _onFundCodeChanged,
                   ),
                   const SizedBox(height: 12),
@@ -295,6 +303,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _amountError,
                     icon: CupertinoIcons.money_dollar,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    isDarkMode: isDarkMode,
                     onChanged: _onAmountChanged,
                   ),
                   const SizedBox(height: 12),
@@ -306,15 +315,17 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _sharesError,
                     icon: CupertinoIcons.chart_pie,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    isDarkMode: isDarkMode,
                     onChanged: _onSharesChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildDatePicker(),
+                  _buildDatePicker(isDarkMode),
                 ],
               ),
               const SizedBox(height: 24),
               _buildSection(
                 title: '选填信息',
+                isDarkMode: isDarkMode,
                 children: [
                   _buildTextField(
                     title: '客户号',
@@ -323,6 +334,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     controller: _clientIdController,
                     icon: CupertinoIcons.creditcard,
                     keyboardType: TextInputType.number,
+                    isDarkMode: isDarkMode,
                     onChanged: (v) {
                       final filtered = v.replaceAll(RegExp(r'[^0-9]'), '');
                       final newValue = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
@@ -342,6 +354,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     hint: '选填，最多30个字符',
                     controller: _remarksController,
                     icon: CupertinoIcons.text_bubble,
+                    isDarkMode: isDarkMode,
                     onChanged: (v) {
                       if (v.length > 30) {
                         final cursor = _remarksController.selection.baseOffset;
@@ -360,7 +373,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   Expanded(
                     child: CupertinoButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      color: CupertinoColors.systemGrey,
+                      color: isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey,
                       child: const Text('取消'),
                     ),
                   ),
@@ -383,8 +396,12 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   Widget _buildSection({
     required String title,
+    required bool isDarkMode,
     required List<Widget> children,
   }) {
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final backgroundColor = isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -392,16 +409,16 @@ class _EditHoldingViewState extends State<EditHoldingView> {
           padding: const EdgeInsets.only(left: 8, bottom: 8),
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: CupertinoColors.label,
+              color: textColor,
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
+            color: backgroundColor,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
@@ -420,9 +437,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     required TextEditingController controller,
     required IconData icon,
     required Function(String) onChanged,
+    required bool isDarkMode,
     String? error,
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final secondaryTextColor = isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey;
+    final backgroundColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -444,10 +466,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             const SizedBox(width: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
             ),
             if (required)
-              const Text(' *', style: TextStyle(color: CupertinoColors.systemRed)),
+              Text(' *', style: TextStyle(color: CupertinoColors.systemRed)),
           ],
         ),
         const SizedBox(height: 8),
@@ -458,9 +484,11 @@ class _EditHoldingViewState extends State<EditHoldingView> {
           keyboardType: keyboardType,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: CupertinoColors.white,
+            color: backgroundColor,
             borderRadius: BorderRadius.circular(10),
           ),
+          style: TextStyle(color: textColor),
+          placeholderStyle: TextStyle(color: secondaryTextColor),
         ),
         if (error != null)
           Padding(
@@ -478,7 +506,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   // 数字日期选择器
-  Widget _buildDatePicker() {
+  Widget _buildDatePicker(bool isDarkMode) {
     final now = DateTime.now();
     final years = List.generate(10, (i) => now.year - 5 + i);
     final months = List.generate(12, (i) => i + 1);
@@ -490,6 +518,9 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     int selectedYearIndex = years.indexOf(_tempPurchaseDate.year);
     int selectedMonthIndex = _tempPurchaseDate.month - 1;
     int selectedDayIndex = _tempPurchaseDate.day - 1;
+
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final backgroundColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +541,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
               child: const Icon(CupertinoIcons.calendar, size: 14, color: CupertinoColors.white),
             ),
             const SizedBox(width: 8),
-            const Text('购买日期 *', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            Text(
+              '购买日期 *',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -526,14 +564,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: CupertinoColors.white,
+              color: backgroundColor,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
                 Text(
                   '${_purchaseDate.year}-${_purchaseDate.month.toString().padLeft(2, '0')}-${_purchaseDate.day.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontSize: 16),
+                  style: TextStyle(fontSize: 16, color: textColor),
                 ),
                 const Spacer(),
                 Icon(
@@ -550,7 +588,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: CupertinoColors.white,
+              color: backgroundColor,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
@@ -581,7 +619,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               _tempPurchaseDate = newDate;
                             });
                           },
-                          children: years.map((year) => Center(child: Text('$year年'))).toList(),
+                          children: years.map((year) => Center(child: Text('$year年', style: TextStyle(color: textColor)))).toList(),
                         ),
                       ),
                       Expanded(
@@ -596,7 +634,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               _tempPurchaseDate = DateTime(_tempPurchaseDate.year, newMonth, newDay);
                             });
                           },
-                          children: months.map((month) => Center(child: Text('$month月'))).toList(),
+                          children: months.map((month) => Center(child: Text('$month月', style: TextStyle(color: textColor)))).toList(),
                         ),
                       ),
                       Expanded(
@@ -609,7 +647,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               _tempPurchaseDate = DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month, newDay);
                             });
                           },
-                          children: days.map((day) => Center(child: Text('$day日'))).toList(),
+                          children: days.map((day) => Center(child: Text('$day日', style: TextStyle(color: textColor)))).toList(),
                         ),
                       ),
                     ],
