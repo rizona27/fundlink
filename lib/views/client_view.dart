@@ -24,7 +24,6 @@ class _ClientViewState extends State<ClientView> {
   String _searchText = '';
   final Set<String> _expandedClients = {};
   bool _isSearchVisible = false;
-  bool _isLoading = true;
 
   @override
   void didChangeDependencies() {
@@ -45,10 +44,6 @@ class _ClientViewState extends State<ClientView> {
   Future<void> _loadInitialData() async {
     if (_dataManager.holdings.isEmpty) {
       await _loadSampleData();
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -59,10 +54,6 @@ class _ClientViewState extends State<ClientView> {
     for (final holding in sampleHoldings) {
       await _dataManager.addHolding(holding);
     }
-
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   Map<String, List<FundHolding>> get _groupedHoldings {
@@ -183,16 +174,6 @@ class _ClientViewState extends State<ClientView> {
         trailing: RefreshButton(
           dataManager: _dataManager,
           fundService: _fundService,
-          onRefreshStart: () {
-            setState(() {
-              _isLoading = true;
-            });
-          },
-          onRefreshComplete: () {
-            setState(() {
-              _isLoading = false;
-            });
-          },
         ),
       ),
       child: SafeArea(
@@ -225,18 +206,7 @@ class _ClientViewState extends State<ClientView> {
               secondChild: const SizedBox(height: 0),
             ),
             Expanded(
-              child: _isLoading
-                  ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CupertinoActivityIndicator(radius: 20),
-                    SizedBox(height: 16),
-                    Text('正在加载基金净值数据...'),
-                  ],
-                ),
-              )
-                  : _filteredGroupedHoldings.isEmpty
+              child: _filteredGroupedHoldings.isEmpty
                   ? const EmptyState(
                 icon: CupertinoIcons.person,
                 title: '暂无数据',
@@ -251,7 +221,6 @@ class _ClientViewState extends State<ClientView> {
   }
 
   Widget _buildHoldingsList(bool isDarkMode) {
-    // 使用 ListView.builder 并确保每个 item 有唯一 key
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       itemCount: _sortedClientNames.length,
@@ -261,44 +230,46 @@ class _ClientViewState extends State<ClientView> {
         final isExpanded = _expandedClients.contains(clientName);
         final gradient = _getGradientForName(clientName);
 
-        return Column(
-          key: ValueKey('client_$clientName'),  // 确保唯一性
-          children: [
-            GradientCard(
-              title: clientName,
-              subtitle: '持仓数:',
-              countValue: holdings.length,
-              gradient: gradient,
-              isExpanded: isExpanded,
-              isDarkMode: isDarkMode,
-              onTap: () => setState(() {
-                if (isExpanded) {
-                  _expandedClients.remove(clientName);
-                } else {
-                  _expandedClients.add(clientName);
-                }
-              }),
-            ),
-            if (isExpanded)
-              Column(
-                children: holdings.map((holding) {
-                  return FundCard(
-                    key: ValueKey(holding.id),  // 使用唯一 id
-                    holding: holding,
-                    hideClientInfo: true,
-                    onCopyClientId: () {
-                      _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-                      context.showToast('客户号已复制');
-                    },
-                    onGenerateReport: () {
-                      _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
-                      context.showToast('报告已生成');
-                    },
-                  );
-                }).toList(),
+        return Container(
+          key: ValueKey('client_${clientName}_$index'),
+          margin: const EdgeInsets.only(bottom: 6),
+          child: Column(
+            children: [
+              GradientCard(
+                title: clientName,
+                subtitle: '持仓数:',
+                countValue: holdings.length,
+                gradient: gradient,
+                isExpanded: isExpanded,
+                isDarkMode: isDarkMode,
+                onTap: () => setState(() {
+                  if (isExpanded) {
+                    _expandedClients.remove(clientName);
+                  } else {
+                    _expandedClients.add(clientName);
+                  }
+                }),
               ),
-            const SizedBox(height: 6),
-          ],
+              if (isExpanded)
+                Column(
+                  children: holdings.map((holding) {
+                    return FundCard(
+                      key: ValueKey(holding.id),
+                      holding: holding,
+                      hideClientInfo: true,
+                      onCopyClientId: () {
+                        _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+                        context.showToast('客户号已复制');
+                      },
+                      onGenerateReport: () {
+                        _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
+                        context.showToast('报告已生成');
+                      },
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
         );
       },
     );

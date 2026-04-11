@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors, Material;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -28,8 +29,8 @@ class RefreshButton extends StatefulWidget {
 
 class _RefreshButtonState extends State<RefreshButton> {
   bool _isRefreshing = false;
+  OverlayEntry? _loadingOverlayEntry;
 
-  /// 获取上一个工作日
   DateTime _getPreviousWorkday(DateTime date) {
     var result = DateTime(date.year, date.month, date.day);
     while (true) {
@@ -45,7 +46,6 @@ class _RefreshButtonState extends State<RefreshButton> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  /// 带重试的单个基金获取
   Future<(String, FundHolding?)> _fetchHoldingWithRetry(FundHolding holding) async {
     var retryCount = 0;
 
@@ -58,7 +58,7 @@ class _RefreshButtonState extends State<RefreshButton> {
           fundName: fundInfo['fundName'] as String? ?? holding.fundName,
           currentNav: fundInfo['currentNav'] as double? ?? holding.currentNav,
           navDate: fundInfo['navDate'] as DateTime? ?? holding.navDate,
-          isValid: true,  // 关键：设置为 true
+          isValid: true,
         );
         return (holding.id, updatedHolding);
       }
@@ -72,6 +72,53 @@ class _RefreshButtonState extends State<RefreshButton> {
     return (holding.id, null);
   }
 
+  void _showLoadingOverlay(BuildContext context) {
+    _loadingOverlayEntry = OverlayEntry(
+      builder: (context) => Material(
+        color: Colors.black.withOpacity(0.6),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CupertinoActivityIndicator(radius: 20),
+                const SizedBox(height: 16),
+                const Text(
+                  '正在刷新基金数据...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: CupertinoColors.label,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '请稍候',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: CupertinoColors.systemGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_loadingOverlayEntry!);
+  }
+
+  void _hideLoadingOverlay() {
+    _loadingOverlayEntry?.remove();
+    _loadingOverlayEntry = null;
+  }
+
   Future<void> _refresh() async {
     if (_isRefreshing) return;
 
@@ -82,8 +129,7 @@ class _RefreshButtonState extends State<RefreshButton> {
     widget.onRefreshStart?.call();
 
     if (mounted) {
-      final context = this.context;
-      context.showToast('开始刷新...');
+      _showLoadingOverlay(context);
     }
 
     await widget.dataManager.addLog('开始刷新所有基金信息', type: LogType.info);
@@ -92,7 +138,6 @@ class _RefreshButtonState extends State<RefreshButton> {
     final holdings = widget.dataManager.holdings;
     final totalCount = holdings.length;
 
-    // 收集需要刷新的基金
     final needsRefreshHoldings = <FundHolding>[];
     for (final holding in holdings) {
       final isLatest = holding.isValid &&
@@ -107,30 +152,21 @@ class _RefreshButtonState extends State<RefreshButton> {
     var skipCount = totalCount - needsRefreshHoldings.length;
     var failCount = 0;
 
-    // 并发请求，控制并发数
     if (needsRefreshHoldings.isNotEmpty) {
       final results = <(String, FundHolding?)>[];
 
-      // 分批处理
       for (int i = 0; i < needsRefreshHoldings.length; i += widget.maxConcurrentRequests) {
         final end = (i + widget.maxConcurrentRequests < needsRefreshHoldings.length)
             ? i + widget.maxConcurrentRequests
             : needsRefreshHoldings.length;
         final batch = needsRefreshHoldings.sublist(i, end);
 
-        // 并发执行当前批次
         final batchResults = await Future.wait(
             batch.map((holding) => _fetchHoldingWithRetry(holding))
         );
         results.addAll(batchResults);
-
-        // 更新进度
-        if (mounted) {
-          setState(() {});
-        }
       }
 
-      // 处理结果
       for (final result in results) {
         final (id, updatedHolding) = result;
         if (updatedHolding != null) {
@@ -146,6 +182,8 @@ class _RefreshButtonState extends State<RefreshButton> {
       '刷新完成: 成功 $successCount, 跳过 $skipCount, 失败 $failCount',
       type: LogType.success,
     );
+
+    _hideLoadingOverlay();
 
     if (mounted) {
       setState(() {

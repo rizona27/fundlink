@@ -40,7 +40,7 @@ class FundHolding {
     this.navReturn3m,
     this.navReturn6m,
     this.navReturn1y,
-  }) : id = id ?? const Uuid().v4();  // 使用 UUID 确保唯一性
+  }) : id = id ?? const Uuid().v4();
 
   double get totalValue => purchaseShares * currentNav;
   double get profit => totalValue - purchaseAmount;
@@ -82,7 +82,7 @@ class FundHolding {
     double? navReturn1y,
   }) {
     return FundHolding(
-      id: id ?? this.id,  // 保持原有 id，不要生成新的
+      id: id ?? this.id,
       clientName: clientName ?? this.clientName,
       clientId: clientId ?? this.clientId,
       fundCode: fundCode ?? this.fundCode,
@@ -173,7 +173,7 @@ class MockData {
   static List<FundHolding> getHoldings() {
     return [
       FundHolding(
-        id: 'mock_1',  // 添加明确的 id
+        id: 'mock_110022',
         clientName: "张三",
         clientId: "123456789012",
         fundCode: "110022",
@@ -187,7 +187,7 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
-        id: 'mock_2',
+        id: 'mock_163406',
         clientName: "张三",
         clientId: "123456789012",
         fundCode: "163406",
@@ -201,7 +201,7 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
-        id: 'mock_3',
+        id: 'mock_519069',
         clientName: "李四",
         clientId: "234567890123",
         fundCode: "519069",
@@ -215,7 +215,7 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
-        id: 'mock_4',
+        id: 'mock_000001',
         clientName: "李四",
         clientId: "234567890123",
         fundCode: "000001",
@@ -229,7 +229,7 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
-        id: 'mock_5',
+        id: 'mock_110011',
         clientName: "王五",
         clientId: "345678901234",
         fundCode: "110011",
@@ -243,7 +243,7 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
-        id: 'mock_6',
+        id: 'mock_519688',
         clientName: "赵六",
         clientId: "456789012345",
         fundCode: "519688",
