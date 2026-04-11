@@ -24,7 +24,7 @@ class _ClientViewState extends State<ClientView> {
   String _searchText = '';
   final Set<String> _expandedClients = {};
   bool _isSearchVisible = false;
-  int _dataVersion = 0; // 用于强制刷新列表
+  int _dataVersion = 0;
 
   @override
   void didChangeDependencies() {
@@ -38,7 +38,6 @@ class _ClientViewState extends State<ClientView> {
 
   void _onDataManagerChanged() {
     if (mounted) {
-      // 数据变化时增加版本号，强制 ListView 重建
       setState(() {
         _dataVersion++;
       });
@@ -225,7 +224,6 @@ class _ClientViewState extends State<ClientView> {
   }
 
   Widget _buildHoldingsList(bool isDarkMode) {
-    // 使用 _dataVersion 作为 key，确保数据变化时列表完全重建
     return ListView.builder(
       key: ValueKey(_dataVersion),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -256,32 +254,16 @@ class _ClientViewState extends State<ClientView> {
                   }
                 }),
               ),
-              AnimatedContainer(
-                key: ValueKey('animated_${clientName}_$index'),
-                duration: const Duration(milliseconds: 350),
+              // 展开区域 - 使用 AnimatedSize 实现高度动画
+              AnimatedSize(
+                duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
-                margin: EdgeInsets.only(
-                  left: isExpanded ? 16 : 0,
-                  top: isExpanded ? 8 : 0,
-                ),
                 child: isExpanded
-                    ? Column(
-                  children: holdings.asMap().entries.map((entry) {
-                    final holding = entry.value;
-                    return FundCard(
-                      key: ValueKey('fund_${holding.id}_${entry.key}_${holding.currentNav}'),
-                      holding: holding,
-                      hideClientInfo: true,
-                      onCopyClientId: () {
-                        _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-                        context.showToast('客户号已复制');
-                      },
-                      onGenerateReport: () {
-                        _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
-                        context.showToast('报告已生成');
-                      },
-                    );
-                  }).toList(),
+                    ? Container(
+                  margin: const EdgeInsets.only(left: 16, top: 8),
+                  child: Column(
+                    children: _buildAnimatedFundCards(holdings),
+                  ),
                 )
                     : const SizedBox.shrink(),
               ),
@@ -289,6 +271,106 @@ class _ClientViewState extends State<ClientView> {
           ),
         );
       },
+    );
+  }
+
+  // 构建带动画的基金卡片列表（逐个淡入）
+  List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings) {
+    final cards = <Widget>[];
+    for (int i = 0; i < holdings.length; i++) {
+      final holding = holdings[i];
+      // 每个卡片的延迟时间：基础延迟 + 每个卡片增加 80ms
+      final delay = Duration(milliseconds: 100 + (i * 80));
+
+      cards.add(
+        _FadeInWidget(
+          key: ValueKey('fade_${holding.id}_$i'),
+          delay: delay,
+          duration: const Duration(milliseconds: 400),
+          child: FundCard(
+            key: ValueKey('card_${holding.id}_$i'),
+            holding: holding,
+            hideClientInfo: true,
+            onCopyClientId: () {
+              _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+              context.showToast('客户号已复制');
+            },
+            onGenerateReport: () {
+              _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
+              context.showToast('报告已生成');
+            },
+          ),
+        ),
+      );
+      // 添加间距（最后一个不加）
+      if (i < holdings.length - 1) {
+        cards.add(const SizedBox(height: 8));
+      }
+    }
+    return cards;
+  }
+}
+
+// 自定义淡入动画组件
+class _FadeInWidget extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+  final Duration duration;
+
+  const _FadeInWidget({
+    super.key,
+    required this.child,
+    required this.delay,
+    required this.duration,
+  });
+
+  @override
+  State<_FadeInWidget> createState() => _FadeInWidgetState();
+}
+
+class _FadeInWidgetState extends State<_FadeInWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: widget.duration,
+      vsync: this,
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    // 延迟后开始动画
+    Future.delayed(widget.delay, () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: widget.child,
+      ),
     );
   }
 }

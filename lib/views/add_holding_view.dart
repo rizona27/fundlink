@@ -18,7 +18,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   late DataManager _dataManager;
   late FundService _fundService;
 
-  // 表单控制器
+  // 使用 TextEditingController
   final TextEditingController _clientNameController = TextEditingController();
   final TextEditingController _clientIdController = TextEditingController();
   final TextEditingController _fundCodeController = TextEditingController();
@@ -118,16 +118,66 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     }
   }
 
-  String _formatDecimalInput(String input, int maxDigits) {
-    final parts = input.split('.');
-    String result = parts[0];
-    if (result.length > maxDigits) {
-      result = result.substring(0, maxDigits);
+  // 修复输入框光标问题：使用 controller.text 并手动设置
+  void _onFundCodeChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
+    if (newValue != _fundCodeController.text) {
+      final cursorPosition = _fundCodeController.selection.baseOffset;
+      _fundCodeController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _fundCodeController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateFundCode(newValue);
     }
-    if (parts.length > 1) {
-      result += '.' + parts[1].substring(0, parts[1].length > 2 ? 2 : parts[1].length);
+  }
+
+  void _onAmountChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final dotCount = filtered.split('.').length - 1;
+    if (dotCount > 1) return;
+    final parts = filtered.split('.');
+    String integerPart = parts[0];
+    if (integerPart.length > 9) {
+      integerPart = integerPart.substring(0, 9);
     }
-    return result;
+    String decimalPart = parts.length > 1 ? parts[1] : '';
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    final newValue = decimalPart.isEmpty ? integerPart : '$integerPart.$decimalPart';
+    if (newValue != _purchaseAmountController.text) {
+      final cursorPosition = _purchaseAmountController.selection.baseOffset;
+      _purchaseAmountController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _purchaseAmountController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateAmount(newValue);
+    }
+  }
+
+  void _onSharesChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final dotCount = filtered.split('.').length - 1;
+    if (dotCount > 1) return;
+    final parts = filtered.split('.');
+    String integerPart = parts[0];
+    if (integerPart.length > 9) {
+      integerPart = integerPart.substring(0, 9);
+    }
+    String decimalPart = parts.length > 1 ? parts[1] : '';
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    final newValue = decimalPart.isEmpty ? integerPart : '$integerPart.$decimalPart';
+    if (newValue != _purchaseSharesController.text) {
+      final cursorPosition = _purchaseSharesController.selection.baseOffset;
+      _purchaseSharesController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _purchaseSharesController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateShares(newValue);
+    }
   }
 
   Future<void> _saveHolding() async {
@@ -157,7 +207,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       await _dataManager.addLog('新增持仓: ${newHolding.fundCode} - ${newHolding.clientName}', type: LogType.success);
       context.showToast('添加成功');
 
-      // 刷新基金信息
       final fundInfo = await _fundService.fetchFundInfo(newHolding.fundCode);
       final updatedHolding = newHolding.copyWith(
         fundName: fundInfo['fundName'] as String? ?? '待加载',
@@ -209,7 +258,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     controller: _clientNameController,
                     error: _clientNameError,
                     icon: CupertinoIcons.person,
-                    onChanged: _validateClientName,
+                    onChanged: (v) {
+                      _validateClientName(v);
+                    },
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -220,12 +271,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     error: _fundCodeError,
                     icon: CupertinoIcons.number,
                     keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9]'), '');
-                      _fundCodeController.text = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
-                      _validateFundCode(_fundCodeController.text);
-                    },
+                    onChanged: _onFundCodeChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -236,13 +282,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     error: _amountError,
                     icon: CupertinoIcons.money_dollar,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9.]'), '');
-                      final dotCount = filtered.split('.').length - 1;
-                      if (dotCount > 1) return;
-                      _purchaseAmountController.text = _formatDecimalInput(filtered, 9);
-                      _validateAmount(_purchaseAmountController.text);
-                    },
+                    onChanged: _onAmountChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -253,13 +293,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     error: _sharesError,
                     icon: CupertinoIcons.chart_pie,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9.]'), '');
-                      final dotCount = filtered.split('.').length - 1;
-                      if (dotCount > 1) return;
-                      _purchaseSharesController.text = _formatDecimalInput(filtered, 9);
-                      _validateShares(_purchaseSharesController.text);
-                    },
+                    onChanged: _onSharesChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildDatePicker(),
@@ -276,10 +310,16 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     controller: _clientIdController,
                     icon: CupertinoIcons.creditcard,
                     keyboardType: TextInputType.number,
-                    maxLength: 12,
                     onChanged: (v) {
                       final filtered = v.replaceAll(RegExp(r'[^0-9]'), '');
-                      _clientIdController.text = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
+                      final newValue = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
+                      if (newValue != _clientIdController.text) {
+                        final cursor = _clientIdController.selection.baseOffset;
+                        _clientIdController.text = newValue;
+                        if (cursor <= newValue.length) {
+                          _clientIdController.selection = TextSelection.collapsed(offset: cursor);
+                        }
+                      }
                     },
                   ),
                   const SizedBox(height: 12),
@@ -289,10 +329,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     hint: '选填，最多30个字符',
                     controller: _remarksController,
                     icon: CupertinoIcons.text_bubble,
-                    maxLength: 30,
                     onChanged: (v) {
                       if (v.length > 30) {
+                        final cursor = _remarksController.selection.baseOffset;
                         _remarksController.text = v.substring(0, 30);
+                        if (cursor <= 30) {
+                          _remarksController.selection = TextSelection.collapsed(offset: cursor);
+                        }
                       }
                     },
                   ),
@@ -366,7 +409,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     required Function(String) onChanged,
     String? error,
     TextInputType keyboardType = TextInputType.text,
-    int? maxLength,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,7 +443,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           controller: controller,
           onChanged: onChanged,
           keyboardType: keyboardType,
-          maxLength: maxLength,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: CupertinoColors.white,
