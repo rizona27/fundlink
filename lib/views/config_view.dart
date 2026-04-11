@@ -3,6 +3,8 @@ import 'package:flutter/material.dart' show Colors, Divider;
 import '../providers/data_manager_provider.dart';
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
+import 'add_holding_view.dart';
+import 'manage_holdings_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -104,6 +106,37 @@ class _ConfigViewState extends State<ConfigView> {
                   _buildSection(
                     title: '数据管理',
                     children: [
+                      // 新增持仓
+                      _buildMenuRow(
+                        icon: CupertinoIcons.plus_circle_fill,
+                        title: '新增持仓',
+                        subtitle: '添加新的基金持仓记录',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            CupertinoPageRoute(
+                              builder: (context) => const AddHoldingView(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildDivider(),
+                      // 管理持仓
+                      _buildMenuRow(
+                        icon: CupertinoIcons.folder_fill,
+                        title: '管理持仓',
+                        subtitle: '编辑或删除现有持仓',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            CupertinoPageRoute(
+                              builder: (context) => const ManageHoldingsView(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildDivider(),
+                      // 清空所有日志
                       _buildMenuRow(
                         icon: CupertinoIcons.trash_fill,
                         title: '清空所有日志',
