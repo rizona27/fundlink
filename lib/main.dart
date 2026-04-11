@@ -1,13 +1,12 @@
 import 'package:flutter/cupertino.dart';
-import 'models/fund_holding.dart';
+import 'providers/data_manager_provider.dart';
+import 'services/data_manager.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 
 void main() {
-  // 使用 print 确保日志输出
-  print('==================== 应用启动 ====================');
   debugPrint('==================== 应用启动 ====================');
   runApp(const MyApp());
 }
@@ -17,15 +16,28 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('==================== MyApp build ====================');
+    return DataManagerProvider(
+      dataManager: DataManager(),
+      child: const MyAppContent(),
+    );
+  }
+}
+
+class MyAppContent extends StatelessWidget {
+  const MyAppContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final dataManager = DataManagerProvider.of(context);
+
     return CupertinoApp(
       title: '基金持仓管理',
-      theme: CupertinoThemeData(
-        primaryColor: const Color(0xFF007AFF),
+      theme: const CupertinoThemeData(
+        primaryColor: Color(0xFF007AFF),
         primaryContrastingColor: CupertinoColors.white,
-        barBackgroundColor: CupertinoColors.systemBackground.withOpacity(0.92),
-        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
-        textTheme: const CupertinoTextThemeData(
+        barBackgroundColor: CupertinoColors.systemBackground,
+        scaffoldBackgroundColor: Color(0xFFF2F2F7),
+        textTheme: CupertinoTextThemeData(
           navTitleTextStyle: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -38,14 +50,16 @@ class MyApp extends StatelessWidget {
         ),
         brightness: Brightness.light,
       ),
-      home: const MainTabView(),
+      home: MainTabView(dataManager: dataManager),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
 class MainTabView extends StatefulWidget {
-  const MainTabView({super.key});
+  final DataManager dataManager;
+
+  const MainTabView({super.key, required this.dataManager});
 
   @override
   State<MainTabView> createState() => _MainTabViewState();
@@ -54,20 +68,18 @@ class MainTabView extends StatefulWidget {
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
 
-  final List<FundHolding> _holdings = MockData.getHoldings();
-
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-    print('==================== MainTabView initState ====================');
-    print('持仓数量: ${_holdings.length}');
+    debugPrint('==================== MainTabView initState ====================');
+    debugPrint('持仓数量: ${widget.dataManager.holdings.length}');
 
     _pages = [
-      ClientView(holdings: _holdings),
-      SummaryView(holdings: _holdings),
-      TopPerformersView(holdings: _holdings),
+      const ClientView(),
+      const SummaryView(),
+      const TopPerformersView(),
       const ConfigView(),
     ];
   }

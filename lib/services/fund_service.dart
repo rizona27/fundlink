@@ -4,12 +4,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
+import 'data_manager.dart';
 
 class FundService {
   static const String _eastmoneyUrl = 'https://fundgz.1234567.com.cn/js';
 
+  final DataManager? _dataManager;
+
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
+
+  // 构造函数，可选传入 DataManager 用于日志记录
+  FundService([this._dataManager]);
 
   // 只返回净值信息，不返回完整的 FundHolding 对象
   Future<Map<String, dynamic>> fetchFundInfo(String code) async {
@@ -20,16 +27,21 @@ class FundService {
     debugPrint('║ 请求时间: ${DateTime.now()}');
     debugPrint('╚══════════════════════════════════════════════════════════════════╝');
 
+    // 记录日志
+    _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
+
     // 检查缓存
     if (_cache.containsKey(code)) {
       final cached = _cache[code]!;
       debugPrint('✅ [缓存命中] 基金代码 $code');
+      _dataManager?.addLog('基金代码 $code: 使用缓存数据', type: LogType.cache);
       return cached;
     }
 
     // 检查进行中的请求
     if (_activeRequests.containsKey(code)) {
       debugPrint('🔄 [并发请求] 基金代码 $code 已有请求进行中');
+      _dataManager?.addLog('基金代码 $code: 使用进行中的请求', type: LogType.cache);
       return await _activeRequests[code]!;
     }
 
@@ -42,6 +54,7 @@ class FundService {
       return result;
     } catch (e) {
       debugPrint('❌ API失败: $e');
+      _dataManager?.addLog('基金代码 $code: API请求失败 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
         'currentNav': 0.0,
@@ -111,6 +124,7 @@ class FundService {
 
       if (statusCode != 200) {
         debugPrint('❌ 请求失败: HTTP $statusCode');
+        _dataManager?.addLog('基金代码 $code: HTTP ${response.statusCode}', type: LogType.error);
         return {
           'fundName': '加载失败',
           'currentNav': 0.0,
@@ -142,9 +156,19 @@ class FundService {
       debugPrint('📊 解析成功，字段: ${json.keys.join(', ')}');
 
       final fundName = json['name'] as String? ?? '未知基金';
-      final dwjz = double.tryParse(json['dwjz']?.toString() ?? '');
-      final gsz = double.tryParse(json['gsz']?.toString() ?? '');
-      final currentNav = dwjz ?? gsz ?? 0.0;
+
+      // 加强净值解析：确保正确转换 String 到 double
+      double currentNav = 0.0;
+      if (json['dwjz'] != null) {
+        final dwjzStr = json['dwjz'].toString();
+        currentNav = double.tryParse(dwjzStr) ?? 0.0;
+        debugPrint('📈 单位净值: $dwjzStr -> $currentNav');
+      }
+      if (currentNav == 0.0 && json['gsz'] != null) {
+        final gszStr = json['gsz'].toString();
+        currentNav = double.tryParse(gszStr) ?? 0.0;
+        debugPrint('📈 估算净值: $gszStr -> $currentNav');
+      }
 
       DateTime navDate = DateTime.now();
       if (json['jzrq'] != null) {
@@ -160,12 +184,20 @@ class FundService {
       }
 
       debugPrint('📈 基金名称: $fundName');
-      debugPrint('📈 单位净值: $dwjz');
-      debugPrint('📈 估算净值: $gsz');
       debugPrint('📈 使用净值: $currentNav');
       debugPrint('📅 净值日期: ${_formatDate(navDate)}');
 
-      final isValid = fundName != '未知基金' && fundName != '加载失败' && currentNav > 0;
+      // 加强 isValid 判断
+      final isValid = fundName != '未知基金' &&
+          fundName != '加载失败' &&
+          fundName != 'N/A' &&
+          currentNav > 0;
+
+      if (isValid) {
+        _dataManager?.addLog('基金代码 $code: 获取成功 - $fundName, 净值: $currentNav', type: LogType.success);
+      } else {
+        _dataManager?.addLog('基金代码 $code: 数据无效 - fundName: $fundName, currentNav: $currentNav', type: LogType.error);
+      }
 
       return {
         'fundName': fundName,
@@ -177,6 +209,7 @@ class FundService {
     } on SocketException catch (e) {
       debugPrint('❌ 网络异常: $e');
       debugPrint('   可能原因: 无法连接到服务器、DNS解析失败');
+      _dataManager?.addLog('基金代码 $code: 网络异常 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
         'currentNav': 0.0,
@@ -187,6 +220,7 @@ class FundService {
     } on TimeoutException catch (e) {
       debugPrint('❌ 超时异常: $e');
       debugPrint('   尝试增加超时时间或检查网络连接');
+      _dataManager?.addLog('基金代码 $code: 请求超时 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
         'currentNav': 0.0,

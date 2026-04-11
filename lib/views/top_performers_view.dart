@@ -1,5 +1,8 @@
 import 'package:flutter/cupertino.dart';
+import '../providers/data_manager_provider.dart';
+import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../widgets/empty_state.dart';
 
 enum SortType {
@@ -25,19 +28,17 @@ extension SortTypeExtension on SortType {
 }
 
 class TopPerformersView extends StatefulWidget {
-  final List<FundHolding> holdings;
-
-  const TopPerformersView({super.key, required this.holdings});
+  const TopPerformersView({super.key});
 
   @override
   State<TopPerformersView> createState() => _TopPerformersViewState();
 }
 
 class _TopPerformersViewState extends State<TopPerformersView> {
+  late DataManager _dataManager;
   SortType _sortType = SortType.profit;
   bool _isAscending = false;
 
-  // 筛选条件
   String _fundCodeFilter = '';
   double? _minAmount;
   double? _maxAmount;
@@ -46,12 +47,17 @@ class _TopPerformersViewState extends State<TopPerformersView> {
 
   bool _showFilter = false;
 
-  // 获取有效的持仓（有净值数据的）
-  List<FundHolding> get _validHoldings {
-    return widget.holdings.where((h) => h.isValid && h.currentNav > 0).toList();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dataManager = DataManagerProvider.of(context);
+    _dataManager.addLog('进入收益排行页面', type: LogType.info);
   }
 
-  // 筛选后的持仓
+  List<FundHolding> get _validHoldings {
+    return _dataManager.holdings.where((h) => h.isValid && h.currentNav > 0).toList();
+  }
+
   List<FundHolding> get _filteredHoldings {
     var result = _validHoldings;
 
@@ -81,7 +87,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     return result;
   }
 
-  // 排序后的持仓
   List<FundHolding> get _sortedHoldings {
     final result = List<FundHolding>.from(_filteredHoldings);
 
@@ -95,12 +100,16 @@ class _TopPerformersViewState extends State<TopPerformersView> {
           valueB = b.purchaseAmount;
           break;
         case SortType.profit:
-          valueA = a.profit;
-          valueB = b.profit;
+          final profitA = _dataManager.calculateProfit(a);
+          final profitB = _dataManager.calculateProfit(b);
+          valueA = profitA.absolute;
+          valueB = profitB.absolute;
           break;
         case SortType.profitRate:
-          valueA = a.annualizedProfitRate;
-          valueB = b.annualizedProfitRate;
+          final profitA = _dataManager.calculateProfit(a);
+          final profitB = _dataManager.calculateProfit(b);
+          valueA = profitA.annualized;
+          valueB = profitB.annualized;
           break;
         case SortType.days:
           valueA = DateTime.now().difference(a.purchaseDate).inDays.toDouble();
@@ -122,6 +131,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       _minProfitRate = null;
       _maxProfitRate = null;
     });
+    _dataManager.addLog('重置收益排行筛选条件', type: LogType.info);
   }
 
   @override
@@ -276,6 +286,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                   _isAscending = false;
                 }
               });
+              _dataManager.addLog('排序方式切换为: ${type.label}${_isAscending ? "(升序)" : "(降序)"}', type: LogType.info);
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -311,6 +322,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       itemBuilder: (context, index) {
         final holding = _sortedHoldings[index];
         final days = DateTime.now().difference(holding.purchaseDate).inDays;
+        final profit = _dataManager.calculateProfit(holding);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -356,7 +368,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${holding.fundCode} | ${holding.clientName}',
+                          '${holding.fundCode} | ${_dataManager.obscuredName(holding.clientName)}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: CupertinoColors.systemGrey,
@@ -371,8 +383,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
               Row(
                 children: [
                   _buildInfoItem('金额', '${(holding.purchaseAmount / 10000).toStringAsFixed(2)}万'),
-                  _buildInfoItem('收益', '${holding.profit >= 0 ? '+' : ''}${holding.profit.toStringAsFixed(2)}'),
-                  _buildInfoItem('年化收益', '${holding.annualizedProfitRate >= 0 ? '+' : ''}${holding.annualizedProfitRate.toStringAsFixed(2)}%'),
+                  _buildInfoItem('收益', '${profit.absolute >= 0 ? '+' : ''}${profit.absolute.toStringAsFixed(2)}'),
+                  _buildInfoItem('年化收益', '${profit.annualized >= 0 ? '+' : ''}${profit.annualized.toStringAsFixed(2)}%'),
                   _buildInfoItem('持有', '${days}天'),
                 ],
               ),

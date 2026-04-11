@@ -1,24 +1,32 @@
 import 'package:flutter/cupertino.dart';
+import '../providers/data_manager_provider.dart';
+import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../widgets/empty_state.dart';
 
 class SummaryView extends StatefulWidget {
-  final List<FundHolding> holdings;
-
-  const SummaryView({super.key, required this.holdings});
+  const SummaryView({super.key});
 
   @override
   State<SummaryView> createState() => _SummaryViewState();
 }
 
 class _SummaryViewState extends State<SummaryView> {
+  late DataManager _dataManager;
   String _searchText = '';
   final Set<String> _expandedFunds = {};
 
-  // 按基金代码分组
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dataManager = DataManagerProvider.of(context);
+    _dataManager.addLog('进入基金汇总页面', type: LogType.info);
+  }
+
   Map<String, List<FundHolding>> get _groupedByFund {
     final map = <String, List<FundHolding>>{};
-    for (final holding in widget.holdings) {
+    for (final holding in _dataManager.holdings) {
       final key = holding.fundCode;
       if (!map.containsKey(key)) {
         map[key] = [];
@@ -28,7 +36,6 @@ class _SummaryViewState extends State<SummaryView> {
     return map;
   }
 
-  // 筛选后的分组
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
     if (_searchText.isEmpty) return _groupedByFund;
 
@@ -192,7 +199,6 @@ class _SummaryViewState extends State<SummaryView> {
               ],
             ),
             const SizedBox(height: 8),
-            // 收益率行
             Row(
               children: [
                 _buildReturnItem('近1月', navReturn1m),
@@ -240,9 +246,12 @@ class _SummaryViewState extends State<SummaryView> {
   }
 
   Widget _buildHoldersList(List<FundHolding> holdings) {
-    // 按收益排序
     final sortedHoldings = List<FundHolding>.from(holdings);
-    sortedHoldings.sort((a, b) => b.profit.compareTo(a.profit));
+    sortedHoldings.sort((a, b) {
+      final profitA = _dataManager.calculateProfit(a);
+      final profitB = _dataManager.calculateProfit(b);
+      return profitB.absolute.compareTo(profitA.absolute);
+    });
 
     return Container(
       margin: const EdgeInsets.only(top: 8, left: 12),
@@ -254,21 +263,22 @@ class _SummaryViewState extends State<SummaryView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: sortedHoldings.map((holding) {
+          final profit = _dataManager.calculateProfit(holding);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  holding.clientName,
+                  _dataManager.obscuredName(holding.clientName),
                   style: const TextStyle(fontSize: 14),
                 ),
                 Text(
-                  '收益: ${holding.profit >= 0 ? '+' : ''}${holding.profit.toStringAsFixed(2)}',
+                  '收益: ${profit.absolute >= 0 ? '+' : ''}${profit.absolute.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: holding.profit >= 0
+                    color: profit.absolute >= 0
                         ? CupertinoColors.systemGreen
                         : CupertinoColors.systemRed,
                   ),

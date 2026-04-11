@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 class FundHolding {
   final String id;
@@ -39,7 +40,7 @@ class FundHolding {
     this.navReturn3m,
     this.navReturn6m,
     this.navReturn1y,
-  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+  }) : id = id ?? const Uuid().v4();  // 使用 UUID 确保唯一性
 
   double get totalValue => purchaseShares * currentNav;
   double get profit => totalValue - purchaseAmount;
@@ -81,7 +82,7 @@ class FundHolding {
     double? navReturn1y,
   }) {
     return FundHolding(
-      id: id ?? this.id,
+      id: id ?? this.id,  // 保持原有 id，不要生成新的
       clientName: clientName ?? this.clientName,
       clientId: clientId ?? this.clientId,
       fundCode: fundCode ?? this.fundCode,
@@ -172,9 +173,10 @@ class MockData {
   static List<FundHolding> getHoldings() {
     return [
       FundHolding(
+        id: 'mock_1',  // 添加明确的 id
         clientName: "张三",
         clientId: "123456789012",
-        fundCode: "110022",  // 易方达消费行业股票
+        fundCode: "110022",
         fundName: "加载中...",
         purchaseAmount: 100000,
         purchaseShares: 50000,
@@ -185,9 +187,10 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
+        id: 'mock_2',
         clientName: "张三",
         clientId: "123456789012",
-        fundCode: "163406",  // 兴全合润混合
+        fundCode: "163406",
         fundName: "加载中...",
         purchaseAmount: 80000,
         purchaseShares: 30000,
@@ -198,9 +201,10 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
+        id: 'mock_3',
         clientName: "李四",
         clientId: "234567890123",
-        fundCode: "519069",  // 汇添富价值精选
+        fundCode: "519069",
         fundName: "加载中...",
         purchaseAmount: 50000,
         purchaseShares: 20000,
@@ -211,9 +215,10 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
+        id: 'mock_4',
         clientName: "李四",
         clientId: "234567890123",
-        fundCode: "000001",  // 华夏成长混合
+        fundCode: "000001",
         fundName: "加载中...",
         purchaseAmount: 60000,
         purchaseShares: 25000,
@@ -224,9 +229,10 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
+        id: 'mock_5',
         clientName: "王五",
         clientId: "345678901234",
-        fundCode: "110011",  // 易方达中小盘混合
+        fundCode: "110011",
         fundName: "加载中...",
         purchaseAmount: 120000,
         purchaseShares: 45000,
@@ -237,9 +243,10 @@ class MockData {
         remarks: "待加载净值",
       ),
       FundHolding(
+        id: 'mock_6',
         clientName: "赵六",
         clientId: "456789012345",
-        fundCode: "519688",  // 交银精选混合
+        fundCode: "519688",
         fundName: "加载中...",
         purchaseAmount: 75000,
         purchaseShares: 28000,

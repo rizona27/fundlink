@@ -24,11 +24,6 @@ class FundCard extends StatelessWidget {
     return '${date.year.toString().substring(2)}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  String _truncateName(String name, int maxLength) {
-    if (name.length <= maxLength) return name;
-    return '${name.substring(0, maxLength)}...';
-  }
-
   Color _getProfitColor(double value) {
     if (value > 0) return CupertinoColors.systemRed;
     if (value < 0) return CupertinoColors.systemGreen;
@@ -58,52 +53,53 @@ class FundCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 第一行：基金名称 + 代码 + 净值日期
+          // 第一行：基金名称 + 代码 + 净值日期（靠右）
           Row(
             children: [
-              SizedBox(
-                width: 85,
-                child: Text(
-                  _truncateName(holding.fundName, 7),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1C1C1E),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                holding.fundCode,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF8E8E93),
-                ),
-              ),
-              const Spacer(),
-              if (holding.isValid && holding.currentNav > 0)
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${holding.currentNav.toStringAsFixed(4)}',
+              // 基金名称和代码区域 - 允许压缩但保持最小宽度
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        holding.fundName,
                         style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF007AFF),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1C1C1E),
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '($_formatDate(holding.navDate))',
-                        style: const TextStyle(
-                          fontSize: 8,
-                          color: Color(0xFF007AFF),
-                        ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      holding.fundCode,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF8E8E93),
+                      ),
+                    ),
+                    // 置顶图标
+                    if (holding.isPinned) ...[
+                      const SizedBox(width: 4),
+                      const Icon(
+                        CupertinoIcons.pin_fill,
+                        size: 10,
+                        color: Color(0xFFFF9500),
                       ),
                     ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 净值日期 - 固定靠右，不压缩
+              if (holding.isValid && holding.currentNav > 0)
+                Text(
+                  '${holding.currentNav.toStringAsFixed(4)}(${_formatDate(holding.navDate)})',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF007AFF),
                   ),
                 )
               else
@@ -116,13 +112,31 @@ class FundCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
-          // 第二行：购买金额 和 份额 - 移除 Expanded 避免布局错误
+          // 客户信息（如果不隐藏）
+          if (!hideClientInfo) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  '客户: ${holding.clientName}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (holding.clientId.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '(${holding.clientId})',
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF8E8E93)),
+                  ),
+                ],
+                const Spacer(),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          // 第二行：购买金额 和 份额（均匀分布）
           Row(
             children: [
-              // 购买金额
-              Flexible(
-                flex: 1,
+              Expanded(
                 child: Row(
                   children: [
                     Text(
@@ -133,7 +147,7 @@ class FundCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${(holding.purchaseAmount / 10000).toStringAsFixed(0)}万',
+                      _formatPurchaseAmount(holding.purchaseAmount),
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -143,10 +157,7 @@ class FundCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // 份额
-              Flexible(
-                flex: 1,
+              Expanded(
                 child: Row(
                   children: [
                     Text(
@@ -167,18 +178,18 @@ class FundCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const Text('份', style: TextStyle(fontSize: 9)),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          // 第三行：收益 和 收益率 - 移除 Expanded
+          // 第三行：收益（左） + 收益率组合（右）
           Row(
             children: [
-              // 收益
-              Flexible(
-                flex: 1,
+              // 收益 - 左对齐
+              Expanded(
                 child: Row(
                   children: [
                     Text(
@@ -190,7 +201,7 @@ class FundCard extends StatelessWidget {
                     ),
                     if (holding.isValid && holding.currentNav > 0)
                       Text(
-                        '${holding.profit >= 0 ? '+' : ''}${holding.profit.toStringAsFixed(2)}',
+                        '${holding.profit >= 0 ? '+' : ''}${_formatProfitAmount(holding.profit)}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -199,32 +210,23 @@ class FundCard extends StatelessWidget {
                       )
                     else
                       const Text(
-                        '--',
+                        '--元',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF8E8E93),
                         ),
                       ),
-                    const Text('元', style: TextStyle(fontSize: 9)),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // 收益率
-              Flexible(
-                flex: 1,
+              // 收益率组合 - 与份额对齐
+              Expanded(
                 child: Wrap(
-                  spacing: 2,
+                  spacing: 4,
+                  runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(
-                      '收益率: ',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
-                      ),
-                    ),
                     if (holding.isValid && holding.currentNav > 0) ...[
                       Text(
                         '${absoluteReturn >= 0 ? '+' : ''}${absoluteReturn.toStringAsFixed(2)}%',
@@ -234,14 +236,20 @@ class FundCard extends StatelessWidget {
                           color: _getProfitColor(absoluteReturn),
                         ),
                       ),
-                      Text(
+                      const Text(
                         '[绝对]',
                         style: TextStyle(
-                          fontSize: 8,
-                          color: CupertinoColors.label.withOpacity(0.4),
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const Text(
+                        '|',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
                       Text(
                         '${annualizedReturn >= 0 ? '+' : ''}${annualizedReturn.toStringAsFixed(2)}%',
                         style: TextStyle(
@@ -250,14 +258,14 @@ class FundCard extends StatelessWidget {
                           color: _getProfitColor(annualizedReturn),
                         ),
                       ),
-                      Text(
+                      const Text(
                         '[年化]',
                         style: TextStyle(
-                          fontSize: 8,
-                          color: CupertinoColors.label.withOpacity(0.4),
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
                         ),
                       ),
-                    ] else
+                    ] else ...[
                       const Text(
                         '--%',
                         style: TextStyle(
@@ -266,18 +274,46 @@ class FundCard extends StatelessWidget {
                           color: Color(0xFF8E8E93),
                         ),
                       ),
+                      const Text(
+                        '[绝对]',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                      const Text(
+                        '|',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                      const Text(
+                        '--%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      ),
+                      const Text(
+                        '[年化]',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          // 第四行：购买日期 和 持有天数 - 移除 Expanded
+          // 第四行：购买日期 和 持有天数（均匀分布）
           Row(
             children: [
-              // 购买日期
-              Flexible(
-                flex: 1,
+              Expanded(
                 child: Row(
                   children: [
                     Text(
@@ -298,10 +334,7 @@ class FundCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // 持有天数
-              Flexible(
-                flex: 1,
+              Expanded(
                 child: Row(
                   children: [
                     Text(
@@ -324,6 +357,31 @@ class FundCard extends StatelessWidget {
               ),
             ],
           ),
+          // 备注
+          if (holding.remarks.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  '备注: ',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: CupertinoColors.label.withOpacity(0.5),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    holding.remarks,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF8E8E93),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           // 底部按钮行
           Row(
@@ -338,7 +396,9 @@ class FundCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF007AFF).withOpacity(0.8),
+                    color: holding.clientId.isEmpty
+                        ? CupertinoColors.systemGrey
+                        : const Color(0xFF007AFF).withOpacity(0.8),
                   ),
                 ),
               ),
@@ -347,12 +407,12 @@ class FundCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 minSize: 0,
                 onPressed: onGenerateReport,
-                child: Text(
+                child: const Text(
                   '报告',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF007AFF).withOpacity(0.8),
+                    color: Color(0xFF007AFF),
                   ),
                 ),
               ),
@@ -361,5 +421,27 @@ class FundCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatPurchaseAmount(double amount) {
+    if (amount >= 10000) {
+      final wan = amount / 10000;
+      if (wan == wan.toInt().toDouble()) {
+        return '${wan.toInt()}万元';
+      }
+      return '${wan.toStringAsFixed(2)}万元';
+    }
+    return '${amount.toStringAsFixed(2)}元';
+  }
+
+  String _formatProfitAmount(double amount) {
+    if (amount >= 10000) {
+      final wan = amount / 10000;
+      if (wan == wan.toInt().toDouble()) {
+        return '${wan.toInt()}万元';
+      }
+      return '${wan.toStringAsFixed(2)}万元';
+    }
+    return '${amount.toStringAsFixed(2)}元';
   }
 }
