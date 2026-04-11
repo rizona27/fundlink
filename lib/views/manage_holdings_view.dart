@@ -5,6 +5,7 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
+import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
 import 'edit_holding_view.dart';
 
@@ -24,7 +25,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   final Set<String> _expandedClients = {};
   int _dataVersion = 0;
 
-  // 重命名对话框的控制器
   final TextEditingController _renameController = TextEditingController();
 
   @override
@@ -95,6 +95,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     });
   }
 
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (!_isSearchVisible) _searchText = '';
+    });
+  }
+
   String _getDisplayName(String key) {
     final parts = key.split('|');
     final clientName = parts[0];
@@ -105,14 +112,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     return clientName;
   }
 
-  Color _getClientColor(String key) {
-    final parts = key.split('|');
-    final name = parts[0];
+  Color _getClientColor(String name) {
     int hash = 0;
     for (int i = 0; i < name.length; i++) {
       hash = (hash << 5) - hash + name.codeUnitAt(i);
     }
     hash = hash.abs();
+
     final softColors = [
       const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
       const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
@@ -120,6 +126,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
       const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
       const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
     ];
+
     return softColors[hash % softColors.length];
   }
 
@@ -250,9 +257,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('管理持仓'),
+        middle: const SizedBox(),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: () => Navigator.of(context).pop(),
@@ -271,12 +280,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
             ),
             CupertinoButton(
               padding: EdgeInsets.zero,
-              onPressed: () {
-                setState(() {
-                  _isSearchVisible = !_isSearchVisible;
-                  if (!_isSearchVisible) _searchText = '';
-                });
-              },
+              onPressed: _toggleSearch,
               child: Icon(
                 _isSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
                 size: 22,
@@ -316,108 +320,71 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                   final key = _sortedKeys[index];
                   final holdings = _filteredGroupedHoldings[key]!;
                   final isExpanded = _expandedClients.contains(key);
-                  final gradientColor = _getClientColor(key);
+                  final gradientColor = _getClientColor(holdings.first.clientName);
+                  final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      children: [
-                        // 客户卡片
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (isExpanded) {
-                                _expandedClients.remove(key);
-                              } else {
-                                _expandedClients.add(key);
-                              }
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [gradientColor.withOpacity(0.8), Colors.transparent],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: gradientColor.withOpacity(0.25),
-                                  blurRadius: 6,
-                                  offset: const Offset(3, 3),
-                                ),
-                              ],
+                  return Column(
+                    children: [
+                      GradientCard(
+                        title: _getDisplayName(key),
+                        subtitle: '持仓数:',
+                        countValue: holdings.length,
+                        gradient: gradient,
+                        isExpanded: isExpanded,
+                        isDarkMode: isDarkMode,
+                        onTap: () {
+                          setState(() {
+                            if (isExpanded) {
+                              _expandedClients.remove(key);
+                            } else {
+                              _expandedClients.add(key);
+                            }
+                          });
+                        },
+                        trailing: isExpanded
+                            ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minSize: 0,
+                              onPressed: () => _showRenameDialog(key),
+                              child: const Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
                             ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _getDisplayName(key),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                if (!isExpanded)
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '持仓数: ',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: CupertinoColors.label.withOpacity(0.5),
-                                        ),
-                                      ),
-                                      Text(
-                                        '${holdings.length}',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle: FontStyle.italic,
-                                          color: _colorForHoldingCount(holdings.length),
-                                        ),
-                                      ),
-                                      const Text('支', style: TextStyle(fontSize: 11)),
-                                    ],
-                                  ),
-                                if (isExpanded)
-                                  Row(
-                                    children: [
-                                      CupertinoButton(
-                                        padding: EdgeInsets.zero,
-                                        minSize: 0,
-                                        onPressed: () => _showRenameDialog(key),
-                                        child: const Text('改名', style: TextStyle(fontSize: 12)),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      CupertinoButton(
-                                        padding: EdgeInsets.zero,
-                                        minSize: 0,
-                                        onPressed: () => _showDeleteClientDialog(key),
-                                        child: const Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
-                                      ),
-                                    ],
-                                  ),
-                              ],
+                            const SizedBox(width: 12),
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minSize: 0,
+                              onPressed: () => _showDeleteClientDialog(key),
+                              child: const Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
                             ),
+                          ],
+                        )
+                            : null,
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutCubic,
+                        child: isExpanded
+                            ? Container(
+                          margin: const EdgeInsets.only(left: 16, top: 8),
+                          child: Column(
+                            children: holdings.asMap().entries.map((entry) {
+                              final holding = entry.value;
+                              final cardIndex = entry.key;
+                              return _FadeInCard(
+                                key: ValueKey('fade_${holding.id}_$cardIndex'),
+                                delay: Duration(milliseconds: 100 + (cardIndex * 50)),
+                                duration: const Duration(milliseconds: 400),
+                                child: _buildHoldingCard(holding),
+                              );
+                            }).toList(),
                           ),
-                        ),
-                        // 展开的持仓列表
-                        if (isExpanded)
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.only(left: 16, top: 8),
-                            child: Column(
-                              children: holdings.map((holding) {
-                                return _buildHoldingCard(holding);
-                              }).toList(),
-                            ),
-                          ),
-                      ],
-                    ),
+                        )
+                            : const SizedBox.shrink(),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   );
                 },
               ),
@@ -493,6 +460,61 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 淡入动画卡片组件
+class _FadeInCard extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+  final Duration duration;
+
+  const _FadeInCard({
+    super.key,
+    required this.child,
+    required this.delay,
+    required this.duration,
+  });
+
+  @override
+  State<_FadeInCard> createState() => _FadeInCardState();
+}
+
+class _FadeInCardState extends State<_FadeInCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: widget.duration,
+      vsync: this,
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    Future.delayed(widget.delay, () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnimation,
+      child: widget.child,
     );
   }
 }

@@ -1,26 +1,31 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
+import '../widgets/theme_switch.dart';
 
 class DataManager extends ChangeNotifier {
   static const String _holdingsKey = 'fund_holdings';
   static const String _logsKey = 'logs';
   static const String _privacyModeKey = 'privacy_mode';
+  static const String _themeModeKey = 'theme_mode';
 
   final Uuid _uuid = const Uuid();
 
   List<FundHolding> _holdings = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
+  ThemeMode _themeMode = ThemeMode.system;
 
   // Getters
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
+  ThemeMode get themeMode => _themeMode;
 
   DataManager() {
     loadData();
@@ -48,7 +53,38 @@ class DataManager extends ChangeNotifier {
     }
 
     _isPrivacyMode = prefs.getBool(_privacyModeKey) ?? true;
+
+    // 加载主题模式
+    final themeModeString = prefs.getString(_themeModeKey);
+    if (themeModeString != null) {
+      _themeMode = _parseThemeMode(themeModeString);
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+
     notifyListeners();
+  }
+
+  ThemeMode _parseThemeMode(String value) {
+    switch (value) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  String _themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.system:
+        return 'system';
+    }
   }
 
   Future<void> saveData() async {
@@ -66,6 +102,7 @@ class DataManager extends ChangeNotifier {
     await prefs.setStringList(_logsKey, logsJson);
 
     await prefs.setBool(_privacyModeKey, _isPrivacyMode);
+    await prefs.setString(_themeModeKey, _themeModeToString(_themeMode));
 
     debugPrint('DataManager: 所有数据保存成功');
   }
@@ -142,6 +179,15 @@ class DataManager extends ChangeNotifier {
     await saveData();
     await addLog('隐私模式: ${_isPrivacyMode ? "开启" : "关闭"}', type: LogType.info);
     notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (_themeMode != mode) {
+      _themeMode = mode;
+      await saveData();
+      await addLog('主题模式: ${mode.displayName}', type: LogType.info);
+      notifyListeners();
+    }
   }
 
   String obscuredName(String name) {

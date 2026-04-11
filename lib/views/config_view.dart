@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show Colors, Divider;
 import '../providers/data_manager_provider.dart';
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
+import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
 import 'manage_holdings_view.dart';
 
@@ -55,8 +56,14 @@ class _ConfigViewState extends State<ConfigView> {
     });
   }
 
+  void _onThemeChanged(ThemeMode mode) {
+    _dataManager.setThemeMode(mode);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
         middle: Text('设置'),
@@ -70,22 +77,27 @@ class _ConfigViewState extends State<ConfigView> {
                 children: [
                   _buildSection(
                     title: '通用设置',
+                    isDarkMode: isDarkMode,
                     children: [
                       _buildSwitchRow(
                         icon: CupertinoIcons.lock_fill,
                         title: '隐私模式',
                         subtitle: '开启后隐藏客户姓名中的部分字符',
                         value: _dataManager.isPrivacyMode,
+                        isDarkMode: isDarkMode,
                         onChanged: (value) async {
                           await _dataManager.togglePrivacyMode();
                           setState(() {});
                         },
                       ),
-                      _buildDivider(),
+                      _buildDivider(isDarkMode: isDarkMode),
+                      _buildThemeRow(isDarkMode: isDarkMode),
+                      _buildDivider(isDarkMode: isDarkMode),
                       _buildMenuRow(
                         icon: CupertinoIcons.doc_text_search,
                         title: '日志查询',
                         subtitle: '查看API请求和操作日志',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           setState(() {
                             _showLogs = !_showLogs;
@@ -97,20 +109,21 @@ class _ConfigViewState extends State<ConfigView> {
 
                   if (_showLogs) ...[
                     const SizedBox(height: 20),
-                    _buildLogFilterSection(),
+                    _buildLogFilterSection(isDarkMode: isDarkMode),
                     const SizedBox(height: 12),
-                    _buildLogListSection(),
+                    _buildLogListSection(isDarkMode: isDarkMode),
                   ],
 
                   const SizedBox(height: 20),
                   _buildSection(
                     title: '数据管理',
+                    isDarkMode: isDarkMode,
                     children: [
-                      // 新增持仓
                       _buildMenuRow(
                         icon: CupertinoIcons.plus_circle_fill,
                         title: '新增持仓',
                         subtitle: '添加新的基金持仓记录',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -120,12 +133,12 @@ class _ConfigViewState extends State<ConfigView> {
                           );
                         },
                       ),
-                      _buildDivider(),
-                      // 管理持仓
+                      _buildDivider(isDarkMode: isDarkMode),
                       _buildMenuRow(
                         icon: CupertinoIcons.folder_fill,
                         title: '管理持仓',
                         subtitle: '编辑或删除现有持仓',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -135,12 +148,12 @@ class _ConfigViewState extends State<ConfigView> {
                           );
                         },
                       ),
-                      _buildDivider(),
-                      // 清空所有日志
+                      _buildDivider(isDarkMode: isDarkMode),
                       _buildMenuRow(
                         icon: CupertinoIcons.trash_fill,
                         title: '清空所有日志',
                         subtitle: '删除所有操作日志记录',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           _showConfirmDialog(
                             title: '清空日志',
@@ -158,20 +171,23 @@ class _ConfigViewState extends State<ConfigView> {
                   const SizedBox(height: 20),
                   _buildSection(
                     title: '关于',
+                    isDarkMode: isDarkMode,
                     children: [
                       _buildMenuRow(
                         icon: CupertinoIcons.info_circle_fill,
                         title: '版本信息',
                         subtitle: 'v1.0.0',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           _showAboutDialog();
                         },
                       ),
-                      _buildDivider(),
+                      _buildDivider(isDarkMode: isDarkMode),
                       _buildMenuRow(
                         icon: CupertinoIcons.heart_fill,
                         title: '开源许可',
                         subtitle: 'MIT License',
+                        isDarkMode: isDarkMode,
                         onTap: () {
                           _showNotImplementedToast();
                         },
@@ -185,7 +201,9 @@ class _ConfigViewState extends State<ConfigView> {
                       'Happiness around the corner.',
                       style: TextStyle(
                         fontSize: 14,
-                        color: CupertinoColors.systemGrey.withOpacity(0.6),
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.6)
+                            : CupertinoColors.systemGrey.withOpacity(0.6),
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -199,10 +217,57 @@ class _ConfigViewState extends State<ConfigView> {
     );
   }
 
-  Widget _buildLogFilterSection() {
+  Widget _buildThemeRow({required bool isDarkMode}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBlue.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(CupertinoIcons.paintbrush_fill, size: 18, color: CupertinoColors.systemBlue),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '主题模式',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '浅色、深色或跟随系统',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ThemeSwitch(
+            initialMode: _dataManager.themeMode,
+            onChanged: _onThemeChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogFilterSection({required bool isDarkMode}) {
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6,
+        color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -212,9 +277,13 @@ class _ConfigViewState extends State<ConfigView> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '日志筛选',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
                 ),
                 const Spacer(),
                 CupertinoButton(
@@ -222,7 +291,10 @@ class _ConfigViewState extends State<ConfigView> {
                   onPressed: _toggleAllSelection,
                   child: Text(
                     _isAllSelected ? '取消全选' : '全选',
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -232,21 +304,27 @@ class _ConfigViewState extends State<ConfigView> {
                     await _dataManager.clearAllLogs();
                     setState(() {});
                   },
-                  child: const Text(
+                  child: Text(
                     '清空',
-                    style: TextStyle(fontSize: 13, color: CupertinoColors.destructiveRed),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDarkMode ? CupertinoColors.systemRed : CupertinoColors.destructiveRed,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 0),
+          Divider(
+            height: 0,
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4,
+          ),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: LogType.values.map((type) {
               final isSelected = _selectedLogTypes.contains(type);
-              return _buildLogTypeChip(type, isSelected);
+              return _buildLogTypeChip(type, isSelected, isDarkMode);
             }).toList(),
           ),
         ],
@@ -254,13 +332,15 @@ class _ConfigViewState extends State<ConfigView> {
     );
   }
 
-  Widget _buildLogTypeChip(LogType type, bool isSelected) {
+  Widget _buildLogTypeChip(LogType type, bool isSelected, bool isDarkMode) {
     return GestureDetector(
       onTap: () => _toggleLogType(type),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? type.color.withOpacity(0.15) : CupertinoColors.systemGrey5,
+          color: isSelected
+              ? type.color.withOpacity(isDarkMode ? 0.3 : 0.15)
+              : (isDarkMode ? CupertinoColors.systemGrey5.withOpacity(0.3) : CupertinoColors.systemGrey5),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? type.color : Colors.transparent,
@@ -284,7 +364,9 @@ class _ConfigViewState extends State<ConfigView> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? type.color : CupertinoColors.label,
+                color: isSelected
+                    ? type.color
+                    : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
               ),
             ),
           ],
@@ -293,22 +375,31 @@ class _ConfigViewState extends State<ConfigView> {
     );
   }
 
-  Widget _buildLogListSection() {
+  Widget _buildLogListSection({required bool isDarkMode}) {
     final logs = _filteredLogs;
 
     if (logs.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: CupertinoColors.systemGrey6,
+          color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             children: [
-              Icon(CupertinoIcons.doc_text, size: 48, color: CupertinoColors.systemGrey),
-              SizedBox(height: 12),
-              Text('暂无日志', style: TextStyle(color: CupertinoColors.systemGrey)),
+              Icon(
+                CupertinoIcons.doc_text,
+                size: 48,
+                color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '暂无日志',
+                style: TextStyle(
+                  color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                ),
+              ),
             ],
           ),
         ),
@@ -317,28 +408,39 @@ class _ConfigViewState extends State<ConfigView> {
 
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6,
+        color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.all(12),
+          Padding(
+            padding: const EdgeInsets.all(12),
             child: Text(
               '日志列表',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
             ),
           ),
-          const Divider(height: 0),
+          Divider(
+            height: 0,
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4,
+          ),
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: logs.length,
-            separatorBuilder: (_, __) => const Divider(height: 0, indent: 16),
+            separatorBuilder: (_, __) => Divider(
+              height: 0,
+              indent: 16,
+              color: isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4,
+            ),
             itemBuilder: (context, index) {
               final log = logs[index];
-              return _buildLogItem(log);
+              return _buildLogItem(log, isDarkMode);
             },
           ),
         ],
@@ -346,7 +448,7 @@ class _ConfigViewState extends State<ConfigView> {
     );
   }
 
-  Widget _buildLogItem(LogEntry log) {
+  Widget _buildLogItem(LogEntry log, bool isDarkMode) {
     final timeStr = '${log.timestamp.hour.toString().padLeft(2, '0')}:'
         '${log.timestamp.minute.toString().padLeft(2, '0')}:'
         '${log.timestamp.second.toString().padLeft(2, '0')}';
@@ -371,12 +473,18 @@ class _ConfigViewState extends State<ConfigView> {
               children: [
                 Text(
                   log.message,
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   timeStr,
-                  style: const TextStyle(fontSize: 10, color: CupertinoColors.systemGrey),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+                  ),
                 ),
               ],
             ),
@@ -388,6 +496,7 @@ class _ConfigViewState extends State<ConfigView> {
 
   Widget _buildSection({
     required String title,
+    required bool isDarkMode,
     required List<Widget> children,
   }) {
     return Column(
@@ -397,16 +506,16 @@ class _ConfigViewState extends State<ConfigView> {
           padding: const EdgeInsets.only(left: 12, bottom: 8),
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: CupertinoColors.systemGrey,
+              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
+            color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -422,6 +531,7 @@ class _ConfigViewState extends State<ConfigView> {
     required String title,
     required String subtitle,
     required bool value,
+    required bool isDarkMode,
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
@@ -444,12 +554,19 @@ class _ConfigViewState extends State<ConfigView> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 12, color: CupertinoColors.systemGrey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                  ),
                 ),
               ],
             ),
@@ -468,6 +585,7 @@ class _ConfigViewState extends State<ConfigView> {
     required IconData icon,
     required String title,
     required String subtitle,
+    required bool isDarkMode,
     required VoidCallback onTap,
   }) {
     return CupertinoButton(
@@ -492,12 +610,19 @@ class _ConfigViewState extends State<ConfigView> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 12, color: CupertinoColors.systemGrey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                  ),
                 ),
               ],
             ),
@@ -505,18 +630,18 @@ class _ConfigViewState extends State<ConfigView> {
           Icon(
             CupertinoIcons.chevron_forward,
             size: 14,
-            color: CupertinoColors.systemGrey.withOpacity(0.6),
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey.withOpacity(0.6),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider({required bool isDarkMode}) {
     return Divider(
       height: 0,
       indent: 60,
-      color: CupertinoColors.systemGrey4,
+      color: isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4,
     );
   }
 

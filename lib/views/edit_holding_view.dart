@@ -130,16 +130,65 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     }
   }
 
-  String _formatDecimalInput(String input, int maxDigits) {
-    final parts = input.split('.');
-    String result = parts[0];
-    if (result.length > maxDigits) {
-      result = result.substring(0, maxDigits);
+  void _onFundCodeChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
+    if (newValue != _fundCodeController.text) {
+      final cursorPosition = _fundCodeController.selection.baseOffset;
+      _fundCodeController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _fundCodeController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateFundCode(newValue);
     }
-    if (parts.length > 1) {
-      result += '.' + parts[1].substring(0, parts[1].length > 2 ? 2 : parts[1].length);
+  }
+
+  void _onAmountChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final dotCount = filtered.split('.').length - 1;
+    if (dotCount > 1) return;
+    final parts = filtered.split('.');
+    String integerPart = parts[0];
+    if (integerPart.length > 9) {
+      integerPart = integerPart.substring(0, 9);
     }
-    return result;
+    String decimalPart = parts.length > 1 ? parts[1] : '';
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    final newValue = decimalPart.isEmpty ? integerPart : '$integerPart.$decimalPart';
+    if (newValue != _purchaseAmountController.text) {
+      final cursorPosition = _purchaseAmountController.selection.baseOffset;
+      _purchaseAmountController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _purchaseAmountController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateAmount(newValue);
+    }
+  }
+
+  void _onSharesChanged(String value) {
+    final filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final dotCount = filtered.split('.').length - 1;
+    if (dotCount > 1) return;
+    final parts = filtered.split('.');
+    String integerPart = parts[0];
+    if (integerPart.length > 9) {
+      integerPart = integerPart.substring(0, 9);
+    }
+    String decimalPart = parts.length > 1 ? parts[1] : '';
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    final newValue = decimalPart.isEmpty ? integerPart : '$integerPart.$decimalPart';
+    if (newValue != _purchaseSharesController.text) {
+      final cursorPosition = _purchaseSharesController.selection.baseOffset;
+      _purchaseSharesController.text = newValue;
+      if (cursorPosition <= newValue.length) {
+        _purchaseSharesController.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
+      _validateShares(newValue);
+    }
   }
 
   Future<void> _saveChanges() async {
@@ -235,12 +284,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _fundCodeError,
                     icon: CupertinoIcons.number,
                     keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9]'), '');
-                      _fundCodeController.text = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
-                      _validateFundCode(_fundCodeController.text);
-                    },
+                    onChanged: _onFundCodeChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -251,13 +295,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _amountError,
                     icon: CupertinoIcons.money_dollar,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9.]'), '');
-                      final dotCount = filtered.split('.').length - 1;
-                      if (dotCount > 1) return;
-                      _purchaseAmountController.text = _formatDecimalInput(filtered, 9);
-                      _validateAmount(_purchaseAmountController.text);
-                    },
+                    onChanged: _onAmountChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -268,13 +306,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     error: _sharesError,
                     icon: CupertinoIcons.chart_pie,
                     keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (v) {
-                      final filtered = v.replaceAll(RegExp(r'[^0-9.]'), '');
-                      final dotCount = filtered.split('.').length - 1;
-                      if (dotCount > 1) return;
-                      _purchaseSharesController.text = _formatDecimalInput(filtered, 9);
-                      _validateShares(_purchaseSharesController.text);
-                    },
+                    onChanged: _onSharesChanged,
                   ),
                   const SizedBox(height: 12),
                   _buildDatePicker(),
@@ -291,10 +323,16 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     controller: _clientIdController,
                     icon: CupertinoIcons.creditcard,
                     keyboardType: TextInputType.number,
-                    maxLength: 12,
                     onChanged: (v) {
                       final filtered = v.replaceAll(RegExp(r'[^0-9]'), '');
-                      _clientIdController.text = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
+                      final newValue = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
+                      if (newValue != _clientIdController.text) {
+                        final cursor = _clientIdController.selection.baseOffset;
+                        _clientIdController.text = newValue;
+                        if (cursor <= newValue.length) {
+                          _clientIdController.selection = TextSelection.collapsed(offset: cursor);
+                        }
+                      }
                     },
                   ),
                   const SizedBox(height: 12),
@@ -304,10 +342,13 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     hint: '选填，最多30个字符',
                     controller: _remarksController,
                     icon: CupertinoIcons.text_bubble,
-                    maxLength: 30,
                     onChanged: (v) {
                       if (v.length > 30) {
+                        final cursor = _remarksController.selection.baseOffset;
                         _remarksController.text = v.substring(0, 30);
+                        if (cursor <= 30) {
+                          _remarksController.selection = TextSelection.collapsed(offset: cursor);
+                        }
                       }
                     },
                   ),
@@ -381,7 +422,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     required Function(String) onChanged,
     String? error,
     TextInputType keyboardType = TextInputType.text,
-    int? maxLength,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,7 +456,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
           controller: controller,
           onChanged: onChanged,
           keyboardType: keyboardType,
-          maxLength: maxLength,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: CupertinoColors.white,
@@ -438,7 +477,20 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
+  // 数字日期选择器
   Widget _buildDatePicker() {
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final days = List.generate(
+      DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month + 1, 0).day,
+          (i) => i + 1,
+    );
+
+    int selectedYearIndex = years.indexOf(_tempPurchaseDate.year);
+    int selectedMonthIndex = _tempPurchaseDate.month - 1;
+    int selectedDayIndex = _tempPurchaseDate.day - 1;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -512,15 +564,58 @@ class _EditHoldingViewState extends State<EditHoldingView> {
               children: [
                 SizedBox(
                   height: 200,
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.date,
-                    initialDateTime: _tempPurchaseDate,
-                    maximumDate: DateTime.now(),
-                    onDateTimeChanged: (date) {
-                      _tempPurchaseDate = date;
-                    },
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedYearIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newYear = years[index];
+                              final newDate = DateTime(
+                                newYear,
+                                _tempPurchaseDate.month,
+                                _tempPurchaseDate.day.clamp(1, DateTime(newYear, _tempPurchaseDate.month + 1, 0).day),
+                              );
+                              _tempPurchaseDate = newDate;
+                            });
+                          },
+                          children: years.map((year) => Center(child: Text('$year年'))).toList(),
+                        ),
+                      ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedMonthIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newMonth = index + 1;
+                              final maxDay = DateTime(_tempPurchaseDate.year, newMonth + 1, 0).day;
+                              final newDay = _tempPurchaseDate.day.clamp(1, maxDay);
+                              _tempPurchaseDate = DateTime(_tempPurchaseDate.year, newMonth, newDay);
+                            });
+                          },
+                          children: months.map((month) => Center(child: Text('$month月'))).toList(),
+                        ),
+                      ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedDayIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newDay = index + 1;
+                              _tempPurchaseDate = DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month, newDay);
+                            });
+                          },
+                          children: days.map((day) => Center(child: Text('$day日'))).toList(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

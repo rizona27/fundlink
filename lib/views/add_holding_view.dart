@@ -18,7 +18,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   late DataManager _dataManager;
   late FundService _fundService;
 
-  // 使用 TextEditingController
   final TextEditingController _clientNameController = TextEditingController();
   final TextEditingController _clientIdController = TextEditingController();
   final TextEditingController _fundCodeController = TextEditingController();
@@ -26,13 +25,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   final TextEditingController _purchaseSharesController = TextEditingController();
   final TextEditingController _remarksController = TextEditingController();
 
-  // 错误信息
   String? _clientNameError;
   String? _fundCodeError;
   String? _amountError;
   String? _sharesError;
 
-  // 日期选择器
   bool _showDatePicker = false;
   DateTime _purchaseDate = DateTime.now();
   DateTime _tempPurchaseDate = DateTime.now();
@@ -118,7 +115,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     }
   }
 
-  // 修复输入框光标问题：使用 controller.text 并手动设置
   void _onFundCodeChanged(String value) {
     final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
     final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
@@ -258,9 +254,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     controller: _clientNameController,
                     error: _clientNameError,
                     icon: CupertinoIcons.person,
-                    onChanged: (v) {
-                      _validateClientName(v);
-                    },
+                    onChanged: _validateClientName,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
@@ -464,7 +458,20 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
+  // 数字日期选择器 - 使用 CupertinoPicker 显示数字
   Widget _buildDatePicker() {
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final days = List.generate(
+      DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month + 1, 0).day,
+          (i) => i + 1,
+    );
+
+    int selectedYearIndex = years.indexOf(_tempPurchaseDate.year);
+    int selectedMonthIndex = _tempPurchaseDate.month - 1;
+    int selectedDayIndex = _tempPurchaseDate.day - 1;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -538,15 +545,61 @@ class _AddHoldingViewState extends State<AddHoldingView> {
               children: [
                 SizedBox(
                   height: 200,
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.date,
-                    initialDateTime: _tempPurchaseDate,
-                    maximumDate: DateTime.now(),
-                    onDateTimeChanged: (date) {
-                      _tempPurchaseDate = date;
-                    },
+                  child: Row(
+                    children: [
+                      // 年份选择器
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedYearIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newYear = years[index];
+                              final newDate = DateTime(
+                                newYear,
+                                _tempPurchaseDate.month,
+                                _tempPurchaseDate.day.clamp(1, DateTime(newYear, _tempPurchaseDate.month + 1, 0).day),
+                              );
+                              _tempPurchaseDate = newDate;
+                            });
+                          },
+                          children: years.map((year) => Center(child: Text('$year年'))).toList(),
+                        ),
+                      ),
+                      // 月份选择器
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedMonthIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newMonth = index + 1;
+                              final maxDay = DateTime(_tempPurchaseDate.year, newMonth + 1, 0).day;
+                              final newDay = _tempPurchaseDate.day.clamp(1, maxDay);
+                              _tempPurchaseDate = DateTime(_tempPurchaseDate.year, newMonth, newDay);
+                            });
+                          },
+                          children: months.map((month) => Center(child: Text('$month月'))).toList(),
+                        ),
+                      ),
+                      // 日期选择器
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: selectedDayIndex),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() {
+                              final newDay = index + 1;
+                              _tempPurchaseDate = DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month, newDay);
+                            });
+                          },
+                          children: days.map((day) => Center(child: Text('$day日'))).toList(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

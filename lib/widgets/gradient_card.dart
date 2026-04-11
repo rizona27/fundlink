@@ -35,13 +35,55 @@ class GradientCard extends StatelessWidget {
     return const Color(0xFFD46B6B);
   }
 
+  // 根据深色模式获取渐变结束颜色
+  Color _getEndColor() {
+    if (isDarkMode) {
+      return const Color(0xFF1C1C1E); // 深色模式背景色
+    }
+    return CupertinoColors.white;
+  }
+
+  // 根据深色模式获取文字颜色
+  Color _getTextColor() {
+    if (isDarkMode) {
+      return CupertinoColors.white;
+    }
+    return CupertinoColors.label;
+  }
+
+  // 根据深色模式获取副文字颜色
+  Color _getSubTextColor() {
+    if (isDarkMode) {
+      return CupertinoColors.white.withOpacity(0.5);
+    }
+    return CupertinoColors.label.withOpacity(0.5);
+  }
+
+  // 根据深色模式获取阴影颜色
+  Color _getShadowColor() {
+    if (isDarkMode) {
+      return CupertinoColors.black.withOpacity(0.3);
+    }
+    return gradient[0].withOpacity(0.25);
+  }
+
+  // 根据深色模式获取边框阴影颜色
+  Color _getBoxShadowColor() {
+    if (isDarkMode) {
+      return CupertinoColors.black.withOpacity(0.15);
+    }
+    return Colors.black.withOpacity(0.05);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final endColor = isDarkMode
-        ? CupertinoColors.systemBackground
-        : CupertinoColors.white;
+    final endColor = _getEndColor();
     final adjustedGradient = [gradient[0], endColor];
     final countColor = _getCountColor(countValue);
+    final textColor = _getTextColor();
+    final subTextColor = _getSubTextColor();
+    final shadowColor = _getShadowColor();
+    final boxShadowColor = _getBoxShadowColor();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -63,12 +105,12 @@ class GradientCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
               BoxShadow(
-                color: gradient[0].withOpacity(0.25),
+                color: shadowColor,
                 blurRadius: 6,
                 offset: const Offset(3, 3),
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: boxShadowColor,
                 blurRadius: 4,
                 offset: const Offset(1, 1),
               ),
@@ -79,10 +121,10 @@ class GradientCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: CupertinoColors.label,
+                    color: textColor,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -97,7 +139,7 @@ class GradientCard extends StatelessWidget {
                       subtitle!,
                       style: TextStyle(
                         fontSize: 11,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: subTextColor,
                       ),
                     ),
                     if (countValue != null) ...[
@@ -115,7 +157,7 @@ class GradientCard extends StatelessWidget {
                         '支',
                         style: TextStyle(
                           fontSize: 11,
-                          color: CupertinoColors.label.withOpacity(0.5),
+                          color: subTextColor,
                         ),
                       ),
                     ],

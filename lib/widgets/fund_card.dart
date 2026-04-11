@@ -24,14 +24,63 @@ class FundCard extends StatelessWidget {
     return '${date.year.toString().substring(2)}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  Color _getProfitColor(double value) {
+  Color _getProfitColor(double value, bool isDarkMode) {
     if (value > 0) return CupertinoColors.systemRed;
     if (value < 0) return CupertinoColors.systemGreen;
-    return CupertinoColors.label.withOpacity(0.5);
+    return isDarkMode
+        ? CupertinoColors.white.withOpacity(0.5)
+        : CupertinoColors.label.withOpacity(0.5);
+  }
+
+  // 获取卡片背景色
+  Color _getCardBackgroundColor(bool isDarkMode) {
+    return isDarkMode
+        ? CupertinoColors.systemGrey6.withOpacity(0.5)
+        : CupertinoColors.white;
+  }
+
+  // 获取主要文字颜色
+  Color _getPrimaryTextColor(bool isDarkMode) {
+    return isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
+  }
+
+  // 获取次要文字颜色
+  Color _getSecondaryTextColor(bool isDarkMode) {
+    return isDarkMode
+        ? CupertinoColors.white.withOpacity(0.5)
+        : const Color(0xFF8E8E93);
+  }
+
+  // 获取标签文字颜色
+  Color _getLabelTextColor(bool isDarkMode) {
+    return isDarkMode
+        ? CupertinoColors.white.withOpacity(0.4)
+        : CupertinoColors.label.withOpacity(0.5);
+  }
+
+  // 获取阴影颜色
+  List<BoxShadow> _getBoxShadow(bool isDarkMode) {
+    if (isDarkMode) {
+      return [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.2),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+        ),
+      ];
+    }
+    return [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.06),
+        blurRadius: 6,
+        offset: const Offset(2, 3),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final days = DateTime.now().difference(holding.purchaseDate).inDays;
     final absoluteReturn = holding.profitRate;
     final annualizedReturn = holding.annualizedProfitRate;
@@ -43,15 +92,9 @@ class FundCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
-        color: CupertinoColors.white,
+        color: _getCardBackgroundColor(isDarkMode),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 6,
-            offset: const Offset(2, 3),
-          ),
-        ],
+        boxShadow: _getBoxShadow(isDarkMode),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,10 +108,10 @@ class FundCard extends StatelessWidget {
                     Flexible(
                       child: Text(
                         holding.fundName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1C1C1E),
+                          color: _getPrimaryTextColor(isDarkMode),
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -76,9 +119,9 @@ class FundCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       holding.fundCode,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: Color(0xFF8E8E93),
+                        color: _getSecondaryTextColor(isDarkMode),
                       ),
                     ),
                     if (holding.isPinned) ...[
@@ -119,13 +162,19 @@ class FundCard extends StatelessWidget {
               children: [
                 Text(
                   '客户: ${holding.clientName}',
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _getPrimaryTextColor(isDarkMode),
+                  ),
                 ),
                 if (holding.clientId.isNotEmpty) ...[
                   const SizedBox(width: 4),
                   Text(
                     '(${holding.clientId})',
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF8E8E93)),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: _getSecondaryTextColor(isDarkMode),
+                    ),
                   ),
                 ],
                 const Spacer(),
@@ -143,15 +192,15 @@ class FundCard extends StatelessWidget {
                       '购买金额: ',
                       style: TextStyle(
                         fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: _getLabelTextColor(isDarkMode),
                       ),
                     ),
                     Text(
                       _formatPurchaseAmount(holding.purchaseAmount),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF1C1C1E),
+                        color: _getPrimaryTextColor(isDarkMode),
                       ),
                     ),
                   ],
@@ -164,21 +213,27 @@ class FundCard extends StatelessWidget {
                       '份额: ',
                       style: TextStyle(
                         fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: _getLabelTextColor(isDarkMode),
                       ),
                     ),
                     Flexible(
                       child: Text(
                         holding.purchaseShares.toStringAsFixed(2),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF1C1C1E),
+                          color: _getPrimaryTextColor(isDarkMode),
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Text('份', style: TextStyle(fontSize: 9)),
+                    Text(
+                      '份',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: _getLabelTextColor(isDarkMode),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -195,16 +250,16 @@ class FundCard extends StatelessWidget {
                       '收益: ',
                       style: TextStyle(
                         fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: _getLabelTextColor(isDarkMode),
                       ),
                     ),
                     if (hasNoData)
-                      const Text(
+                      Text(
                         '待加载',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       )
                     else
@@ -213,7 +268,7 @@ class FundCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: _getProfitColor(holding.profit),
+                          color: _getProfitColor(holding.profit, isDarkMode),
                         ),
                       ),
                   ],
@@ -226,41 +281,41 @@ class FundCard extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (hasNoData) ...[
-                      const Text(
+                      Text(
                         '--%',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '[绝对]',
                         style: TextStyle(
                           fontSize: 9,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '|',
                         style: TextStyle(
                           fontSize: 11,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '--%',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '[年化]',
                         style: TextStyle(
                           fontSize: 9,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
                     ] else ...[
@@ -269,21 +324,21 @@ class FundCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: _getProfitColor(absoluteReturn),
+                          color: _getProfitColor(absoluteReturn, isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '[绝对]',
                         style: TextStyle(
                           fontSize: 9,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '|',
                         style: TextStyle(
                           fontSize: 11,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
                       Text(
@@ -291,14 +346,14 @@ class FundCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: _getProfitColor(annualizedReturn),
+                          color: _getProfitColor(annualizedReturn, isDarkMode),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '[年化]',
                         style: TextStyle(
                           fontSize: 9,
-                          color: CupertinoColors.systemGrey,
+                          color: _getSecondaryTextColor(isDarkMode),
                         ),
                       ),
                     ],
@@ -318,15 +373,15 @@ class FundCard extends StatelessWidget {
                       '购买日期: ',
                       style: TextStyle(
                         fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: _getLabelTextColor(isDarkMode),
                       ),
                     ),
                     Text(
                       _formatShortDate(holding.purchaseDate),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF1C1C1E),
+                        color: _getPrimaryTextColor(isDarkMode),
                       ),
                     ),
                   ],
@@ -339,15 +394,15 @@ class FundCard extends StatelessWidget {
                       '持有天数: ',
                       style: TextStyle(
                         fontSize: 10,
-                        color: CupertinoColors.label.withOpacity(0.5),
+                        color: _getLabelTextColor(isDarkMode),
                       ),
                     ),
                     Text(
                       '$days天',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF1C1C1E),
+                        color: _getPrimaryTextColor(isDarkMode),
                       ),
                     ),
                   ],
@@ -364,15 +419,15 @@ class FundCard extends StatelessWidget {
                   '备注: ',
                   style: TextStyle(
                     fontSize: 10,
-                    color: CupertinoColors.label.withOpacity(0.5),
+                    color: _getLabelTextColor(isDarkMode),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     holding.remarks,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: Color(0xFF8E8E93),
+                      color: _getSecondaryTextColor(isDarkMode),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
