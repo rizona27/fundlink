@@ -83,25 +83,17 @@ class _RefreshButtonState extends State<RefreshButton> {
               color: CupertinoColors.systemBackground,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(
+            child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CupertinoActivityIndicator(radius: 20),
-                const SizedBox(height: 16),
-                const Text(
-                  '正在刷新基金数据...',
+                CupertinoActivityIndicator(radius: 20),
+                SizedBox(height: 16),
+                Text(
+                  '刷新中...',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                     color: CupertinoColors.label,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '请稍候',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.systemGrey,
                   ),
                 ),
               ],

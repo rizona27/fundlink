@@ -76,7 +76,6 @@ class GradientCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // 标题
               Expanded(
                 child: Text(
                   title,
@@ -88,7 +87,6 @@ class GradientCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // 右侧内容
               if (trailing != null)
                 trailing!
               else if (subtitle != null)

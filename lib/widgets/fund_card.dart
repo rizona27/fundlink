@@ -36,6 +36,9 @@ class FundCard extends StatelessWidget {
     final absoluteReturn = holding.profitRate;
     final annualizedReturn = holding.annualizedProfitRate;
 
+    // 判断是否没有有效数据
+    final bool hasNoData = !holding.isValid || holding.currentNav <= 0;
+
     return Container(
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -56,7 +59,6 @@ class FundCard extends StatelessWidget {
           // 第一行：基金名称 + 代码 + 净值日期（靠右）
           Row(
             children: [
-              // 基金名称和代码区域 - 允许压缩但保持最小宽度
               Expanded(
                 child: Row(
                   children: [
@@ -79,7 +81,6 @@ class FundCard extends StatelessWidget {
                         color: Color(0xFF8E8E93),
                       ),
                     ),
-                    // 置顶图标
                     if (holding.isPinned) ...[
                       const SizedBox(width: 4),
                       const Icon(
@@ -92,22 +93,21 @@ class FundCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // 净值日期 - 固定靠右，不压缩
-              if (holding.isValid && holding.currentNav > 0)
+              if (hasNoData)
+                const Text(
+                  '净值待加载',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Color(0xFFFF9500),
+                  ),
+                )
+              else
                 Text(
                   '${holding.currentNav.toStringAsFixed(4)}(${_formatDate(holding.navDate)})',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF007AFF),
-                  ),
-                )
-              else
-                const Text(
-                  '净值加载中...',
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Color(0xFF8E8E93),
                   ),
                 ),
             ],
@@ -188,7 +188,6 @@ class FundCard extends StatelessWidget {
           // 第三行：收益（左） + 收益率组合（右）
           Row(
             children: [
-              // 收益 - 左对齐
               Expanded(
                 child: Row(
                   children: [
@@ -199,7 +198,16 @@ class FundCard extends StatelessWidget {
                         color: CupertinoColors.label.withOpacity(0.5),
                       ),
                     ),
-                    if (holding.isValid && holding.currentNav > 0)
+                    if (hasNoData)
+                      const Text(
+                        '待加载',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      )
+                    else
                       Text(
                         '${holding.profit >= 0 ? '+' : ''}${_formatProfitAmount(holding.profit)}',
                         style: TextStyle(
@@ -207,27 +215,55 @@ class FundCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: _getProfitColor(holding.profit),
                         ),
-                      )
-                    else
-                      const Text(
-                        '--元',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
-                        ),
                       ),
                   ],
                 ),
               ),
-              // 收益率组合 - 与份额对齐
               Expanded(
                 child: Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (holding.isValid && holding.currentNav > 0) ...[
+                    if (hasNoData) ...[
+                      const Text(
+                        '--%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      ),
+                      const Text(
+                        '[绝对]',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                      const Text(
+                        '|',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                      const Text(
+                        '--%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      ),
+                      const Text(
+                        '[年化]',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ] else ...[
                       Text(
                         '${absoluteReturn >= 0 ? '+' : ''}${absoluteReturn.toStringAsFixed(2)}%',
                         style: TextStyle(
@@ -256,44 +292,6 @@ class FundCard extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: _getProfitColor(annualizedReturn),
-                        ),
-                      ),
-                      const Text(
-                        '[年化]',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
-                    ] else ...[
-                      const Text(
-                        '--%',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
-                        ),
-                      ),
-                      const Text(
-                        '[绝对]',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
-                      const Text(
-                        '|',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
-                      const Text(
-                        '--%',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF8E8E93),
                         ),
                       ),
                       const Text(

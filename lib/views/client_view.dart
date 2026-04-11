@@ -24,6 +24,7 @@ class _ClientViewState extends State<ClientView> {
   String _searchText = '';
   final Set<String> _expandedClients = {};
   bool _isSearchVisible = false;
+  int _dataVersion = 0; // 用于强制刷新列表
 
   @override
   void didChangeDependencies() {
@@ -37,7 +38,10 @@ class _ClientViewState extends State<ClientView> {
 
   void _onDataManagerChanged() {
     if (mounted) {
-      setState(() {});
+      // 数据变化时增加版本号，强制 ListView 重建
+      setState(() {
+        _dataVersion++;
+      });
     }
   }
 
@@ -221,7 +225,9 @@ class _ClientViewState extends State<ClientView> {
   }
 
   Widget _buildHoldingsList(bool isDarkMode) {
+    // 使用 _dataVersion 作为 key，确保数据变化时列表完全重建
     return ListView.builder(
+      key: ValueKey(_dataVersion),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       itemCount: _sortedClientNames.length,
       itemBuilder: (context, index) {
@@ -250,11 +256,20 @@ class _ClientViewState extends State<ClientView> {
                   }
                 }),
               ),
-              if (isExpanded)
-                Column(
-                  children: holdings.map((holding) {
+              AnimatedContainer(
+                key: ValueKey('animated_${clientName}_$index'),
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOutCubic,
+                margin: EdgeInsets.only(
+                  left: isExpanded ? 16 : 0,
+                  top: isExpanded ? 8 : 0,
+                ),
+                child: isExpanded
+                    ? Column(
+                  children: holdings.asMap().entries.map((entry) {
+                    final holding = entry.value;
                     return FundCard(
-                      key: ValueKey(holding.id),
+                      key: ValueKey('fund_${holding.id}_${entry.key}_${holding.currentNav}'),
                       holding: holding,
                       hideClientInfo: true,
                       onCopyClientId: () {
@@ -267,7 +282,9 @@ class _ClientViewState extends State<ClientView> {
                       },
                     );
                   }).toList(),
-                ),
+                )
+                    : const SizedBox.shrink(),
+              ),
             ],
           ),
         );
