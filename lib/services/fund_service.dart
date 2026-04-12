@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../models/fund_holding.dart';
+// 删除未使用的 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'data_manager.dart';
 
@@ -15,10 +15,8 @@ class FundService {
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
 
-  // 构造函数，可选传入 DataManager 用于日志记录
   FundService([this._dataManager]);
 
-  // 只返回净值信息，不返回完整的 FundHolding 对象
   Future<Map<String, dynamic>> fetchFundInfo(String code) async {
     debugPrint('╔══════════════════════════════════════════════════════════════════╗');
     debugPrint('║ [🌐 API请求] 开始获取基金数据                                      ║');
@@ -27,10 +25,8 @@ class FundService {
     debugPrint('║ 请求时间: ${DateTime.now()}');
     debugPrint('╚══════════════════════════════════════════════════════════════════╝');
 
-    // 记录日志
     _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
 
-    // 检查缓存
     if (_cache.containsKey(code)) {
       final cached = _cache[code]!;
       debugPrint('✅ [缓存命中] 基金代码 $code');
@@ -38,7 +34,6 @@ class FundService {
       return cached;
     }
 
-    // 检查进行中的请求
     if (_activeRequests.containsKey(code)) {
       debugPrint('🔄 [并发请求] 基金代码 $code 已有请求进行中');
       _dataManager?.addLog('基金代码 $code: 使用进行中的请求', type: LogType.cache);
@@ -67,11 +62,9 @@ class FundService {
     }
   }
 
-  // 通用JSONP解析函数
   String _extractJsonFromJsonp(String rawBody) {
     String jsonStr = rawBody.trim();
 
-    // 查找第一个 { 和最后一个 } 的位置
     int startIndex = jsonStr.indexOf('{');
     int endIndex = jsonStr.lastIndexOf('}');
 
@@ -79,7 +72,6 @@ class FundService {
       return jsonStr.substring(startIndex, endIndex + 1);
     }
 
-    // 如果找不到标准的JSON格式，返回原字符串
     debugPrint('⚠️ 未找到有效的JSON格式');
     return jsonStr;
   }
@@ -96,7 +88,6 @@ class FundService {
       final url = Uri.parse('$_eastmoneyUrl/$code.js');
       debugPrint('📍 请求URL: $url');
 
-      // 使用 http 包（更简单可靠）
       final client = http.Client();
 
       final request = http.Request('GET', url);
@@ -107,7 +98,6 @@ class FundService {
         'Referer': 'https://fund.eastmoney.com/',
       });
 
-      // 增加超时时间到30秒
       final response = await client.send(request).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
@@ -147,17 +137,14 @@ class FundService {
 
       debugPrint('📦 响应数据长度: ${responseBody.length} 字符');
 
-      // 使用通用JSONP解析函数提取JSON
       String jsonStr = _extractJsonFromJsonp(responseBody);
       debugPrint('📝 提取的JSON: ${jsonStr.substring(0, jsonStr.length > 100 ? 100 : jsonStr.length)}...');
 
-      // 解析JSON
       final json = jsonDecode(jsonStr) as Map<String, dynamic>;
       debugPrint('📊 解析成功，字段: ${json.keys.join(', ')}');
 
       final fundName = json['name'] as String? ?? '未知基金';
 
-      // 加强净值解析：确保正确转换 String 到 double
       double currentNav = 0.0;
       if (json['dwjz'] != null) {
         final dwjzStr = json['dwjz'].toString();
@@ -187,7 +174,6 @@ class FundService {
       debugPrint('📈 使用净值: $currentNav');
       debugPrint('📅 净值日期: ${_formatDate(navDate)}');
 
-      // 加强 isValid 判断
       final isValid = fundName != '未知基金' &&
           fundName != '加载失败' &&
           fundName != 'N/A' &&

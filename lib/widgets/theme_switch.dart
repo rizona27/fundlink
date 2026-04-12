@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
 
 enum ThemeMode {
   light,
@@ -37,7 +36,6 @@ class ThemeSwitch extends StatefulWidget {
 class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStateMixin {
   late ThemeMode _selectedMode;
   late AnimationController _animationController;
-  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
@@ -97,12 +95,11 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
       ),
       child: Stack(
         children: [
-          // 滑动的药丸指示器 - 使用 AnimatedBuilder 实现平滑动画
           AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
               final slideValue = _animationController.value;
-              final leftOffset = slideValue * 168; // 168 = 总宽度(260) - 药丸宽度(80) - 边距(12)
+              final leftOffset = slideValue * 168;
               return Transform.translate(
                 offset: Offset(leftOffset, 0),
                 child: Container(
@@ -124,7 +121,6 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
               );
             },
           ),
-          // 三个选项
           Row(
             children: [
               _buildOption(ThemeMode.light, '浅色'),

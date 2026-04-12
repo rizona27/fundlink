@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../providers/data_manager_provider.dart';
 import '../services/data_manager.dart';
-import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/gradient_card.dart';
@@ -18,7 +17,6 @@ class ManageHoldingsView extends StatefulWidget {
 
 class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   late DataManager _dataManager;
-  late FundService _fundService;
 
   String _searchText = '';
   bool _isSearchVisible = false;
@@ -31,7 +29,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
   }
 
@@ -107,7 +104,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     final clientName = parts[0];
     final clientId = parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
 
-    // 应用隐私模式
     final displayName = _dataManager.obscuredName(clientName);
     if (clientId != null && clientId.isNotEmpty) {
       return '$displayName($clientId)';
@@ -131,12 +127,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     ];
 
     return softColors[hash % softColors.length];
-  }
-
-  Color _colorForHoldingCount(int count) {
-    if (count == 1) return const Color(0xFFD4A84B);
-    if (count <= 3) return const Color(0xFFD4844B);
-    return const Color(0xFFD46B6B);
   }
 
   Future<void> _renameClient(String oldKey, String newName) async {
@@ -279,7 +269,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 返回按钮
             CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () => Navigator.of(context).pop(),

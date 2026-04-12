@@ -5,7 +5,6 @@ class Toast {
   static OverlayEntry? _currentOverlayEntry;
 
   static void show(BuildContext context, String message, {Duration duration = const Duration(seconds: 2)}) {
-    // 移除已有的 Toast（安全移除）
     _removeCurrentOverlay();
 
     final overlayState = Overlay.of(context);
@@ -17,8 +16,8 @@ class Toast {
         message: message,
         duration: duration,
         onDismiss: () {
-          if (overlayEntry != null && overlayEntry!.mounted) {
-            overlayEntry!.remove();
+          if (overlayEntry != null && overlayEntry.mounted) {
+            overlayEntry.remove();
           }
           if (_currentOverlayEntry == overlayEntry) {
             _currentOverlayEntry = null;
@@ -113,7 +112,6 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    // 修复弃用警告
                     color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
@@ -136,7 +134,6 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
   }
 }
 
-// 便捷扩展方法
 extension ToastExtension on BuildContext {
   void showToast(String message, {Duration duration = const Duration(seconds: 2)}) {
     Toast.show(this, message, duration: duration);

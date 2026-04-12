@@ -18,7 +18,8 @@ class _ConfigViewState extends State<ConfigView> {
   late DataManager _dataManager;
   bool _showLogs = false;
   Set<LogType> _selectedLogTypes = LogType.values.toSet();
-  final ScrollController _scrollController = ScrollController();
+  // 删除未使用的 _scrollController
+  // final ScrollController _scrollController = ScrollController();
 
   @override
   void didChangeDependencies() {

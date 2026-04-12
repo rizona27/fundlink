@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
+// 删除未使用的 import 'package:uuid/uuid.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
@@ -14,14 +14,14 @@ class DataManager extends ChangeNotifier {
   static const String _privacyModeKey = 'privacy_mode';
   static const String _themeModeKey = 'theme_mode';
 
-  final Uuid _uuid = const Uuid();
+  // 删除未使用的 _uuid
+  // final Uuid _uuid = const Uuid();
 
   List<FundHolding> _holdings = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
 
-  // Getters
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
@@ -54,7 +54,6 @@ class DataManager extends ChangeNotifier {
 
     _isPrivacyMode = prefs.getBool(_privacyModeKey) ?? true;
 
-    // 加载主题模式
     final themeModeString = prefs.getString(_themeModeKey);
     if (themeModeString != null) {
       _themeMode = _parseThemeMode(themeModeString);
@@ -126,7 +125,6 @@ class DataManager extends ChangeNotifier {
       throw Exception('持仓不存在');
     }
 
-    // 创建新列表，替换对应项
     final newHoldings = List<FundHolding>.from(_holdings);
     newHoldings[index] = updatedHolding;
     _holdings = newHoldings;

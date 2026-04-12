@@ -64,7 +64,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
         _searchTextBeforeScroll = _searchText;
       }
 
-      // 只有搜索框没有焦点且内容为空时，才允许滚动自动关闭
       if (targetProgress < 0.05 && _isSearchVisible && _searchText.isEmpty && !_searchFocusNode.hasFocus) {
         setState(() {
           _isSearchVisible = false;
@@ -116,7 +115,8 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
-    _loadInitialData();
+    // 移除自动加载示例数据的调用，应用启动时保持空白
+    // _loadInitialData();
   }
 
   void _onDataManagerChanged() {
@@ -125,6 +125,10 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     }
   }
 
+  // 删除或注释掉 _loadInitialData 和 _loadSampleData 方法
+  // 如需保留，可保留但不再调用，或者直接删除以下代码块
+
+  /*
   Future<void> _loadInitialData() async {
     if (_dataManager.holdings.isEmpty) {
       await _loadSampleData();
@@ -138,6 +142,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
       await _dataManager.addHolding(holding);
     }
   }
+  */
 
   Map<String, List<FundHolding>> get _groupedHoldings {
     final map = <String, List<FundHolding>>{};
@@ -237,7 +242,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
 
               return Column(
                 children: [
-                  // 顶部导航栏
                   Container(
                     height: height,
                     child: Opacity(
@@ -282,7 +286,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                  // 搜索栏
                   Opacity(
                     opacity: opacity,
                     child: Container(
@@ -319,7 +322,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                  // 内容区域 - 移除了 key: ValueKey(_dataVersion)
                   Expanded(
                     child: _filteredGroupedHoldings.isEmpty
                         ? const EmptyState(

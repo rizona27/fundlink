@@ -247,9 +247,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.systemGrey6;
-    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    final secondaryTextColor = isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey;
+    // 修复：删除未使用的 backgroundColor, textColor, secondaryTextColor
+    // 这些变量在后续代码中并未使用，直接移除
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
@@ -505,7 +504,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  // 数字日期选择器
   Widget _buildDatePicker(bool isDarkMode) {
     final now = DateTime.now();
     final years = List.generate(10, (i) => now.year - 5 + i);
