@@ -6,6 +6,7 @@ import 'views/client_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
+import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
 
 void main() {
@@ -64,51 +65,37 @@ class _MyAppState extends State<MyApp> {
     final backgroundColor = isDarkMode
         ? const Color(0xFF1C1C1E)
         : const Color(0xFFF2F2F7);
-    final barBackgroundColor = isDarkMode
-        ? CupertinoColors.black.withOpacity(0.8)
-        : CupertinoColors.systemBackground.withOpacity(0.92);
-    final textColor = isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
-
-    final themeData = CupertinoThemeData(
-      brightness: _currentBrightness,
-      primaryColor: const Color(0xFF007AFF),
-      primaryContrastingColor: CupertinoColors.white,
-      barBackgroundColor: barBackgroundColor,
-      scaffoldBackgroundColor: backgroundColor,
-      textTheme: CupertinoTextThemeData(
-        navTitleTextStyle: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-        ),
-        textStyle: TextStyle(
-          fontSize: 17,
-          color: textColor,
-        ),
-      ),
-    );
 
     return DataManagerProvider(
       dataManager: _dataManager,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-        color: backgroundColor,
-        child: CupertinoApp(
-          title: '基金持仓管理',
-          theme: themeData,
-          home: MainTabView(dataManager: _dataManager),
-          debugShowCheckedModeBanner: false,
+      child: CupertinoApp(
+        title: '基金持仓管理',
+        theme: CupertinoThemeData(
+          brightness: _currentBrightness,
+          primaryColor: const Color(0xFF007AFF),
+          primaryContrastingColor: CupertinoColors.white,
+          scaffoldBackgroundColor: backgroundColor,
+          textTheme: CupertinoTextThemeData(
+            navTitleTextStyle: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+            ),
+            textStyle: TextStyle(
+              fontSize: 17,
+              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+            ),
+          ),
         ),
+        home: const MainTabView(),
+        debugShowCheckedModeBanner: false,
       ),
     );
   }
 }
 
 class MainTabView extends StatefulWidget {
-  final DataManager dataManager;
-
-  const MainTabView({super.key, required this.dataManager});
+  const MainTabView({super.key});
 
   @override
   State<MainTabView> createState() => _MainTabViewState();
@@ -116,56 +103,73 @@ class MainTabView extends StatefulWidget {
 
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
+  final GlobalKey<FloatingTabBarState> _tabBarKey = GlobalKey<FloatingTabBarState>();
 
-  late final List<Widget> _pages;
+  final List<Widget> _pages = [
+    const ClientView(),
+    const SummaryView(),
+    const TopPerformersView(),
+    const ConfigView(),
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('==================== MainTabView initState ====================');
-    debugPrint('持仓数量: ${widget.dataManager.holdings.length}');
+  final List<BottomNavigationBarItem> _tabItems = const [
+    BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.person_2_fill),
+      label: '客户',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.chart_bar_fill),
+      label: '汇总',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.star_fill),
+      label: '排行',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.settings),
+      label: '设置',
+    ),
+  ];
 
-    _pages = [
-      const ClientView(),
-      const SummaryView(),
-      const TopPerformersView(),
-      const ConfigView(),
-    ];
+  void _handleScroll() {
+    _tabBarKey.currentState?.onScroll();
   }
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoTabScaffold(
-      tabBar: CupertinoTabBar(
-        activeColor: const Color(0xFF007AFF),
-        inactiveColor: const Color(0xFF8E8E93),
-        backgroundColor: CupertinoColors.systemBackground,
-        height: 50,
-        iconSize: 22,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.person_2_fill),
-            label: '客户',
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollUpdateNotification) {
+              _handleScroll();
+            }
+            return false;
+          },
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: _pages,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.chart_bar_fill),
-            label: '汇总',
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: FloatingTabBar(
+              key: _tabBarKey,
+              currentIndex: _selectedIndex,
+              onTap: (index) {
+                setState(() {
+                  _selectedIndex = index;
+                });
+                _tabBarKey.currentState?.restore();
+              },
+              items: _tabItems,
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.star_fill),
-            label: '排行',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.settings),
-            label: '设置',
-          ),
-        ],
-      ),
-      tabBuilder: (context, index) {
-        return CupertinoTabView(
-          builder: (context) => _pages[index],
-        );
-      },
+        ),
+      ],
     );
   }
 }

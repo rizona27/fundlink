@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../providers/data_manager_provider.dart';
@@ -18,7 +19,7 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> {
+class _ClientViewState extends State<ClientView> with SingleTickerProviderStateMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
@@ -26,12 +27,97 @@ class _ClientViewState extends State<ClientView> {
   bool _isSearchVisible = false;
   int _dataVersion = 0;
 
+  late AnimationController _topBarController;
+  Timer? _scrollTimer;
+  double _lastTargetProgress = 1.0;
+  double _currentScrollOffset = 0;
+
+  // 记录滚动前的搜索状态
+  bool _searchVisibleBeforeScroll = false;
+  String _searchTextBeforeScroll = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _topBarController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    )..value = 1.0;
+  }
+
+  void _handleScroll(double offset) {
+    _currentScrollOffset = offset;
+
+    // 防抖
+    _scrollTimer?.cancel();
+    _scrollTimer = Timer(const Duration(milliseconds: 16), () {
+      if (!mounted) return;
+
+      // 使用 easeOutCubic 曲线计算目标进度
+      double rawProgress = 1.0 - (_currentScrollOffset / 100).clamp(0.0, 1.0);
+      double targetProgress = Curves.easeOutCubic.transform(rawProgress);
+
+      if ((targetProgress - _lastTargetProgress).abs() > 0.01) {
+        _lastTargetProgress = targetProgress;
+        _topBarController.animateTo(targetProgress, duration: const Duration(milliseconds: 150));
+      }
+
+      // 当工具栏开始隐藏时（进度小于0.3），记录当前搜索状态
+      if (targetProgress < 0.3 && _topBarController.value > 0.3) {
+        _searchVisibleBeforeScroll = _isSearchVisible;
+        _searchTextBeforeScroll = _searchText;
+      }
+
+      // 当工具栏完全隐藏时（进度接近0），如果有搜索文字则保持搜索栏状态，否则关闭
+      if (targetProgress < 0.05 && _isSearchVisible) {
+        // 如果搜索框内没有文字，则关闭搜索栏
+        if (_searchText.trim().isEmpty) {
+          setState(() {
+            _isSearchVisible = false;
+          });
+        }
+      }
+
+      // 当工具栏重新展开时（进度大于0.5），根据之前记录的状态恢复
+      if (targetProgress > 0.5 && _topBarController.value < 0.5) {
+        if (_searchTextBeforeScroll.isNotEmpty) {
+          // 如果有搜索文字，恢复搜索栏状态
+          setState(() {
+            _isSearchVisible = _searchVisibleBeforeScroll;
+          });
+        }
+      }
+    });
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (!_isSearchVisible) {
+        _searchText = '';
+      }
+    });
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchText = value;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollTimer?.cancel();
+    _topBarController.dispose();
+    _dataManager.removeListener(_onDataManagerChanged);
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
-
     _dataManager.addListener(_onDataManagerChanged);
     _loadInitialData();
   }
@@ -52,7 +138,6 @@ class _ClientViewState extends State<ClientView> {
 
   Future<void> _loadSampleData() async {
     await _dataManager.addLog('加载示例数据', type: LogType.info);
-
     final sampleHoldings = MockData.getHoldings();
     for (final holding in sampleHoldings) {
       await _dataManager.addHolding(holding);
@@ -73,7 +158,6 @@ class _ClientViewState extends State<ClientView> {
 
   Map<String, List<FundHolding>> get _filteredGroupedHoldings {
     if (_searchText.isEmpty) return _groupedHoldings;
-
     final filtered = <String, List<FundHolding>>{};
     _groupedHoldings.forEach((clientName, holdings) {
       if (clientName.contains(_searchText)) {
@@ -117,7 +201,6 @@ class _ClientViewState extends State<ClientView> {
       hash = (hash << 5) - hash + name.codeUnitAt(i);
     }
     hash = hash.abs();
-
     final softColors = [
       const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
       const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
@@ -125,159 +208,186 @@ class _ClientViewState extends State<ClientView> {
       const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
       const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
     ];
-
     return [softColors[hash % softColors.length], CupertinoColors.white];
-  }
-
-  @override
-  void dispose() {
-    _dataManager.removeListener(_onDataManagerChanged);
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final backgroundColor = isDarkMode
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFF2F2F7);
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: const SizedBox(),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 刷新按钮放在最前面
-            RefreshButton(
-              dataManager: _dataManager,
-              fundService: _fundService,
-            ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: _areAnyCardsExpanded ? _collapseAll : _expandAll,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  _areAnyCardsExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-                  key: ValueKey(_areAnyCardsExpanded),
-                  size: 22,
-                ),
-              ),
-            ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                setState(() {
-                  _isSearchVisible = !_isSearchVisible;
-                  if (!_isSearchVisible) _searchText = '';
-                });
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                child: _isSearchVisible
-                    ? const Icon(CupertinoIcons.search_circle_fill, size: 24)
-                    : const Icon(CupertinoIcons.search, size: 22),
-              ),
-            ),
-          ],
-        ),
-        trailing: const SizedBox(width: 44),
-      ),
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final bottomNavBarHeight = 56.0;
+    final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
+
+    return Container(
+      color: backgroundColor,
       child: SafeArea(
-        child: Column(
-          children: [
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 250),
-              crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              firstChild: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 1),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollUpdateNotification) {
+              _handleScroll(notification.metrics.pixels);
+            }
+            return false;
+          },
+          child: AnimatedBuilder(
+            animation: _topBarController,
+            builder: (context, child) {
+              final progress = _topBarController.value;
+              final opacity = progress;
+              final height = 52.0 * progress;
+              final scale = 0.8 + (progress * 0.2);
+
+              return Column(
+                children: [
+                  // 顶部导航栏 - 高度 + 透明度 + 缩放
+                  Container(
+                    height: height,
+                    child: Opacity(
+                      opacity: opacity,
+                      child: Transform.scale(
+                        scale: scale,
+                        alignment: Alignment.center,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(
+                            children: [
+                              RefreshButton(
+                                dataManager: _dataManager,
+                                fundService: _fundService,
+                              ),
+                              const Spacer(),
+                              CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: _areAnyCardsExpanded ? _collapseAll : _expandAll,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: Icon(
+                                    _areAnyCardsExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
+                                    key: ValueKey(_areAnyCardsExpanded),
+                                    size: 22,
+                                  ),
+                                ),
+                              ),
+                              CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: _toggleSearch,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: _isSearchVisible
+                                      ? const Icon(CupertinoIcons.search_circle_fill, size: 24)
+                                      : const Icon(CupertinoIcons.search, size: 22),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: CupertinoSearchTextField(
-                  placeholder: '搜索客户名、基金代码',
-                  placeholderStyle: const TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
-                  style: const TextStyle(fontSize: 16),
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  onChanged: (value) => setState(() => _searchText = value),
-                ),
-              ),
-              secondChild: const SizedBox(height: 0),
-            ),
-            Expanded(
-              child: _filteredGroupedHoldings.isEmpty
-                  ? const EmptyState(
-                icon: CupertinoIcons.person,
-                title: '暂无数据',
-                message: '没有找到匹配的客户',
-              )
-                  : _buildHoldingsList(isDarkMode),
-            ),
-          ],
+                  ),
+                  // 搜索栏 - 随工具栏一起收缩
+                  Opacity(
+                    opacity: opacity,
+                    child: Container(
+                      height: _isSearchVisible ? (52.0 * progress) : 0,
+                      child: SingleChildScrollView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 200),
+                          crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          firstChild: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: CupertinoSearchTextField(
+                              placeholder: '搜索客户名、基金代码',
+                              placeholderStyle: const TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
+                              style: const TextStyle(fontSize: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                              onChanged: _onSearchChanged,
+                            ),
+                          ),
+                          secondChild: const SizedBox(height: 0),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // 内容区域
+                  Expanded(
+                    child: _filteredGroupedHoldings.isEmpty
+                        ? const EmptyState(
+                      icon: CupertinoIcons.person,
+                      title: '暂无数据',
+                      message: '没有找到匹配的客户',
+                    )
+                        : ListView.builder(
+                      key: ValueKey(_dataVersion),
+                      padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
+                      itemCount: _sortedClientNames.length,
+                      itemBuilder: (context, index) {
+                        final clientName = _sortedClientNames[index];
+                        final holdings = _filteredGroupedHoldings[clientName];
+                        if (holdings == null || holdings.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        final isExpanded = _expandedClients.contains(clientName);
+                        final gradient = _getGradientForName(clientName);
+                        final bool isLastClient = index == _sortedClientNames.length - 1;
+                        return Container(
+                          key: ValueKey('client_${clientName}_$index'),
+                          margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
+                          child: Column(
+                            children: [
+                              GradientCard(
+                                title: clientName,
+                                subtitle: '持仓数:',
+                                countValue: holdings.length,
+                                gradient: gradient,
+                                isExpanded: isExpanded,
+                                isDarkMode: isDarkMode,
+                                onTap: () => setState(() {
+                                  if (isExpanded) {
+                                    _expandedClients.remove(clientName);
+                                  } else {
+                                    _expandedClients.add(clientName);
+                                  }
+                                }),
+                              ),
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.easeOutCubic,
+                                child: isExpanded
+                                    ? Container(
+                                  margin: const EdgeInsets.only(left: 16, top: 8),
+                                  child: Column(
+                                    children: _buildAnimatedFundCards(holdings),
+                                  ),
+                                )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildHoldingsList(bool isDarkMode) {
-    return ListView.builder(
-      key: ValueKey(_dataVersion),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      itemCount: _sortedClientNames.length,
-      itemBuilder: (context, index) {
-        final clientName = _sortedClientNames[index];
-        final holdings = _filteredGroupedHoldings[clientName];
-
-        if (holdings == null || holdings.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        final isExpanded = _expandedClients.contains(clientName);
-        final gradient = _getGradientForName(clientName);
-        final bool isLastClient = index == _sortedClientNames.length - 1;
-
-        return Container(
-          key: ValueKey('client_${clientName}_$index'),
-          margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
-          child: Column(
-            children: [
-              GradientCard(
-                title: clientName,
-                subtitle: '持仓数:',
-                countValue: holdings.length,
-                gradient: gradient,
-                isExpanded: isExpanded,
-                isDarkMode: isDarkMode,
-                onTap: () => setState(() {
-                  if (isExpanded) {
-                    _expandedClients.remove(clientName);
-                  } else {
-                    _expandedClients.add(clientName);
-                  }
-                }),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutCubic,
-                child: isExpanded
-                    ? Container(
-                  margin: const EdgeInsets.only(left: 16, top: 8),
-                  child: Column(
-                    children: _buildAnimatedFundCards(holdings),
-                  ),
-                )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -286,7 +396,6 @@ class _ClientViewState extends State<ClientView> {
     for (int i = 0; i < holdings.length; i++) {
       final holding = holdings[i];
       final delay = Duration(milliseconds: 100 + (i * 80));
-
       cards.add(
         _FadeInWidget(
           key: ValueKey('fade_${holding.id}_$i'),
@@ -307,7 +416,6 @@ class _ClientViewState extends State<ClientView> {
           ),
         ),
       );
-
       if (i < holdings.length - 1) {
         cards.add(const SizedBox(height: 8));
       }
@@ -347,15 +455,12 @@ class _FadeInWidgetState extends State<_FadeInWidget> with SingleTickerProviderS
       duration: widget.duration,
       vsync: this,
     );
-
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
-
     _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
-
     Future.delayed(widget.delay, () {
       if (mounted) {
         _controller.forward();
