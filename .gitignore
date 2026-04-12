@@ -23,3 +23,5 @@
 .env
 *.key
 *.p12
+android/.kotlin/errors/errors-1775973091001.log
+/android/.kotlin/errors
