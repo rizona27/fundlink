@@ -25,16 +25,16 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   String _searchText = '';
   final Set<String> _expandedClients = {};
   bool _isSearchVisible = false;
-  int _dataVersion = 0;
 
   late AnimationController _topBarController;
   Timer? _scrollTimer;
   double _lastTargetProgress = 1.0;
   double _currentScrollOffset = 0;
 
-  // 记录滚动前的搜索状态
   bool _searchVisibleBeforeScroll = false;
   String _searchTextBeforeScroll = '';
+
+  final FocusNode _searchFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -47,13 +47,10 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
 
   void _handleScroll(double offset) {
     _currentScrollOffset = offset;
-
-    // 防抖
     _scrollTimer?.cancel();
     _scrollTimer = Timer(const Duration(milliseconds: 16), () {
       if (!mounted) return;
 
-      // 使用 easeOutCubic 曲线计算目标进度
       double rawProgress = 1.0 - (_currentScrollOffset / 100).clamp(0.0, 1.0);
       double targetProgress = Curves.easeOutCubic.transform(rawProgress);
 
@@ -62,26 +59,20 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
         _topBarController.animateTo(targetProgress, duration: const Duration(milliseconds: 150));
       }
 
-      // 当工具栏开始隐藏时（进度小于0.3），记录当前搜索状态
       if (targetProgress < 0.3 && _topBarController.value > 0.3) {
         _searchVisibleBeforeScroll = _isSearchVisible;
         _searchTextBeforeScroll = _searchText;
       }
 
-      // 当工具栏完全隐藏时（进度接近0），如果有搜索文字则保持搜索栏状态，否则关闭
-      if (targetProgress < 0.05 && _isSearchVisible) {
-        // 如果搜索框内没有文字，则关闭搜索栏
-        if (_searchText.trim().isEmpty) {
-          setState(() {
-            _isSearchVisible = false;
-          });
-        }
+      // 只有搜索框没有焦点且内容为空时，才允许滚动自动关闭
+      if (targetProgress < 0.05 && _isSearchVisible && _searchText.isEmpty && !_searchFocusNode.hasFocus) {
+        setState(() {
+          _isSearchVisible = false;
+        });
       }
 
-      // 当工具栏重新展开时（进度大于0.5），根据之前记录的状态恢复
       if (targetProgress > 0.5 && _topBarController.value < 0.5) {
         if (_searchTextBeforeScroll.isNotEmpty) {
-          // 如果有搜索文字，恢复搜索栏状态
           setState(() {
             _isSearchVisible = _searchVisibleBeforeScroll;
           });
@@ -103,12 +94,18 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     setState(() {
       _searchText = value;
     });
+    if (value.isNotEmpty && !_isSearchVisible) {
+      setState(() {
+        _isSearchVisible = true;
+      });
+    }
   }
 
   @override
   void dispose() {
     _scrollTimer?.cancel();
     _topBarController.dispose();
+    _searchFocusNode.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
@@ -124,9 +121,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
 
   void _onDataManagerChanged() {
     if (mounted) {
-      setState(() {
-        _dataVersion++;
-      });
+      setState(() {});
     }
   }
 
@@ -195,13 +190,13 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     });
   }
 
-  List<Color> _getGradientForName(String name) {
+  List<Color> _getGradientForOriginalName(String originalName) {
     int hash = 0;
-    for (int i = 0; i < name.length; i++) {
-      hash = (hash << 5) - hash + name.codeUnitAt(i);
+    for (int i = 0; i < originalName.length; i++) {
+      hash = (hash << 5) - hash + originalName.codeUnitAt(i);
     }
     hash = hash.abs();
-    final softColors = [
+    final softColors = <Color>[
       const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
       const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
       const Color(0xFFE0C8A8), const Color(0xFFC8D4A8), const Color(0xFFD4A8C4),
@@ -219,7 +214,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
         : const Color(0xFFF2F2F7);
 
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final bottomNavBarHeight = 56.0;
+    const bottomNavBarHeight = 56.0;
     final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
 
     return Container(
@@ -242,7 +237,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
 
               return Column(
                 children: [
-                  // 顶部导航栏 - 高度 + 透明度 + 缩放
+                  // 顶部导航栏
                   Container(
                     height: height,
                     child: Opacity(
@@ -287,7 +282,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                  // 搜索栏 - 随工具栏一起收缩
+                  // 搜索栏
                   Opacity(
                     opacity: opacity,
                     child: Container(
@@ -304,13 +299,14 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                               borderRadius: BorderRadius.circular(10),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
+                                  color: Colors.black.withValues(alpha: 0.03),
                                   blurRadius: 6,
                                   offset: const Offset(0, 1),
                                 ),
                               ],
                             ),
                             child: CupertinoSearchTextField(
+                              focusNode: _searchFocusNode,
                               placeholder: '搜索客户名、基金代码',
                               placeholderStyle: const TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
                               style: const TextStyle(fontSize: 16),
@@ -323,7 +319,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                  // 内容区域
+                  // 内容区域 - 移除了 key: ValueKey(_dataVersion)
                   Expanded(
                     child: _filteredGroupedHoldings.isEmpty
                         ? const EmptyState(
@@ -332,25 +328,25 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                       message: '没有找到匹配的客户',
                     )
                         : ListView.builder(
-                      key: ValueKey(_dataVersion),
                       padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
                       itemCount: _sortedClientNames.length,
                       itemBuilder: (context, index) {
-                        final clientName = _sortedClientNames[index];
-                        final holdings = _filteredGroupedHoldings[clientName];
+                        final obscuredName = _sortedClientNames[index];
+                        final holdings = _filteredGroupedHoldings[obscuredName];
                         if (holdings == null || holdings.isEmpty) {
                           return const SizedBox.shrink();
                         }
-                        final isExpanded = _expandedClients.contains(clientName);
-                        final gradient = _getGradientForName(clientName);
+                        final isExpanded = _expandedClients.contains(obscuredName);
+                        final originalClientName = holdings.first.clientName;
+                        final gradient = _getGradientForOriginalName(originalClientName);
                         final bool isLastClient = index == _sortedClientNames.length - 1;
                         return Container(
-                          key: ValueKey('client_${clientName}_$index'),
+                          key: ValueKey('client_${obscuredName}_$index'),
                           margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
                           child: Column(
                             children: [
                               GradientCard(
-                                title: clientName,
+                                title: obscuredName,
                                 subtitle: '持仓数:',
                                 countValue: holdings.length,
                                 gradient: gradient,
@@ -358,9 +354,9 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                                 isDarkMode: isDarkMode,
                                 onTap: () => setState(() {
                                   if (isExpanded) {
-                                    _expandedClients.remove(clientName);
+                                    _expandedClients.remove(obscuredName);
                                   } else {
-                                    _expandedClients.add(clientName);
+                                    _expandedClients.add(obscuredName);
                                   }
                                 }),
                               ),
@@ -398,11 +394,11 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
       final delay = Duration(milliseconds: 100 + (i * 80));
       cards.add(
         _FadeInWidget(
-          key: ValueKey('fade_${holding.id}_$i'),
+          key: ValueKey('fade_${holding.id}'),
           delay: delay,
           duration: const Duration(milliseconds: 400),
           child: FundCard(
-            key: ValueKey('card_${holding.id}_$i'),
+            key: ValueKey('card_${holding.id}'),
             holding: holding,
             hideClientInfo: true,
             onCopyClientId: () {

@@ -27,9 +27,11 @@ class RefreshButton extends StatefulWidget {
   State<RefreshButton> createState() => _RefreshButtonState();
 }
 
-class _RefreshButtonState extends State<RefreshButton> {
+class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateMixin {
   bool _isRefreshing = false;
   OverlayEntry? _loadingOverlayEntry;
+  AnimationController? _fadeController;
+  double _overlayOpacity = 0.0;
 
   DateTime _getPreviousWorkday(DateTime date) {
     var result = DateTime(date.year, date.month, date.day);
@@ -72,31 +74,56 @@ class _RefreshButtonState extends State<RefreshButton> {
     return (holding.id, null);
   }
 
+  void _hideLoadingOverlay() {
+    if (_fadeController != null) {
+      _fadeController!.dispose();
+      _fadeController = null;
+    }
+    if (_loadingOverlayEntry != null && _loadingOverlayEntry!.mounted) {
+      _loadingOverlayEntry!.remove();
+      _loadingOverlayEntry = null;
+    }
+    _overlayOpacity = 0.0;
+  }
+
   void _showLoadingOverlay(BuildContext context) {
+    _hideLoadingOverlay(); // 先清理旧的
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    )..addListener(() {
+      _overlayOpacity = _fadeController!.value;
+      _loadingOverlayEntry?.markNeedsBuild();
+    });
+
     _loadingOverlayEntry = OverlayEntry(
       builder: (context) => Material(
-        color: Colors.black.withOpacity(0.6),
+        color: Colors.black.withValues(alpha: 0.3 * _overlayOpacity),
         child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemBackground,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CupertinoActivityIndicator(radius: 20),
-                SizedBox(height: 16),
-                Text(
-                  '刷新中...',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: CupertinoColors.label,
+          child: Opacity(
+            opacity: _overlayOpacity,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemBackground,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoActivityIndicator(radius: 20),
+                  SizedBox(height: 16),
+                  Text(
+                    '刷新中...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: CupertinoColors.label,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -104,11 +131,7 @@ class _RefreshButtonState extends State<RefreshButton> {
     );
 
     Overlay.of(context).insert(_loadingOverlayEntry!);
-  }
-
-  void _hideLoadingOverlay() {
-    _loadingOverlayEntry?.remove();
-    _loadingOverlayEntry = null;
+    _fadeController!.forward();
   }
 
   Future<void> _refresh() async {
@@ -193,6 +216,12 @@ class _RefreshButtonState extends State<RefreshButton> {
         context.showToast('所有数据已是最新');
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _hideLoadingOverlay();
+    super.dispose();
   }
 
   @override

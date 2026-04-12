@@ -5,12 +5,11 @@ class Toast {
   static OverlayEntry? _currentOverlayEntry;
 
   static void show(BuildContext context, String message, {Duration duration = const Duration(seconds: 2)}) {
-    // 移除已有的 Toast
-    _currentOverlayEntry?.remove();
+    // 移除已有的 Toast（安全移除）
+    _removeCurrentOverlay();
 
     final overlayState = Overlay.of(context);
 
-    // 先创建 overlayEntry，但需要在 builder 中引用自身
     OverlayEntry? overlayEntry;
 
     overlayEntry = OverlayEntry(
@@ -18,7 +17,9 @@ class Toast {
         message: message,
         duration: duration,
         onDismiss: () {
-          overlayEntry?.remove();
+          if (overlayEntry != null && overlayEntry!.mounted) {
+            overlayEntry!.remove();
+          }
           if (_currentOverlayEntry == overlayEntry) {
             _currentOverlayEntry = null;
           }
@@ -28,6 +29,13 @@ class Toast {
 
     _currentOverlayEntry = overlayEntry;
     overlayState.insert(overlayEntry);
+  }
+
+  static void _removeCurrentOverlay() {
+    if (_currentOverlayEntry != null && _currentOverlayEntry!.mounted) {
+      _currentOverlayEntry!.remove();
+    }
+    _currentOverlayEntry = null;
   }
 }
 
@@ -72,7 +80,9 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
     Future.delayed(widget.duration, () {
       if (mounted) {
         _controller.reverse().then((_) {
-          widget.onDismiss();
+          if (mounted) {
+            widget.onDismiss();
+          }
         });
       }
     });
@@ -103,7 +113,8 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    // 修复弃用警告
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
