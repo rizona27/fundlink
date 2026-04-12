@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'providers/data_manager_provider.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
@@ -106,29 +105,31 @@ class _MainTabViewState extends State<MainTabView> {
   final GlobalKey<FloatingTabBarState> _tabBarKey = GlobalKey<FloatingTabBarState>();
 
   final List<Widget> _pages = [
-    const ClientView(),
     const SummaryView(),
+    const ClientView(),
     const TopPerformersView(),
     const ConfigView(),
   ];
 
   final List<BottomNavigationBarItem> _tabItems = const [
-    BottomNavigationBarItem(
-      icon: Icon(CupertinoIcons.person_2_fill),
-      label: '客户',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(CupertinoIcons.chart_bar_fill),
-      label: '汇总',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(CupertinoIcons.star_fill),
-      label: '排行',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(CupertinoIcons.settings),
-      label: '设置',
-    ),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_fill), label: '一览'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_2_fill), label: '客户'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.star_fill), label: '排名'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.settings), label: '设置'),
+  ];
+
+  // 自定义每个标签的渐变色（起始色、结束色）
+  final List<Color> _activeColors = [
+    const Color(0xFF667EEA), // 一览
+    const Color(0xFFF093FB), // 客户
+    const Color(0xFF4FACFE), // 排名
+    const Color(0xFF43E97B), // 设置
+  ];
+  final List<Color> _activeColorsEnd = [
+    const Color(0xFF764BA2),
+    const Color(0xFFF5576C),
+    const Color(0xFF00F2FE),
+    const Color(0xFF38F9D7),
   ];
 
   void _handleScroll() {
@@ -166,6 +167,8 @@ class _MainTabViewState extends State<MainTabView> {
                 _tabBarKey.currentState?.restore();
               },
               items: _tabItems,
+              activeColors: _activeColors,
+              activeColorsEnd: _activeColorsEnd,
             ),
           ),
         ),
