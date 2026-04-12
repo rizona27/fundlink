@@ -265,6 +265,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const SizedBox(),
         leading: Row(
           mainAxisSize: MainAxisSize.min,

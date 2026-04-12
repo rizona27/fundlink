@@ -67,6 +67,7 @@ class _ConfigViewState extends State<ConfigView> {
 
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: Text('设置'),
       ),
       child: SafeArea(

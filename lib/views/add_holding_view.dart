@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
@@ -15,47 +16,32 @@ class AmountInputFormatter extends TextInputFormatter {
       TextEditingValue oldValue, TextEditingValue newValue) {
     if (newValue.text.isEmpty) return newValue;
 
-    // 只允许数字和小数点
     String filtered = newValue.text.replaceAll(RegExp(r'[^0-9.]'), '');
-
-    // 限制最多一个小数点
     final parts = filtered.split('.');
     if (parts.length > 2) {
       filtered = parts[0] + '.' + parts[1];
     }
-
-    // 处理以小数点开头的情况（例如 ".5" -> "0.5"）
     if (filtered.startsWith('.')) {
       filtered = '0$filtered';
     }
-
-    // 分离整数和小数部分
     final newParts = filtered.split('.');
     String integerPart = newParts[0];
     String decimalPart = newParts.length > 1 ? newParts[1] : '';
-
-    // 整数部分最多9位
     if (integerPart.length > 9) {
       integerPart = integerPart.substring(0, 9);
     }
-    // 小数部分最多2位
     if (decimalPart.length > 2) {
       decimalPart = decimalPart.substring(0, 2);
     }
-
-    // 格式化结果
     String formatted;
     if (decimalPart.isEmpty) {
       formatted = integerPart;
     } else {
       formatted = '$integerPart.$decimalPart';
     }
-
-    // 如果用户输入了小数点但没有小数部分，保留小数点（例如 "123."）
     if (filtered.endsWith('.') && decimalPart.isEmpty && integerPart.isNotEmpty) {
       formatted = '$integerPart.';
     }
-
     if (formatted != newValue.text) {
       final cursorPos = formatted.length;
       return newValue.copyWith(
@@ -72,22 +58,20 @@ class ClientNameInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
       TextEditingValue oldValue, TextEditingValue newValue) {
-    // 允许的字符：字母、数字、中文、空格
     final allowedPattern = RegExp(r'[a-zA-Z0-9\u4e00-\u9fa5 ]');
-    String filtered = newValue.text.split('').where((c) => allowedPattern.hasMatch(c)).join('');
-
-    // 限制最多一个空格：将多个连续空格替换为单个空格，并限制空格总数不超过1
+    String filtered = newValue.text
+        .split('')
+        .where((c) => allowedPattern.hasMatch(c))
+        .join('');
     filtered = filtered.replaceAll(RegExp(r' +'), ' ');
     final spaceCount = filtered.split('').where((c) => c == ' ').length;
     if (spaceCount > 1) {
-      // 移除多余的空格，保留第一个
       final firstSpaceIndex = filtered.indexOf(' ');
       if (firstSpaceIndex != -1) {
         filtered = filtered.substring(0, firstSpaceIndex + 1) +
             filtered.substring(firstSpaceIndex + 1).replaceAll(' ', '');
       }
     }
-
     if (filtered != newValue.text) {
       final cursorPos = filtered.length;
       return newValue.copyWith(
@@ -134,18 +118,14 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   final TextEditingController _purchaseSharesController = TextEditingController();
   final TextEditingController _remarksController = TextEditingController();
 
-  // 错误状态（用于控制边框颜色）
   bool _clientNameError = false;
   bool _fundCodeError = false;
   bool _amountError = false;
   bool _sharesError = false;
 
-  // 日期选择器
-  bool _showDatePicker = false;
   DateTime _purchaseDate = DateTime.now();
-  DateTime _tempPurchaseDate = DateTime.now();
-
   bool _isLoading = false;
+  bool _isSaving = false;
 
   @override
   void didChangeDependencies() {
@@ -165,7 +145,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     super.dispose();
   }
 
-  // 表单整体有效性
   bool get _isFormValid {
     return !_clientNameError &&
         !_fundCodeError &&
@@ -177,7 +156,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         _purchaseSharesController.text.trim().isNotEmpty;
   }
 
-  // 验证客户姓名
   void _validateClientName(String value) {
     final trimmed = value.trim();
     setState(() {
@@ -185,7 +163,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     });
   }
 
-  // 验证基金代码
   void _validateFundCode(String value) {
     final trimmed = value.trim();
     setState(() {
@@ -193,7 +170,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     });
   }
 
-  // 验证购买金额
   void _validateAmount(String value) {
     final trimmed = value.trim();
     bool error = false;
@@ -206,7 +182,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     setState(() => _amountError = error);
   }
 
-  // 验证购买份额
   void _validateShares(String value) {
     final trimmed = value.trim();
     bool error = false;
@@ -219,7 +194,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     setState(() => _sharesError = error);
   }
 
-  // 基金代码输入过滤（只允许数字，最多6位）
   void _onFundCodeChanged(String value) {
     final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
     final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
@@ -233,11 +207,14 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     _validateFundCode(newValue);
   }
 
-  // 保存持仓
   Future<void> _saveHolding() async {
+    if (_isSaving) return;
     if (!_isFormValid) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isSaving = true;
+    });
 
     final amount = double.parse(_purchaseAmountController.text.trim());
     final shares = double.parse(_purchaseSharesController.text.trim());
@@ -270,35 +247,51 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       );
       await _dataManager.updateHolding(updatedHolding);
 
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       await _dataManager.addLog('添加持仓失败: $e', type: LogType.error);
       context.showToast('添加失败');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isSaving = false;
+        });
+      }
     }
+  }
+
+  void _showDatePickerModal() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => _DatePickerModal(
+        initialDate: _purchaseDate,
+        onConfirm: (newDate) {
+          setState(() {
+            _purchaseDate = newDate;
+          });
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    // 磨玻璃背景色：深色模式深灰半透，浅色模式白半透
     final frostedBgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withOpacity(0.85)
-        : CupertinoColors.white.withOpacity(0.85);
-    // 输入框背景色：深色模式深灰，浅色模式白
+        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        : CupertinoColors.white.withValues(alpha: 0.85);
     final inputBgColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white;
-    // 文字颜色
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    // 次要文字颜色（占位符等）
     final placeholderColor = isDarkMode
-        ? CupertinoColors.white.withOpacity(0.5)
+        ? CupertinoColors.white.withValues(alpha: 0.5)
         : CupertinoColors.systemGrey;
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        heroTag: 'add_holding_view_nav',
-        transitionBetweenRoutes: false,
+        transitionBetweenRoutes: false, // 🔥 关键：禁用 Hero 动画，避免标签冲突
         middle: const SizedBox(),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
@@ -314,7 +307,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 必填信息区块
               _buildFrostedSection(
                 title: '必填信息',
                 isDarkMode: isDarkMode,
@@ -382,21 +374,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     required: true,
                     child: _buildDatePickerField(
                       purchaseDate: _purchaseDate,
-                      onTap: () {
-                        setState(() {
-                          _tempPurchaseDate = _purchaseDate;
-                          _showDatePicker = true;
-                        });
-                      },
+                      onTap: _showDatePickerModal,
                       isDarkMode: isDarkMode,
                     ),
                   ),
-                  // 日期选择器面板
-                  if (_showDatePicker) _buildDatePickerPanel(isDarkMode),
                 ],
               ),
               const SizedBox(height: 24),
-              // 选填信息区块
               _buildFrostedSection(
                 title: '选填信息',
                 isDarkMode: isDarkMode,
@@ -440,7 +424,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                 ],
               ),
               const SizedBox(height: 32),
-              // 底部按钮（统一磨玻璃质感）
               Row(
                 children: [
                   Expanded(
@@ -469,7 +452,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
-  // 磨玻璃质感区块
+  // 磨玻璃质感区块（带 BackdropFilter）
   Widget _buildFrostedSection({
     required String title,
     required bool isDarkMode,
@@ -490,28 +473,33 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: frostedBgColor,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: frostedBgColor,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: children),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: children),
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  // 标签 + 输入框同行（垂直居中）
   Widget _buildRowField({
     required String label,
     required bool required,
@@ -539,7 +527,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
-  // 普通输入框（边框颜色反馈，支持深色模式）
+  // 输入框：极细底边，无实体边框
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,
@@ -551,33 +539,39 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
   }) {
-    Color borderColor;
+    Color bottomBorderColor;
     if (error) {
-      borderColor = CupertinoColors.systemRed;
+      bottomBorderColor = CupertinoColors.systemRed;
     } else if (controller.text.trim().isNotEmpty && !error) {
-      borderColor = CupertinoColors.activeBlue.withOpacity(0.5);
+      bottomBorderColor = CupertinoColors.activeBlue;
     } else {
-      borderColor = CupertinoColors.systemGrey.withOpacity(0.4);
+      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
     }
 
-    return CupertinoTextField(
-      controller: controller,
-      placeholder: hint,
-      onChanged: onChanged,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return Container(
       decoration: BoxDecoration(
         color: inputBgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 1.5),
+        border: Border(
+          bottom: BorderSide(
+            color: bottomBorderColor,
+            width: 1.5,
+          ),
+        ),
       ),
-      style: TextStyle(color: textColor),
-      placeholderStyle: TextStyle(color: placeholderColor),
-      inputFormatters: inputFormatters,
-      maxLength: maxLength,
+      child: CupertinoTextField(
+        controller: controller,
+        placeholder: hint,
+        onChanged: onChanged,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        style: TextStyle(color: textColor),
+        placeholderStyle: TextStyle(color: placeholderColor),
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
+      ),
     );
   }
 
-  // 金额/份额输入框（使用自定义格式化器）
   Widget _buildAmountField({
     required TextEditingController controller,
     required String hint,
@@ -587,46 +581,46 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     required Color placeholderColor,
     bool error = false,
   }) {
-    Color borderColor;
+    Color bottomBorderColor;
     if (error) {
-      borderColor = CupertinoColors.systemRed;
+      bottomBorderColor = CupertinoColors.systemRed;
     } else if (controller.text.trim().isNotEmpty && !error) {
-      borderColor = CupertinoColors.activeBlue.withOpacity(0.5);
+      bottomBorderColor = CupertinoColors.activeBlue;
     } else {
-      borderColor = CupertinoColors.systemGrey.withOpacity(0.4);
+      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
     }
 
-    return CupertinoTextField(
-      controller: controller,
-      placeholder: hint,
-      onChanged: onChanged,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return Container(
       decoration: BoxDecoration(
         color: inputBgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 1.5),
+        border: Border(
+          bottom: BorderSide(
+            color: bottomBorderColor,
+            width: 1.5,
+          ),
+        ),
       ),
-      style: TextStyle(color: textColor),
-      placeholderStyle: TextStyle(color: placeholderColor),
-      inputFormatters: [AmountInputFormatter()],
+      child: CupertinoTextField(
+        controller: controller,
+        placeholder: hint,
+        onChanged: onChanged,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        style: TextStyle(color: textColor),
+        placeholderStyle: TextStyle(color: placeholderColor),
+        inputFormatters: [AmountInputFormatter()],
+      ),
     );
   }
 
-  // ==================== 日期选择器核心修复 ====================
-
-  /// 修复：购买日期显示框（未点击时）深色模式完美适配
   Widget _buildDatePickerField({
     required DateTime purchaseDate,
     required VoidCallback onTap,
     required bool isDarkMode,
   }) {
-    // 核心修复：深色模式下使用比背景稍微亮一点的深灰色，浅色模式下用纯白
     final bgColor = isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.white;
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    final borderColor = isDarkMode
-        ? CupertinoColors.systemGrey.withOpacity(0.2)
-        : CupertinoColors.systemGrey.withOpacity(0.4);
     final iconColor = isDarkMode
         ? CupertinoColors.systemGrey
         : CupertinoColors.inactiveGray;
@@ -638,7 +632,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: 1.5),
+          border: const Border(
+            bottom: BorderSide(color: CupertinoColors.systemGrey, width: 0.5),
+          ),
         ),
         child: Row(
           children: [
@@ -658,112 +654,184 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
-  /// 修复：日期选择器面板（深色模式完整适配，消除白灰色遮罩）
-  Widget _buildDatePickerPanel(bool isDarkMode) {
-    final now = DateTime.now();
-    final years = List.generate(10, (i) => now.year - 5 + i);
-    final months = List.generate(12, (i) => i + 1);
-    final days = List.generate(
-      DateTime(_tempPurchaseDate.year, _tempPurchaseDate.month + 1, 0).day,
-          (i) => i + 1,
-    );
+  Widget _buildGlassButton({
+    required String label,
+    required VoidCallback? onPressed,
+    required bool isDarkMode,
+    required bool isPrimary,
+  }) {
+    final bgColor = isDarkMode
+        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        : CupertinoColors.white.withValues(alpha: 0.85);
+    Color? backgroundColor;
+    if (isPrimary && onPressed != null) {
+      backgroundColor = CupertinoColors.activeBlue.withValues(alpha: 0.15);
+    } else if (!isPrimary && onPressed != null) {
+      backgroundColor = bgColor;
+    }
+    final textColor = isPrimary
+        ? CupertinoColors.activeBlue
+        : (isDarkMode ? CupertinoColors.white : CupertinoColors.label);
+    final disabledColor = isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey5;
 
-    // 严格适配 iOS 深色二级背景
-    final Color panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
-    final Color textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-
-    // 彻底修复：使用系统专门的 Overlay 组件，并设置背景色
-    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
-      background: isDarkMode
-          ? CupertinoColors.white.withOpacity(0.05)
-          : CupertinoColors.black.withOpacity(0.03),
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
+    Widget button = Container(
       decoration: BoxDecoration(
-        color: panelBgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: isDarkMode ? Border.all(color: Colors.white10) : null,
+        color: onPressed != null ? backgroundColor : disabledColor,
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDarkMode ? 0.4 : 0.1),
+            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 180,
-            child: Row(
+      child: CupertinoButton(
+        onPressed: onPressed,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        borderRadius: BorderRadius.circular(30),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: onPressed != null ? textColor : textColor.withValues(alpha: 0.5),
+          ),
+        ),
+      ),
+    );
+    if (onPressed == null) button = Opacity(opacity: 0.6, child: button);
+    return button;
+  }
+}
+
+// 模态日期选择器
+class _DatePickerModal extends StatefulWidget {
+  final DateTime initialDate;
+  final ValueChanged<DateTime> onConfirm;
+
+  const _DatePickerModal({
+    required this.initialDate,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_DatePickerModal> createState() => _DatePickerModalState();
+}
+
+class _DatePickerModalState extends State<_DatePickerModal> {
+  late DateTime _tempDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempDate = widget.initialDate;
+  }
+
+  void _updateTempDate({int? year, int? month, int? day}) {
+    setState(() {
+      int y = year ?? _tempDate.year;
+      int m = month ?? _tempDate.month;
+      int d = day ?? _tempDate.day;
+      int maxDays = DateTime(y, m + 1, 0).day;
+      if (d > maxDays) d = maxDays;
+      _tempDate = DateTime(y, m, d);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final days = List.generate(
+      DateTime(_tempDate.year, _tempDate.month + 1, 0).day,
+          (i) => i + 1,
+    );
+
+    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
+      background: isDarkMode
+          ? CupertinoColors.white.withValues(alpha: 0.05)
+          : CupertinoColors.black.withValues(alpha: 0.03),
+    );
+
+    return CupertinoPopupSurface(
+      child: Container(
+        height: 280,
+        decoration: BoxDecoration(
+          color: panelBgColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  _buildPickerColumn(
+                    years,
+                    years.indexOf(_tempDate.year),
+                    '年',
+                        (i) => _updateTempDate(year: years[i]),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    months,
+                    _tempDate.month - 1,
+                    '月',
+                        (i) => _updateTempDate(month: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    days,
+                    _tempDate.day - 1,
+                    '日',
+                        (i) => _updateTempDate(day: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              height: 0.5,
+              color: isDarkMode
+                  ? CupertinoColors.separator
+                  : CupertinoColors.opaqueSeparator,
+            ),
+            Row(
               children: [
-                _buildColumn(
-                  years,
-                  years.indexOf(_tempPurchaseDate.year),
-                  '年',
-                      (i) => _updateTempDate(year: years[i]),
-                  panelBgColor,
-                  textColor,
-                  selectionOverlay,
+                _buildModalButton(
+                  label: '取消',
+                  onPressed: () => Navigator.pop(context),
+                  isDarkMode: isDarkMode,
                 ),
-                _buildColumn(
-                  months,
-                  _tempPurchaseDate.month - 1,
-                  '月',
-                      (i) => _updateTempDate(month: i + 1),
-                  panelBgColor,
-                  textColor,
-                  selectionOverlay,
-                ),
-                _buildColumn(
-                  days,
-                  _tempPurchaseDate.day - 1,
-                  '日',
-                      (i) => _updateTempDate(day: i + 1),
-                  panelBgColor,
-                  textColor,
-                  selectionOverlay,
+                _buildModalButton(
+                  label: '完成',
+                  onPressed: () {
+                    widget.onConfirm(_tempDate);
+                    Navigator.pop(context);
+                  },
+                  isDarkMode: isDarkMode,
+                  isPrimary: true,
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildGlassButton(
-                  label: '取消',
-                  onPressed: () => setState(() => _showDatePicker = false),
-                  isDarkMode: isDarkMode,
-                  isPrimary: false,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildGlassButton(
-                  label: '完成',
-                  onPressed: () {
-                    setState(() {
-                      _purchaseDate = _tempPurchaseDate;
-                      _showDatePicker = false;
-                    });
-                  },
-                  isDarkMode: isDarkMode,
-                  isPrimary: false,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  /// 提取的列构建方法，确保每个滚轮都应用了 selectionOverlay
-  Widget _buildColumn(
+  Widget _buildPickerColumn(
       List<int> items,
       int initial,
       String unit,
@@ -786,72 +854,27 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
-  /// 辅助方法：更新日期并处理 2.29/2.30 等溢出逻辑
-  void _updateTempDate({int? year, int? month, int? day}) {
-    setState(() {
-      int y = year ?? _tempPurchaseDate.year;
-      int m = month ?? _tempPurchaseDate.month;
-      int d = day ?? _tempPurchaseDate.day;
-      int maxDays = DateTime(y, m + 1, 0).day;
-      if (d > maxDays) d = maxDays;
-      _tempPurchaseDate = DateTime(y, m, d);
-    });
-  }
-
-  // 统一磨玻璃质感按钮（适用于底部按钮和日期选择器按钮）
-  Widget _buildGlassButton({
+  Widget _buildModalButton({
     required String label,
-    required VoidCallback? onPressed,
+    required VoidCallback onPressed,
     required bool isDarkMode,
-    required bool isPrimary,
+    bool isPrimary = false,
   }) {
-    // 背景色：深色模式深灰半透，浅色模式白半透
-    final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withOpacity(0.85)
-        : CupertinoColors.white.withOpacity(0.85);
-    // 主要按钮（保存）使用淡蓝色背景（毛玻璃效果），次要按钮使用半透背景
-    Color? backgroundColor;
-    if (isPrimary && onPressed != null) {
-      backgroundColor = CupertinoColors.activeBlue.withOpacity(0.15);
-    } else if (!isPrimary && onPressed != null) {
-      backgroundColor = bgColor;
-    }
-    // 文字颜色：主要按钮蓝色，次要按钮根据主题自动
-    final textColor = isPrimary
-        ? CupertinoColors.activeBlue
-        : (isDarkMode ? CupertinoColors.white : CupertinoColors.label);
-    final disabledColor = isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey5;
-
-    Widget button = Container(
-      decoration: BoxDecoration(
-        color: onPressed != null ? backgroundColor : disabledColor,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return Expanded(
       child: CupertinoButton(
         onPressed: onPressed,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        borderRadius: BorderRadius.circular(30),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: onPressed != null ? textColor : textColor.withOpacity(0.5),
+            color: isPrimary
+                ? CupertinoColors.activeBlue
+                : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
           ),
         ),
       ),
     );
-
-    if (onPressed == null) {
-      button = Opacity(opacity: 0.6, child: button);
-    }
-    return button;
   }
 }

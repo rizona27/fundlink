@@ -60,6 +60,7 @@ class _SummaryViewState extends State<SummaryView> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: Text('基金汇总'),
       ),
       child: SafeArea(

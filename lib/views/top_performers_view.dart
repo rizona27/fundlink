@@ -138,6 +138,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text('收益排行'),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,

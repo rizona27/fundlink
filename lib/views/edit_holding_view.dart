@@ -252,6 +252,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text('编辑持仓'),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,

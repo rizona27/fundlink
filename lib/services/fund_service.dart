@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-// 删除未使用的 import '../models/fund_holding.dart';
+import 'package:fast_gbk/fast_gbk.dart';
 import '../models/log_entry.dart';
 import 'data_manager.dart';
 
@@ -64,14 +64,11 @@ class FundService {
 
   String _extractJsonFromJsonp(String rawBody) {
     String jsonStr = rawBody.trim();
-
     int startIndex = jsonStr.indexOf('{');
     int endIndex = jsonStr.lastIndexOf('}');
-
     if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
       return jsonStr.substring(startIndex, endIndex + 1);
     }
-
     debugPrint('⚠️ 未找到有效的JSON格式');
     return jsonStr;
   }
@@ -89,7 +86,6 @@ class FundService {
       debugPrint('📍 请求URL: $url');
 
       final client = http.Client();
-
       final request = http.Request('GET', url);
       request.headers.addAll({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -106,7 +102,7 @@ class FundService {
         },
       );
 
-      responseBody = await response.stream.transform(utf8.decoder).join();
+      final bytes = await response.stream.toBytes();
       client.close();
 
       final statusCode = response.statusCode;
@@ -114,7 +110,7 @@ class FundService {
 
       if (statusCode != 200) {
         debugPrint('❌ 请求失败: HTTP $statusCode');
-        _dataManager?.addLog('基金代码 $code: HTTP ${response.statusCode}', type: LogType.error);
+        _dataManager?.addLog('基金代码 $code: HTTP $statusCode', type: LogType.error);
         return {
           'fundName': '加载失败',
           'currentNav': 0.0,
@@ -122,6 +118,14 @@ class FundService {
           'isValid': false,
           'error': 'HTTP $statusCode',
         };
+      }
+
+      // 优先使用 GBK 解码，失败则回退 UTF-8
+      try {
+        responseBody = gbk.decode(bytes);
+      } catch (e) {
+        debugPrint('⚠️ GBK解码失败，尝试UTF-8: $e');
+        responseBody = utf8.decode(bytes, allowMalformed: true);
       }
 
       if (responseBody.isEmpty || responseBody.length < 20) {
@@ -136,7 +140,6 @@ class FundService {
       }
 
       debugPrint('📦 响应数据长度: ${responseBody.length} 字符');
-
       String jsonStr = _extractJsonFromJsonp(responseBody);
       debugPrint('📝 提取的JSON: ${jsonStr.substring(0, jsonStr.length > 100 ? 100 : jsonStr.length)}...');
 
@@ -144,7 +147,6 @@ class FundService {
       debugPrint('📊 解析成功，字段: ${json.keys.join(', ')}');
 
       final fundName = json['name'] as String? ?? '未知基金';
-
       double currentNav = 0.0;
       if (json['dwjz'] != null) {
         final dwjzStr = json['dwjz'].toString();
@@ -194,7 +196,6 @@ class FundService {
 
     } on SocketException catch (e) {
       debugPrint('❌ 网络异常: $e');
-      debugPrint('   可能原因: 无法连接到服务器、DNS解析失败');
       _dataManager?.addLog('基金代码 $code: 网络异常 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
@@ -205,7 +206,6 @@ class FundService {
       };
     } on TimeoutException catch (e) {
       debugPrint('❌ 超时异常: $e');
-      debugPrint('   尝试增加超时时间或检查网络连接');
       _dataManager?.addLog('基金代码 $code: 请求超时 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
