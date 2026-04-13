@@ -6,7 +6,7 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../widgets/theme_switch.dart';
-import '../services/fund_service.dart';  // 新增导入
+import '../services/fund_service.dart';
 
 class DataManager extends ChangeNotifier {
   static const String _holdingsKey = 'fund_holdings';
@@ -289,5 +289,27 @@ class DataManager extends ChangeNotifier {
       return a.fundCode.compareTo(b.fundCode);
     });
     return sorted;
+  }
+}
+
+// ==================== DataManagerProvider ====================
+class DataManagerProvider extends InheritedWidget {
+  final DataManager dataManager;
+
+  const DataManagerProvider({
+    super.key,
+    required this.dataManager,
+    required super.child,
+  });
+
+  static DataManager of(BuildContext context) {
+    final provider = context.dependOnInheritedWidgetOfExactType<DataManagerProvider>();
+    assert(provider != null, 'No DataManagerProvider found in context');
+    return provider!.dataManager;
+  }
+
+  @override
+  bool updateShouldNotify(DataManagerProvider oldWidget) {
+    return dataManager != oldWidget.dataManager;
   }
 }

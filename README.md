@@ -2,9 +2,6 @@
 lib/
 ├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统），管理主题切换动画
 │
-├── providers/
-│   └── data_manager_provider.dart         # 全局状态提供器，使用InheritedWidget将DataManager注入到整个应用树
-│
 ├── services/
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、日志记录、隐私模式、收益计算、SharedPreferences持久化
 │   └── fund_service.dart                  # 基金API服务，调用天天基金接口获取净值/名称/收益率，含缓存和重试机制

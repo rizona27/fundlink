@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import '../providers/data_manager_provider.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';

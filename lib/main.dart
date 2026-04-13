@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'providers/data_manager_provider.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';

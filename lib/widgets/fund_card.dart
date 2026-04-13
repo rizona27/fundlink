@@ -124,15 +124,13 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   void _onCopyClientId() {
     if (widget.holding.clientId.isEmpty) return;
     Clipboard.setData(ClipboardData(text: widget.holding.clientId));
-    widget.onShowToast?.call('客户号已复制到剪贴板');
+    // 移除内部 Toast，只触发外部回调（外部会显示 Toast 和记录日志）
     widget.onCopyClientId?.call();
   }
 
-  // 修改：复制报告到剪贴板，并 Toast 显示报告内容
   void _onGenerateReport() {
     final report = reportContent;
     Clipboard.setData(ClipboardData(text: report)).then((_) {
-      // 直接显示报告内容（完整内容，不截断）
       widget.onShowToast?.call(report);
     });
     widget.onGenerateReport?.call();

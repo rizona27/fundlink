@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
-import '../providers/data_manager_provider.dart';
+// 修改：合并 provider 后直接导入 data_manager
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -117,7 +117,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     _scrollTimer = Timer(const Duration(milliseconds: 16), () {
       if (!mounted) return;
 
-      // 如果搜索框有文字，强制保持搜索栏显示
       if (_searchText.isNotEmpty) {
         if (!_isSearchVisible) {
           setState(() => _isSearchVisible = true);
@@ -199,6 +198,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // 修改：使用 DataManagerProvider.of 但导入已改为 data_manager.dart
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
@@ -206,7 +206,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
 
   void _onDataManagerChanged() => setState(() {});
 
-  // ========== 核心筛选逻辑：支持客户名、客户号、基金代码、基金名称 ==========
   List<FundHolding> get _filteredHoldings {
     if (_searchText.isEmpty) return _dataManager.holdings;
     final lower = _searchText.toLowerCase();
@@ -218,12 +217,10 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     }).toList();
   }
 
-  // 置顶卡片（基于筛选结果）
   List<FundHolding> get _filteredPinnedHoldings {
     return _filteredHoldings.where((h) => h.isPinned).toList();
   }
 
-  // 所有卡片分组（包括置顶和非置顶），基于筛选结果
   Map<String, List<FundHolding>> get _groupedHoldings {
     final map = <String, List<FundHolding>>{};
     for (final holding in _filteredHoldings) {
@@ -414,6 +411,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
             children: [
               GradientCard(
                 title: name,
+                clientId: holdings.first.clientId,   // 新增：传入客户号
                 subtitle: '持仓数:',
                 countValue: holdings.length,
                 gradient: gradient,

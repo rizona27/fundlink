@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show Colors;
 /// 通用渐变卡片组件
 class GradientCard extends StatelessWidget {
   final String title;
+  final String? clientId;           // 新增：客户号（浅灰色显示）
   final String? subtitle;
   final int? countValue;
   final List<Color> gradient;
@@ -17,6 +18,7 @@ class GradientCard extends StatelessWidget {
   const GradientCard({
     super.key,
     required this.title,
+    this.clientId,
     this.subtitle,
     this.countValue,
     required this.gradient,
@@ -35,15 +37,13 @@ class GradientCard extends StatelessWidget {
     return const Color(0xFFD46B6B);
   }
 
-  // 根据深色模式获取渐变结束颜色
   Color _getEndColor() {
     if (isDarkMode) {
-      return const Color(0xFF1C1C1E); // 深色模式背景色
+      return const Color(0xFF1C1C1E);
     }
     return CupertinoColors.white;
   }
 
-  // 根据深色模式获取文字颜色
   Color _getTextColor() {
     if (isDarkMode) {
       return CupertinoColors.white;
@@ -51,7 +51,6 @@ class GradientCard extends StatelessWidget {
     return CupertinoColors.label;
   }
 
-  // 根据深色模式获取副文字颜色
   Color _getSubTextColor() {
     if (isDarkMode) {
       return CupertinoColors.white.withOpacity(0.5);
@@ -59,7 +58,6 @@ class GradientCard extends StatelessWidget {
     return CupertinoColors.label.withOpacity(0.5);
   }
 
-  // 根据深色模式获取阴影颜色
   Color _getShadowColor() {
     if (isDarkMode) {
       return CupertinoColors.black.withOpacity(0.3);
@@ -67,7 +65,6 @@ class GradientCard extends StatelessWidget {
     return gradient[0].withOpacity(0.25);
   }
 
-  // 根据深色模式获取边框阴影颜色
   Color _getBoxShadowColor() {
     if (isDarkMode) {
       return CupertinoColors.black.withOpacity(0.15);
@@ -119,12 +116,25 @@ class GradientCard extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: textColor,
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                    children: [
+                      TextSpan(text: title),
+                      if (clientId != null && clientId!.isNotEmpty)
+                        TextSpan(
+                          text: ' ($clientId)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.normal,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                    ],
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
