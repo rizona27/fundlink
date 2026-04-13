@@ -105,11 +105,11 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
           position: _slideAnimation,
           child: Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              constraints: const BoxConstraints(maxWidth: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              constraints: const BoxConstraints(maxWidth: 320),
               decoration: BoxDecoration(
                 color: CupertinoColors.systemGrey6,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.15),
@@ -124,7 +124,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                   fontSize: 14,
                   color: CupertinoColors.label,
                 ),
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.left, // 文本左对齐
               ),
             ),
           ),

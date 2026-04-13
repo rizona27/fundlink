@@ -6,6 +6,7 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../widgets/theme_switch.dart';
+import '../services/fund_service.dart';  // 新增导入
 
 class DataManager extends ChangeNotifier {
   static const String _holdingsKey = 'fund_holdings';
@@ -187,6 +188,27 @@ class DataManager extends ChangeNotifier {
       await saveData();
       await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
       notifyListeners();
+    }
+  }
+
+  // ========== 新增：强制刷新所有持仓的基金信息（忽略日期检查） ==========
+  Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
+    final total = _holdings.length;
+    for (int i = 0; i < total; i++) {
+      final holding = _holdings[i];
+      final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
+      if (fetched['isValid'] == true) {
+        final updated = holding.copyWith(
+          fundName: fetched['fundName'],
+          currentNav: fetched['currentNav'],
+          navDate: fetched['navDate'],
+          isValid: true,
+        );
+        await updateHolding(updated);
+      } else {
+        await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
+      }
+      onProgress?.call(i + 1, total);
     }
   }
 

@@ -6,7 +6,7 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
 
-/// 刷新按钮组件 - 封装刷新逻辑
+/// 刷新按钮组件 - 支持普通刷新（仅更新过时数据）和长按强制刷新（全部更新）
 class RefreshButton extends StatefulWidget {
   final DataManager dataManager;
   final FundService fundService;
@@ -48,11 +48,11 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  Future<(String, FundHolding?)> _fetchHoldingWithRetry(FundHolding holding) async {
+  Future<(String, FundHolding?)> _fetchHoldingWithRetry(FundHolding holding, {bool forceRefresh = false}) async {
     var retryCount = 0;
 
     while (retryCount < 3) {
-      final fundInfo = await widget.fundService.fetchFundInfo(holding.fundCode);
+      final fundInfo = await widget.fundService.fetchFundInfo(holding.fundCode, forceRefresh: forceRefresh);
       final isValid = fundInfo['isValid'] as bool? ?? false;
 
       if (isValid) {
@@ -86,8 +86,8 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     _overlayOpacity = 0.0;
   }
 
-  void _showLoadingOverlay(BuildContext context) {
-    _hideLoadingOverlay(); // 先清理旧的
+  void _showLoadingOverlay(BuildContext context, {String message = '刷新中...'}) {
+    _hideLoadingOverlay();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -109,14 +109,14 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
                 color: CupertinoColors.systemBackground,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Column(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CupertinoActivityIndicator(radius: 20),
-                  SizedBox(height: 16),
+                  const CupertinoActivityIndicator(radius: 20),
+                  const SizedBox(height: 16),
                   Text(
-                    '刷新中...',
-                    style: TextStyle(
+                    message,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                       color: CupertinoColors.label,
@@ -134,9 +134,19 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     _fadeController!.forward();
   }
 
+  // 普通刷新：仅更新过时的基金
   Future<void> _refresh() async {
     if (_isRefreshing) return;
+    await _performRefresh(forceAll: false);
+  }
 
+  // 强制刷新：更新所有基金（忽略日期检查）
+  Future<void> _forceRefresh() async {
+    if (_isRefreshing) return;
+    await _performRefresh(forceAll: true);
+  }
+
+  Future<void> _performRefresh({required bool forceAll}) async {
     setState(() {
       _isRefreshing = true;
     });
@@ -144,22 +154,27 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     widget.onRefreshStart?.call();
 
     if (mounted) {
-      _showLoadingOverlay(context);
+      _showLoadingOverlay(context, message: forceAll ? '强制刷新所有基金...' : '刷新中...');
     }
 
-    await widget.dataManager.addLog('开始刷新所有基金信息', type: LogType.info);
+    await widget.dataManager.addLog(forceAll ? '开始强制刷新所有基金信息' : '开始刷新基金信息', type: LogType.info);
 
     final previousWorkday = _getPreviousWorkday(DateTime.now());
     final holdings = widget.dataManager.holdings;
     final totalCount = holdings.length;
 
-    final needsRefreshHoldings = <FundHolding>[];
-    for (final holding in holdings) {
-      final isLatest = holding.isValid &&
-          holding.currentNav > 0 &&
-          _isSameDay(holding.navDate, previousWorkday);
-      if (!isLatest) {
-        needsRefreshHoldings.add(holding);
+    List<FundHolding> needsRefreshHoldings;
+    if (forceAll) {
+      needsRefreshHoldings = List.from(holdings);
+    } else {
+      needsRefreshHoldings = [];
+      for (final holding in holdings) {
+        final isLatest = holding.isValid &&
+            holding.currentNav > 0 &&
+            _isSameDay(holding.navDate, previousWorkday);
+        if (!isLatest) {
+          needsRefreshHoldings.add(holding);
+        }
       }
     }
 
@@ -177,7 +192,7 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
         final batch = needsRefreshHoldings.sublist(i, end);
 
         final batchResults = await Future.wait(
-            batch.map((holding) => _fetchHoldingWithRetry(holding))
+            batch.map((holding) => _fetchHoldingWithRetry(holding, forceRefresh: forceAll))
         );
         results.addAll(batchResults);
       }
@@ -194,7 +209,9 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     }
 
     await widget.dataManager.addLog(
-      '刷新完成: 成功 $successCount, 跳过 $skipCount, 失败 $failCount',
+      forceAll
+          ? '强制刷新完成: 成功 $successCount, 失败 $failCount'
+          : '刷新完成: 成功 $successCount, 跳过 $skipCount, 失败 $failCount',
       type: LogType.success,
     );
 
@@ -206,15 +223,19 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
       });
       widget.onRefreshComplete?.call();
 
-      if (successCount > 0 || skipCount > 0) {
-        context.showToast(
-            '刷新完成: 成功 $successCount, 跳过 $skipCount${failCount > 0 ? ', 失败 $failCount' : ''}'
-        );
-      } else if (failCount > 0) {
-        context.showToast('刷新失败，请检查网络');
+      String message;
+      if (forceAll) {
+        message = '强制刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}';
       } else {
-        context.showToast('所有数据已是最新');
+        if (successCount > 0 || skipCount > 0) {
+          message = '刷新完成: 成功 $successCount, 跳过 $skipCount${failCount > 0 ? ', 失败 $failCount' : ''}';
+        } else if (failCount > 0) {
+          message = '刷新失败，请检查网络';
+        } else {
+          message = '所有数据已是最新';
+        }
       }
+      context.showToast(message);
     }
   }
 
@@ -226,16 +247,19 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: _isRefreshing ? null : _refresh,
-      child: _isRefreshing
-          ? const SizedBox(
-        width: 22,
-        height: 22,
-        child: CupertinoActivityIndicator(),
-      )
-          : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+    return GestureDetector(
+      onLongPress: _isRefreshing ? null : _forceRefresh,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: _isRefreshing ? null : _refresh,
+        child: _isRefreshing
+            ? const SizedBox(
+          width: 22,
+          height: 22,
+          child: CupertinoActivityIndicator(),
+        )
+            : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+      ),
     );
   }
 }
