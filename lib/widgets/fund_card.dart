@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
+import '../services/data_manager.dart';
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;
@@ -28,6 +29,28 @@ class FundCard extends StatefulWidget {
 class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin {
   double _dragOffset = 0;
   static const double _maxSwipeOffset = 70;
+  DataManager? _dataManager;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dm = DataManagerProvider.of(context);
+    if (_dataManager != dm) {
+      _dataManager?.removeListener(_onDataManagerChanged);
+      _dataManager = dm;
+      _dataManager?.addListener(_onDataManagerChanged);
+    }
+  }
+
+  void _onDataManagerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _dataManager?.removeListener(_onDataManagerChanged);
+    super.dispose();
+  }
 
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
     setState(() {
@@ -124,7 +147,6 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   void _onCopyClientId() {
     if (widget.holding.clientId.isEmpty) return;
     Clipboard.setData(ClipboardData(text: widget.holding.clientId));
-    // 移除内部 Toast，只触发外部回调（外部会显示 Toast 和记录日志）
     widget.onCopyClientId?.call();
   }
 
@@ -192,6 +214,10 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     final annualizedReturn = widget.holding.annualizedProfitRate;
     final bool hasNoData = !widget.holding.isValid || widget.holding.currentNav <= 0;
     final isPinned = widget.holding.isPinned;
+
+    // 断言 _dataManager 非空（didChangeDependencies 已调用）
+    final dataManager = _dataManager!;
+    final displayClientName = dataManager.obscuredName(widget.holding.clientName);
 
     return GestureDetector(
       onHorizontalDragUpdate: _handleHorizontalDragUpdate,
@@ -288,7 +314,7 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('客户: ${widget.holding.clientName}', style: TextStyle(fontSize: 13, color: _getPrimaryTextColor(isDarkMode))),
+                        Text('客户: $displayClientName', style: TextStyle(fontSize: 13, color: _getPrimaryTextColor(isDarkMode))),
                         if (widget.holding.clientId.isNotEmpty) ...[
                           const SizedBox(width: 4),
                           Text('(${widget.holding.clientId})', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),

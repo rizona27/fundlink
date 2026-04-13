@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
-// 修改：合并 provider 后直接导入 data_manager
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -11,47 +9,7 @@ import '../widgets/fund_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/refresh_button.dart';
-
-// 封装的搜索组件（支持清空）
-class SearchHeader extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-
-  const SearchHeader({
-    super.key,
-    required this.controller,
-    required this.focusNode,
-    required this.onChanged,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: CupertinoColors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 1))],
-      ),
-      child: CupertinoSearchTextField(
-        controller: controller,
-        focusNode: focusNode,
-        placeholder: '搜索客户名、客户号、基金代码、基金名称',
-        placeholderStyle: const TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
-        style: const TextStyle(fontSize: 16),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        onChanged: onChanged,
-        onSuffixTap: () {
-          controller.clear();
-          onClear();
-        },
-      ),
-    );
-  }
-}
+import '../widgets/search.dart';
 
 class ClientView extends StatefulWidget {
   const ClientView({super.key});
@@ -66,7 +24,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   String _searchText = '';
   final Set<String> _expandedClients = {};
   bool _isSearchVisible = false;
-  bool _isPinnedSectionExpanded = true;
+  bool _isPinnedSectionExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
@@ -84,6 +42,14 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _topBarController = AnimationController(duration: const Duration(milliseconds: 200), vsync: this)..value = 1.0;
+
+    // 监听焦点：获取焦点时强制显示搜索栏
+    _searchFocusNode.addListener(() {
+      if (_searchFocusNode.hasFocus && !_isSearchVisible && mounted) {
+        setState(() => _isSearchVisible = true);
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
     });
@@ -117,13 +83,16 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     _scrollTimer = Timer(const Duration(milliseconds: 16), () {
       if (!mounted) return;
 
-      if (_searchText.isNotEmpty) {
+      // 关键修改：只要搜索框有文字，强制保持搜索栏显示，且不执行任何隐藏逻辑
+      final hasText = _searchController.text.isNotEmpty;
+      if (hasText) {
         if (!_isSearchVisible) {
           setState(() => _isSearchVisible = true);
         }
-        return;
+        return;  // 有文字时直接返回，不处理滚动隐藏
       }
 
+      // 无文字时，根据滚动进度控制搜索栏显示/隐藏
       double rawProgress = 1.0 - (_currentScrollOffset / 100).clamp(0.0, 1.0);
       double targetProgress = Curves.easeOutCubic.transform(rawProgress);
       if ((targetProgress - _lastTargetProgress).abs() > 0.01) {
@@ -163,17 +132,16 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   }
 
   void _onSearchChanged(String value) {
+    // 立即更新 _searchText，保证筛选及时（不延迟）
+    _cancelDebounce();
+    setState(() {
+      _searchText = value;
+    });
+
+    // 有内容时强制显示搜索栏
     if (value.isNotEmpty && !_isSearchVisible) {
       setState(() => _isSearchVisible = true);
     }
-    _cancelDebounce();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {
-          _searchText = value;
-        });
-      }
-    });
   }
 
   void _onSearchClear() {
@@ -182,6 +150,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
       _searchText = '';
       _searchController.clear();
     });
+    // 清空后，让滚动控制搜索栏隐藏（如果滚动位置满足条件）
   }
 
   @override
@@ -198,7 +167,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 修改：使用 DataManagerProvider.of 但导入已改为 data_manager.dart
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
@@ -259,17 +227,25 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     return [
       for (int i = 0; i < pinned.length; i++)
         Column(children: [
-          FundCard(
-            key: ValueKey('pinned_${pinned[i].id}'),
-            holding: pinned[i],
-            hideClientInfo: true,
-            onCopyClientId: () {
-              _dataManager.addLog('复制客户号: ${pinned[i].clientId}', type: LogType.info);
-              context.showToast('客户号已复制');
-            },
-            onGenerateReport: () => _dataManager.addLog('生成报告: ${pinned[i].clientName} - ${pinned[i].fundName}', type: LogType.info),
-            onShowToast: context.showToast,
-            onPinToggle: () => _dataManager.togglePinStatus(pinned[i].id),
+          Container(
+            margin: const EdgeInsets.only(left: 16),
+            child: _FadeInWidget(
+              key: ValueKey('fade_pinned_${pinned[i].id}'),
+              delay: Duration(milliseconds: 100 + i * 80),  // 与普通卡片一致的延迟递增
+              duration: const Duration(milliseconds: 400),
+              child: FundCard(
+                key: ValueKey('pinned_${pinned[i].id}'),
+                holding: pinned[i],
+                hideClientInfo: false,
+                onCopyClientId: () {
+                  _dataManager.addLog('复制客户号: ${pinned[i].clientId}', type: LogType.info);
+                  context.showToast('客户号已复制');
+                },
+                onGenerateReport: () => _dataManager.addLog('生成报告: ${pinned[i].clientName} - ${pinned[i].fundName}', type: LogType.info),
+                onShowToast: context.showToast,
+                onPinToggle: () => _dataManager.togglePinStatus(pinned[i].id),
+              ),
+            ),
           ),
           if (i < pinned.length - 1) const SizedBox(height: 8),
         ]),
@@ -345,7 +321,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                         child: AnimatedCrossFade(
                           duration: const Duration(milliseconds: 200),
                           crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                          firstChild: SearchHeader(
+                          firstChild: Search(
                             controller: _searchController,
                             focusNode: _searchFocusNode,
                             onChanged: _onSearchChanged,
@@ -411,7 +387,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
             children: [
               GradientCard(
                 title: name,
-                clientId: holdings.first.clientId,   // 新增：传入客户号
+                clientId: holdings.first.clientId,
                 subtitle: '持仓数:',
                 countValue: holdings.length,
                 gradient: gradient,
