@@ -1,5 +1,4 @@
-![](http://github-profile-summary-cards.vercel.app/api/cards/repos-per-language?username=rizona27&theme=buefy)
-![](http://github-profile-summary-cards.vercel.app/api/cards/productive-time?username=rizona27&theme=buefy&utcOffset=8)
+
 ```text
 lib/
 ├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统），管理主题切换动画
@@ -33,5 +32,3 @@ lib/
     ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关，支持浅色/跟随系统/深色三种模式
     └── toast.dart                         # Toast提示组件，全局消息提示，淡入淡出动画，自动消失
 ```
-
-![](http://github-profile-summary-cards.vercel.app/api/cards/profile-details?username=rizona27&theme=buefy)
