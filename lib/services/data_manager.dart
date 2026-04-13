@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// 删除未使用的 import 'package:uuid/uuid.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
@@ -14,9 +13,6 @@ class DataManager extends ChangeNotifier {
   static const String _privacyModeKey = 'privacy_mode';
   static const String _themeModeKey = 'theme_mode';
 
-  // 删除未使用的 _uuid
-  // final Uuid _uuid = const Uuid();
-
   List<FundHolding> _holdings = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
@@ -26,6 +22,16 @@ class DataManager extends ChangeNotifier {
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
   ThemeMode get themeMode => _themeMode;
+
+  // 获取置顶的持仓
+  List<FundHolding> get pinnedHoldings {
+    return _holdings.where((h) => h.isPinned).toList();
+  }
+
+  // 获取非置顶的持仓
+  List<FundHolding> get unpinnedHoldings {
+    return _holdings.where((h) => !h.isPinned).toList();
+  }
 
   DataManager() {
     loadData();
@@ -150,6 +156,38 @@ class DataManager extends ChangeNotifier {
     await saveData();
     await addLog('清空所有持仓数据，共删除 $count 条记录', type: LogType.warning);
     notifyListeners();
+  }
+
+  // 切换置顶状态
+  Future<void> togglePinStatus(String holdingId) async {
+    final index = _holdings.indexWhere((h) => h.id == holdingId);
+    if (index != -1) {
+      final newHoldings = List<FundHolding>.from(_holdings);
+      final holding = newHoldings[index];
+      final newIsPinned = !holding.isPinned;
+      final newHolding = holding.copyWith(
+        isPinned: newIsPinned,
+        pinnedTimestamp: newIsPinned ? DateTime.now() : null,
+      );
+      newHoldings[index] = newHolding;
+
+      // 重新排序：置顶的放在前面，按置顶时间倒序
+      newHoldings.sort((a, b) {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        if (a.isPinned && b.isPinned) {
+          final aTime = a.pinnedTimestamp ?? DateTime(1970);
+          final bTime = b.pinnedTimestamp ?? DateTime(1970);
+          return bTime.compareTo(aTime);
+        }
+        return 0;
+      });
+
+      _holdings = newHoldings;
+      await saveData();
+      await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
+      notifyListeners();
+    }
   }
 
   Future<void> addLog(String message, {LogType type = LogType.info}) async {

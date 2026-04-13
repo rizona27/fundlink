@@ -115,8 +115,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
-    // 移除自动加载示例数据的调用，应用启动时保持空白
-    // _loadInitialData();
   }
 
   void _onDataManagerChanged() {
@@ -125,28 +123,11 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     }
   }
 
-  // 删除或注释掉 _loadInitialData 和 _loadSampleData 方法
-  // 如需保留，可保留但不再调用，或者直接删除以下代码块
-
-  /*
-  Future<void> _loadInitialData() async {
-    if (_dataManager.holdings.isEmpty) {
-      await _loadSampleData();
-    }
-  }
-
-  Future<void> _loadSampleData() async {
-    await _dataManager.addLog('加载示例数据', type: LogType.info);
-    final sampleHoldings = MockData.getHoldings();
-    for (final holding in sampleHoldings) {
-      await _dataManager.addHolding(holding);
-    }
-  }
-  */
-
-  Map<String, List<FundHolding>> get _groupedHoldings {
+  // 获取非置顶持仓并按客户分组
+  Map<String, List<FundHolding>> get _groupedUnpinnedHoldings {
     final map = <String, List<FundHolding>>{};
-    for (final holding in _dataManager.holdings) {
+    final unpinnedHoldings = _dataManager.unpinnedHoldings;
+    for (final holding in unpinnedHoldings) {
       final name = _dataManager.obscuredName(holding.clientName);
       if (!map.containsKey(name)) {
         map[name] = [];
@@ -156,10 +137,11 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     return map;
   }
 
+  // 过滤后的分组（非置顶）
   Map<String, List<FundHolding>> get _filteredGroupedHoldings {
-    if (_searchText.isEmpty) return _groupedHoldings;
+    if (_searchText.isEmpty) return _groupedUnpinnedHoldings;
     final filtered = <String, List<FundHolding>>{};
-    _groupedHoldings.forEach((clientName, holdings) {
+    _groupedUnpinnedHoldings.forEach((clientName, holdings) {
       if (clientName.contains(_searchText)) {
         filtered[clientName] = holdings;
       } else {
@@ -211,6 +193,52 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     return [softColors[hash % softColors.length], CupertinoColors.white];
   }
 
+  // 获取置顶的持仓（过滤搜索）
+  List<FundHolding> get _filteredPinnedHoldings {
+    if (_searchText.isEmpty) {
+      return _dataManager.pinnedHoldings;
+    }
+    return _dataManager.pinnedHoldings.where((h) =>
+    h.clientName.contains(_searchText) ||
+        h.fundCode.contains(_searchText) ||
+        h.fundName.contains(_searchText)
+    ).toList();
+  }
+
+  // 构建置顶卡片列表
+  List<Widget> _buildPinnedCards() {
+    final pinnedHoldings = _filteredPinnedHoldings;
+    final cards = <Widget>[];
+    for (int i = 0; i < pinnedHoldings.length; i++) {
+      final holding = pinnedHoldings[i];
+      cards.add(
+        FundCard(
+          key: ValueKey('pinned_${holding.id}'),
+          holding: holding,
+          hideClientInfo: true,
+          onCopyClientId: () {
+            _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+            context.showToast('客户号已复制');
+          },
+          onGenerateReport: () {
+            _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
+            context.showToast('报告已生成');
+          },
+          onShowToast: (message) {
+            context.showToast(message);
+          },
+          onPinToggle: () {
+            _dataManager.togglePinStatus(holding.id);
+          },
+        ),
+      );
+      if (i < pinnedHoldings.length - 1) {
+        cards.add(const SizedBox(height: 8));
+      }
+    }
+    return cards;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -221,6 +249,9 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     const bottomNavBarHeight = 56.0;
     final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
+
+    final hasPinnedHoldings = _filteredPinnedHoldings.isNotEmpty;
+    final hasUnpinnedHoldings = _filteredGroupedHoldings.isNotEmpty;
 
     return Container(
       color: backgroundColor,
@@ -323,61 +354,49 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                     ),
                   ),
                   Expanded(
-                    child: _filteredGroupedHoldings.isEmpty
+                    child: (!hasPinnedHoldings && !hasUnpinnedHoldings)
                         ? const EmptyState(
                       icon: CupertinoIcons.person,
                       title: '暂无数据',
                       message: '没有找到匹配的客户',
                     )
-                        : ListView.builder(
+                        : ListView(
                       padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
-                      itemCount: _sortedClientNames.length,
-                      itemBuilder: (context, index) {
-                        final obscuredName = _sortedClientNames[index];
-                        final holdings = _filteredGroupedHoldings[obscuredName];
-                        if (holdings == null || holdings.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        final isExpanded = _expandedClients.contains(obscuredName);
-                        final originalClientName = holdings.first.clientName;
-                        final gradient = _getGradientForOriginalName(originalClientName);
-                        final bool isLastClient = index == _sortedClientNames.length - 1;
-                        return Container(
-                          key: ValueKey('client_${obscuredName}_$index'),
-                          margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
-                          child: Column(
-                            children: [
-                              GradientCard(
-                                title: obscuredName,
-                                subtitle: '持仓数:',
-                                countValue: holdings.length,
-                                gradient: gradient,
-                                isExpanded: isExpanded,
-                                isDarkMode: isDarkMode,
-                                onTap: () => setState(() {
-                                  if (isExpanded) {
-                                    _expandedClients.remove(obscuredName);
-                                  } else {
-                                    _expandedClients.add(obscuredName);
-                                  }
-                                }),
+                      children: [
+                        // 置顶区域
+                        if (hasPinnedHoldings) ...[
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4, bottom: 8),
+                            child: Text(
+                              '置顶',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFFF9500),
                               ),
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeOutCubic,
-                                child: isExpanded
-                                    ? Container(
-                                  margin: const EdgeInsets.only(left: 16, top: 8),
-                                  child: Column(
-                                    children: _buildAnimatedFundCards(holdings),
-                                  ),
-                                )
-                                    : const SizedBox.shrink(),
-                              ),
-                            ],
+                            ),
                           ),
-                        );
-                      },
+                          ..._buildPinnedCards(),
+                          const SizedBox(height: 16),
+                        ],
+                        // 客户分组区域
+                        if (hasUnpinnedHoldings) ...[
+                          if (hasPinnedHoldings) ...[
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4, bottom: 8),
+                              child: Text(
+                                '客户列表',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF8E8E93),
+                                ),
+                              ),
+                            ),
+                          ],
+                          ..._buildClientGroups(),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -387,6 +406,59 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
         ),
       ),
     );
+  }
+
+  List<Widget> _buildClientGroups() {
+    final groups = <Widget>[];
+    for (int i = 0; i < _sortedClientNames.length; i++) {
+      final obscuredName = _sortedClientNames[i];
+      final holdings = _filteredGroupedHoldings[obscuredName];
+      if (holdings == null || holdings.isEmpty) {
+        continue;
+      }
+      final isExpanded = _expandedClients.contains(obscuredName);
+      final originalClientName = holdings.first.clientName;
+      final gradient = _getGradientForOriginalName(originalClientName);
+      final bool isLastClient = i == _sortedClientNames.length - 1;
+      groups.add(
+        Container(
+          key: ValueKey('client_${obscuredName}_$i'),
+          margin: EdgeInsets.only(bottom: isLastClient ? 0 : 8),
+          child: Column(
+            children: [
+              GradientCard(
+                title: obscuredName,
+                subtitle: '持仓数:',
+                countValue: holdings.length,
+                gradient: gradient,
+                isExpanded: isExpanded,
+                isDarkMode: CupertinoTheme.brightnessOf(context) == Brightness.dark,
+                onTap: () => setState(() {
+                  if (isExpanded) {
+                    _expandedClients.remove(obscuredName);
+                  } else {
+                    _expandedClients.add(obscuredName);
+                  }
+                }),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                child: isExpanded
+                    ? Container(
+                  margin: const EdgeInsets.only(left: 16, top: 8),
+                  child: Column(
+                    children: _buildAnimatedFundCards(holdings),
+                  ),
+                )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return groups;
   }
 
   List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings) {
@@ -410,6 +482,12 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
             onGenerateReport: () {
               _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info);
               context.showToast('报告已生成');
+            },
+            onShowToast: (message) {
+              context.showToast(message);
+            },
+            onPinToggle: () {
+              _dataManager.togglePinStatus(holding.id);
             },
           ),
         ),
