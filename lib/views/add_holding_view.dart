@@ -7,6 +7,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';  // 新增导入
 
 /// 金额/份额输入格式化器：支持小数点输入，整数最多9位，小数最多2位，只能一个小数点
 class AmountInputFormatter extends TextInputFormatter {
@@ -290,7 +291,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false, // 🔥 关键：禁用 Hero 动画，避免标签冲突
+        transitionBetweenRoutes: false,
         middle: const SizedBox(),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
@@ -426,19 +427,17 @@ class _AddHoldingViewState extends State<AddHoldingView> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildGlassButton(
+                    child: GlassButton(
                       label: '取消',
                       onPressed: () => Navigator.of(context).pop(),
-                      isDarkMode: isDarkMode,
                       isPrimary: false,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildGlassButton(
+                    child: GlassButton(
                       label: '保存',
                       onPressed: _isFormValid ? _saveHolding : null,
-                      isDarkMode: isDarkMode,
                       isPrimary: true,
                     ),
                   ),
@@ -652,59 +651,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       ),
     );
   }
-
-  Widget _buildGlassButton({
-    required String label,
-    required VoidCallback? onPressed,
-    required bool isDarkMode,
-    required bool isPrimary,
-  }) {
-    final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
-        : CupertinoColors.white.withValues(alpha: 0.85);
-    Color? backgroundColor;
-    if (isPrimary && onPressed != null) {
-      backgroundColor = CupertinoColors.activeBlue.withValues(alpha: 0.15);
-    } else if (!isPrimary && onPressed != null) {
-      backgroundColor = bgColor;
-    }
-    final textColor = isPrimary
-        ? CupertinoColors.activeBlue
-        : (isDarkMode ? CupertinoColors.white : CupertinoColors.label);
-    final disabledColor = isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey5;
-
-    Widget button = Container(
-      decoration: BoxDecoration(
-        color: onPressed != null ? backgroundColor : disabledColor,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: CupertinoButton(
-        onPressed: onPressed,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        borderRadius: BorderRadius.circular(30),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: onPressed != null ? textColor : textColor.withValues(alpha: 0.5),
-          ),
-        ),
-      ),
-    );
-    if (onPressed == null) button = Opacity(opacity: 0.6, child: button);
-    return button;
-  }
 }
 
-// 模态日期选择器
+// 模态日期选择器（复用 GlassButton）
 class _DatePickerModal extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onConfirm;
@@ -808,19 +757,26 @@ class _DatePickerModalState extends State<_DatePickerModal> {
             ),
             Row(
               children: [
-                _buildModalButton(
-                  label: '取消',
-                  onPressed: () => Navigator.pop(context),
-                  isDarkMode: isDarkMode,
+                Expanded(
+                  child: GlassButton(
+                    label: '取消',
+                    onPressed: () => Navigator.pop(context),
+                    isPrimary: false,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
                 ),
-                _buildModalButton(
-                  label: '完成',
-                  onPressed: () {
-                    widget.onConfirm(_tempDate);
-                    Navigator.pop(context);
-                  },
-                  isDarkMode: isDarkMode,
-                  isPrimary: true,
+                Expanded(
+                  child: GlassButton(
+                    label: '完成',
+                    onPressed: () {
+                      widget.onConfirm(_tempDate);
+                      Navigator.pop(context);
+                    },
+                    isPrimary: true,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
                 ),
               ],
             ),
@@ -849,30 +805,6 @@ class _DatePickerModalState extends State<_DatePickerModal> {
         children: items.map((item) => Center(
           child: Text('$item$unit', style: TextStyle(color: textColor, fontSize: 16)),
         )).toList(),
-      ),
-    );
-  }
-
-  Widget _buildModalButton({
-    required String label,
-    required VoidCallback onPressed,
-    required bool isDarkMode,
-    bool isPrimary = false,
-  }) {
-    return Expanded(
-      child: CupertinoButton(
-        onPressed: onPressed,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-            color: isPrimary
-                ? CupertinoColors.activeBlue
-                : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
-          ),
-        ),
       ),
     );
   }
