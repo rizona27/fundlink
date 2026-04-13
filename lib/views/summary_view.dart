@@ -68,10 +68,12 @@ class _SummaryViewState extends State<SummaryView> {
             _buildSearchBar(),
             Expanded(
               child: _filteredGroupedFunds.isEmpty
-                  ? const EmptyState(
+                  ? EmptyState(
                 icon: CupertinoIcons.chart_bar,
-                title: '暂无数据',
-                message: '没有找到匹配的基金',
+                title: '暂无基金数据',
+                message: _searchText.isEmpty
+                    ? '还没有添加任何基金持仓'
+                    : '没有找到与“$_searchText”相关的基金，试试其他关键词',
               )
                   : _buildFundsList(),
             ),

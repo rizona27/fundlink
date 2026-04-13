@@ -159,10 +159,12 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             _buildSortBar(),
             Expanded(
               child: _sortedHoldings.isEmpty
-                  ? const EmptyState(
+                  ? EmptyState(
                 icon: CupertinoIcons.star_slash,
-                title: '暂无数据',
-                message: '没有找到符合条件的持仓',
+                title: '没有符合条件的数据',
+                message: '尝试调整筛选条件或添加更多持仓',
+                actionText: '重置筛选',
+                onAction: _resetFilters,
               )
                   : _buildHoldingsList(),
             ),

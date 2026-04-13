@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -10,6 +11,8 @@ import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/refresh_button.dart';
 import '../widgets/search.dart';
+import '../widgets/glass_button.dart';
+import 'add_holding_view.dart';
 
 class ClientView extends StatefulWidget {
   const ClientView({super.key});
@@ -43,7 +46,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     super.initState();
     _topBarController = AnimationController(duration: const Duration(milliseconds: 200), vsync: this)..value = 1.0;
 
-    // 监听焦点：获取焦点时强制显示搜索栏
     _searchFocusNode.addListener(() {
       if (_searchFocusNode.hasFocus && !_isSearchVisible && mounted) {
         setState(() => _isSearchVisible = true);
@@ -83,16 +85,14 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     _scrollTimer = Timer(const Duration(milliseconds: 16), () {
       if (!mounted) return;
 
-      // 关键修改：只要搜索框有文字，强制保持搜索栏显示，且不执行任何隐藏逻辑
       final hasText = _searchController.text.isNotEmpty;
       if (hasText) {
         if (!_isSearchVisible) {
           setState(() => _isSearchVisible = true);
         }
-        return;  // 有文字时直接返回，不处理滚动隐藏
+        return;
       }
 
-      // 无文字时，根据滚动进度控制搜索栏显示/隐藏
       double rawProgress = 1.0 - (_currentScrollOffset / 100).clamp(0.0, 1.0);
       double targetProgress = Curves.easeOutCubic.transform(rawProgress);
       if ((targetProgress - _lastTargetProgress).abs() > 0.01) {
@@ -132,13 +132,11 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
   }
 
   void _onSearchChanged(String value) {
-    // 立即更新 _searchText，保证筛选及时（不延迟）
     _cancelDebounce();
     setState(() {
       _searchText = value;
     });
 
-    // 有内容时强制显示搜索栏
     if (value.isNotEmpty && !_isSearchVisible) {
       setState(() => _isSearchVisible = true);
     }
@@ -150,7 +148,6 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
       _searchText = '';
       _searchController.clear();
     });
-    // 清空后，让滚动控制搜索栏隐藏（如果滚动位置满足条件）
   }
 
   @override
@@ -231,7 +228,7 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
             margin: const EdgeInsets.only(left: 16),
             child: _FadeInWidget(
               key: ValueKey('fade_pinned_${pinned[i].id}'),
-              delay: Duration(milliseconds: 100 + i * 80),  // 与普通卡片一致的延迟递增
+              delay: Duration(milliseconds: 100 + i * 80),
               duration: const Duration(milliseconds: 400),
               child: FundCard(
                 key: ValueKey('pinned_${pinned[i].id}'),
@@ -334,7 +331,24 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
                   ),
                   Expanded(
                     child: (!hasPinned && !hasGroups)
-                        ? const EmptyState(icon: CupertinoIcons.person, title: '暂无数据', message: '没有找到匹配的客户')
+                        ? EmptyState(
+                      icon: CupertinoIcons.person,
+                      title: '暂无客户数据',
+                      message: '点击开始添加吧～',
+                      titleFontWeight: FontWeight.normal,
+                      titleFontSize: 18,
+                      customButton: GlassButton(
+                        label: 'Go!',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                          );
+                        },
+                        isPrimary: false,
+                        width: null,
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                      ),
+                    )
                         : ListView(
                       padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
                       children: [
