@@ -7,7 +7,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
-import '../widgets/glass_button.dart';  // 新增导入
+import '../widgets/glass_button.dart';
 
 /// 金额/份额输入格式化器：支持小数点输入，整数最多9位，小数最多2位，只能一个小数点
 class AmountInputFormatter extends TextInputFormatter {
@@ -755,19 +755,21 @@ class _DatePickerModalState extends State<_DatePickerModal> {
                   ? CupertinoColors.separator
                   : CupertinoColors.opaqueSeparator,
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: GlassButton(
+            // 修改点：移除 Expanded，改用 Row 右对齐，按钮宽度自适应
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GlassButton(
                     label: '取消',
                     onPressed: () => Navigator.pop(context),
                     isPrimary: false,
                     height: 44,
                     borderRadius: 30,
                   ),
-                ),
-                Expanded(
-                  child: GlassButton(
+                  const SizedBox(width: 12),
+                  GlassButton(
                     label: '完成',
                     onPressed: () {
                       widget.onConfirm(_tempDate);
@@ -777,8 +779,8 @@ class _DatePickerModalState extends State<_DatePickerModal> {
                     height: 44,
                     borderRadius: 30,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

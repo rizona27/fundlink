@@ -1,15 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 
-/// 磨砂玻璃质感按钮（支持深色模式、主要/次要样式、自定义尺寸）
 class GlassButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
-  final bool isPrimary;        // true = 蓝色主题（主要操作），false = 灰色/透明（次要操作）
-  final double? width;         // 可选宽度
-  final double height;         // 高度
-  final double borderRadius;   // 圆角
+  final bool isPrimary;
+  final double? width;           // 固定宽度，优先级最高
+  final double height;
+  final double borderRadius;
   final EdgeInsetsGeometry padding;
+  final bool expand;             // 是否撑满父容器（全宽）
+  final double minWidth;         // 非展开模式下的最小宽度
 
   const GlassButton({
     super.key,
@@ -20,6 +21,8 @@ class GlassButton extends StatelessWidget {
     this.height = 44,
     this.borderRadius = 30,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    this.expand = false,         // 默认不撑满，避免子菜单中过长
+    this.minWidth = 120.0,       // 默认最小宽度
   });
 
   @override
@@ -43,7 +46,8 @@ class GlassButton extends StatelessWidget {
         : (isPrimary ? CupertinoColors.activeBlue : (isDarkMode ? CupertinoColors.white : CupertinoColors.label));
 
     Widget button = Container(
-      width: width,
+      // 宽度优先级：width > expand（全宽） > 约束最小宽度（minWidth + 内容自适应）
+      width: width ?? (expand ? null : null),  // expand 时 width = null，由父容器撑满
       height: height,
       decoration: BoxDecoration(
         color: effectiveBgColor,
@@ -70,6 +74,20 @@ class GlassButton extends StatelessWidget {
         ),
       ),
     );
+
+    // 非展开模式且未指定固定宽度时，用 ConstrainedBox 设置最小宽度，并让宽度由内容决定
+    if (!expand && width == null) {
+      button = ConstrainedBox(
+        constraints: BoxConstraints(minWidth: minWidth),
+        child: IntrinsicWidth(child: button),
+      );
+    }
+
+    // 展开模式且未指定宽度时，让按钮撑满父容器
+    if (expand && width == null) {
+      button = SizedBox(width: double.infinity, child: button);
+    }
+
     if (onPressed == null) button = Opacity(opacity: 0.6, child: button);
     return button;
   }
