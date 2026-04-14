@@ -7,6 +7,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/gradient_card.dart';
 import '../widgets/glass_button.dart';
+import '../widgets/toast.dart';
 import 'add_holding_view.dart';
 
 class SummaryView extends StatefulWidget {
@@ -22,17 +23,13 @@ class _SummaryViewState extends State<SummaryView> {
   late VoidCallback _dataListener;
 
   String _searchText = '';
-  bool _isSearchVisible = false;
   final Set<String> _expandedFundCodes = {};
 
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
 
-  bool get _isAllExpanded {
-    final groups = _filteredGroupedFunds;
-    if (groups.isEmpty) return false;
-    return _expandedFundCodes.length == groups.length;
-  }
+  bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
+  bool get _hasData => _dataManager.holdings.isNotEmpty;
 
   @override
   void initState() {
@@ -62,7 +59,6 @@ class _SummaryViewState extends State<SummaryView> {
     if (_searchText.isEmpty) {
       return _groupByFundCode(allHoldings);
     }
-
     final filtered = allHoldings.where((holding) {
       return holding.fundCode.contains(_searchText) ||
           holding.fundName.contains(_searchText) ||
@@ -85,7 +81,6 @@ class _SummaryViewState extends State<SummaryView> {
       codes.sort();
       return codes;
     }
-
     codes.sort((a, b) {
       final fundsA = _filteredGroupedFunds[a]!;
       final fundsB = _filteredGroupedFunds[b]!;
@@ -93,11 +88,9 @@ class _SummaryViewState extends State<SummaryView> {
       final firstB = fundsB.first;
       final valueA = _sortKey.getValue(firstA);
       final valueB = _sortKey.getValue(firstB);
-
       if (valueA == null && valueB == null) return a.compareTo(b);
       if (valueA == null) return 1;
       if (valueB == null) return -1;
-
       if (_sortOrder == SortOrder.ascending) {
         return valueA.compareTo(valueB);
       } else {
@@ -108,8 +101,9 @@ class _SummaryViewState extends State<SummaryView> {
   }
 
   void _toggleExpandAll() {
+    if (!_hasData) return;
     setState(() {
-      if (_isAllExpanded) {
+      if (_hasAnyExpanded) {
         _expandedFundCodes.clear();
       } else {
         _expandedFundCodes.addAll(_sortedFundCodes);
@@ -127,19 +121,26 @@ class _SummaryViewState extends State<SummaryView> {
     });
   }
 
-  Color _getGradientStartColor(String fundCode) {
-    final hash = fundCode.hashCode.abs();
-    final colorList = [
-      const Color(0xFF667eea),
-      const Color(0xFFf093fb),
-      const Color(0xFF4facfe),
-      const Color(0xFF43e97b),
-      const Color(0xFFfa709a),
-      const Color(0xFFfee140),
-      const Color(0xFF30cfd0),
-      const Color(0xFFa8edea),
+  List<Color> _getGradientForFundCode(String fundCode) {
+    int hash = 0;
+    for (int i = 0; i < fundCode.length; i++) {
+      hash = (hash << 5) - hash + fundCode.codeUnitAt(i);
+    }
+    hash = hash.abs();
+    final softColors = [
+      const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
+      const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
+      const Color(0xFFE0C8A8), const Color(0xFFC8D4A8), const Color(0xFFD4A8C4),
+      const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
+      const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
     ];
-    return colorList[hash % colorList.length];
+    return [softColors[hash % softColors.length], CupertinoColors.white];
+  }
+
+  Color _colorForHoldingCount(int count) {
+    if (count == 1) return const Color(0xFFD4A84B);
+    if (count <= 3) return const Color(0xFFD4844B);
+    return const Color(0xFFD46B6B);
   }
 
   double? _calculateHoldingReturn(FundHolding holding) {
@@ -155,15 +156,22 @@ class _SummaryViewState extends State<SummaryView> {
     return CupertinoColors.systemGrey;
   }
 
-  Widget _buildHoldersListInline(List<FundHolding> holdings) {
+  // 持有客户列表（根据排序顺序排列，隐私模式开启且无搜索时不显示）
+  Widget? _buildHoldersListInline(List<FundHolding> holdings, bool isDarkMode) {
+    if (_dataManager.isPrivacyMode && _searchText.isEmpty) return null;
+
     final sorted = List<FundHolding>.from(holdings);
     sorted.sort((a, b) {
       final retA = _calculateHoldingReturn(a) ?? -double.infinity;
       final retB = _calculateHoldingReturn(b) ?? -double.infinity;
-      return retB.compareTo(retA);
+      if (_sortOrder == SortOrder.ascending) {
+        return retA.compareTo(retB);
+      } else {
+        return retB.compareTo(retA);
+      }
     });
 
-    final children = <TextSpan>[];
+    final children = <InlineSpan>[];
     for (int i = 0; i < sorted.length; i++) {
       final holding = sorted[i];
       final name = _dataManager.obscuredName(holding.clientName);
@@ -173,7 +181,10 @@ class _SummaryViewState extends State<SummaryView> {
 
       children.add(TextSpan(
         text: name,
-        style: const TextStyle(color: CupertinoColors.label),
+        style: TextStyle(
+          color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+          fontSize: 13,
+        ),
       ));
       children.add(TextSpan(
         text: '($retStr)',
@@ -184,17 +195,21 @@ class _SummaryViewState extends State<SummaryView> {
       }
     }
 
-    return RichText(
-      text: TextSpan(children: children),
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: RichText(
+        text: TextSpan(children: children),
+        strutStyle: const StrutStyle(height: 1.2),
+      ),
     );
   }
 
-  Widget _buildExpandedContent(FundHolding firstHolding, List<FundHolding> holdings) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+  Widget _buildExpandedContent(FundHolding firstHolding, List<FundHolding> holdings, bool isDarkMode) {
     final bgColor = isDarkMode ? Colors.black.withOpacity(0.95) : CupertinoColors.white;
+    final holdersList = _buildHoldersListInline(holdings, isDarkMode);
 
     return Container(
-      margin: const EdgeInsets.only(left: 12, top: 8),
+      margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: bgColor,
@@ -221,23 +236,10 @@ class _SummaryViewState extends State<SummaryView> {
               _buildReturnItem('近1年', firstHolding.navReturn1y),
             ],
           ),
-          Divider(height: 24),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '持有客户：',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildHoldersListInline(holdings),
-              ),
-            ],
-          ),
+          if (holdersList != null) ...[
+            const Divider(height: 24),
+            holdersList,
+          ],
         ],
       ),
     );
@@ -269,13 +271,22 @@ class _SummaryViewState extends State<SummaryView> {
     );
   }
 
+  void _showSortToast() {
+    String sortType = _sortKey.displayName;
+    String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
+    context.showToast('${sortType}${_sortKey == SortKey.none ? '' : ' $orderText'}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = _filteredGroupedFunds;
     final sortedCodes = _sortedFundCodes;
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-    final hasData = groups.isNotEmpty;
+    final hasData = _hasData;
+    final showHolderCount = !_dataManager.isPrivacyMode;
+
+    final enableButtons = hasData;
 
     return Container(
       color: backgroundColor,
@@ -285,23 +296,36 @@ class _SummaryViewState extends State<SummaryView> {
             AdaptiveTopBar(
               scrollOffset: 0,
               showRefresh: true,
-              showExpandCollapse: true,
-              showSearch: true,
+              showExpandCollapse: enableButtons,
+              showSearch: enableButtons,
               showReset: false,
               showFilter: false,
-              showSort: true,
-              isAllExpanded: _isAllExpanded,
+              showSort: enableButtons,
+              isAllExpanded: _hasAnyExpanded,
               searchText: _searchText,
-              isSearchVisible: _isSearchVisible,
               sortKey: _sortKey,
               sortOrder: _sortOrder,
-              onSortKeyChanged: (key) => setState(() => _sortKey = key),
-              onSortOrderChanged: (order) => setState(() => _sortOrder = order),
+              onSortKeyChanged: enableButtons
+                  ? (key) {
+                setState(() => _sortKey = key);
+                _showSortToast();
+              }
+                  : null,
+              onSortOrderChanged: enableButtons
+                  ? (order) {
+                setState(() => _sortOrder = order);
+                _showSortToast();
+              }
+                  : null,
               dataManager: _dataManager,
               fundService: _fundService,
-              onToggleExpandAll: _toggleExpandAll,
-              onSearchChanged: (text) => setState(() => _searchText = text),
-              onSearchClear: () => setState(() => _searchText = ''),
+              onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
+              onSearchChanged: enableButtons
+                  ? (text) => setState(() => _searchText = text)
+                  : null,
+              onSearchClear: enableButtons
+                  ? () => setState(() => _searchText = '')
+                  : null,
               onLongPressRefresh: () {},
               backgroundColor: Colors.transparent,
               iconColor: CupertinoTheme.of(context).primaryColor,
@@ -329,50 +353,97 @@ class _SummaryViewState extends State<SummaryView> {
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                 ),
               )
-                  : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                itemCount: sortedCodes.length,
-                itemBuilder: (context, index) {
-                  final fundCode = sortedCodes[index];
-                  final holdings = groups[fundCode]!;
-                  final first = holdings.first;
-                  final isExpanded = _expandedFundCodes.contains(fundCode);
-                  final gradientStart = _getGradientStartColor(fundCode);
+                  : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: ListView.builder(
+                  key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: sortedCodes.length,
+                  itemBuilder: (context, index) {
+                    final fundCode = sortedCodes[index];
+                    final holdings = groups[fundCode]!;
+                    final first = holdings.first;
+                    final isExpanded = _expandedFundCodes.contains(fundCode);
+                    final gradient = _getGradientForFundCode(fundCode);
+                    final holderCount = holdings.length;
 
-                  return Column(
-                    children: [
-                      GradientCard(
-                        title: first.fundName,
-                        clientId: fundCode,
-                        countValue: holdings.length,
-                        gradient: [gradientStart, Colors.transparent],
-                        isExpanded: isExpanded,
-                        onTap: () => _toggleExpand(fundCode),
-                        isDarkMode: isDark,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${holdings.length}支',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              isExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
-                              size: 16,
+                    Widget? trailing;
+                    if (_sortKey != SortKey.none) {
+                      final sortValue = _sortKey.getValue(first);
+                      final valueStr = sortValue != null
+                          ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
+                          : '--';
+                      final valueColor = _getReturnColor(sortValue);
+                      trailing = Text(
+                        valueStr,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: valueColor,
+                        ),
+                      );
+                    } else if (showHolderCount) {
+                      trailing = Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '持有人数: ',
+                            style: TextStyle(
+                              fontSize: 12,
                               color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                             ),
-                          ],
-                        ),
+                          ),
+                          Text(
+                            '$holderCount',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              fontStyle: FontStyle.italic,
+                              color: _colorForHoldingCount(holderCount),
+                            ),
+                          ),
+                          Text(
+                            '人',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      child: Column(
+                        children: [
+                          GradientCard(
+                            title: first.fundName,
+                            clientId: fundCode,
+                            gradient: gradient,
+                            isExpanded: isExpanded,
+                            onTap: () => _toggleExpand(fundCode),
+                            isDarkMode: isDark,
+                            trailing: trailing,
+                          ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                            child: isExpanded
+                                ? ClipRect(
+                              child: _buildExpandedContent(first, holdings, isDark),
+                            )
+                                : const SizedBox.shrink(),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                       ),
-                      if (isExpanded) _buildExpandedContent(first, holdings),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ],

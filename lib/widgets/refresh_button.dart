@@ -85,6 +85,13 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   void _showLoadingOverlay(BuildContext context, {String message = '刷新中...'}) {
     _hideLoadingOverlay();
 
+    // 获取当前主题亮度，决定遮罩颜色
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    // 深色模式使用更暗的遮罩，浅色模式使用半透明遮罩
+    final overlayColor = isDarkMode
+        ? Colors.black.withOpacity(0.7 * _overlayOpacity)
+        : Colors.black.withOpacity(0.3 * _overlayOpacity);
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -95,15 +102,25 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
 
     _loadingOverlayEntry = OverlayEntry(
       builder: (context) => Material(
-        color: Colors.black.withValues(alpha: 0.3 * _overlayOpacity),
+        color: overlayColor,
         child: Center(
           child: Opacity(
             opacity: _overlayOpacity,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemBackground,
+                // 深色模式下使用更暗的背景，浅色模式使用系统背景
+                color: isDarkMode
+                    ? const Color(0xFF1C1C1E).withOpacity(0.95)
+                    : CupertinoColors.systemBackground,
                 borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

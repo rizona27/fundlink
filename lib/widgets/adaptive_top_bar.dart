@@ -8,7 +8,7 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 
-// 排序字段枚举（与外部共享）
+// 排序字段枚举
 enum SortKey {
   none,
   navReturn1m,
@@ -103,13 +103,12 @@ class AdaptiveTopBar extends StatefulWidget {
   final bool showSearch;
   final bool showReset;
   final bool showFilter;
-  final bool showSort; // 是否显示排序按钮
+  final bool showSort;
 
   final bool isAllExpanded;
   final String? searchText;
   final bool? isSearchVisible;
 
-  // 排序相关参数
   final SortKey sortKey;
   final SortOrder sortOrder;
   final ValueChanged<SortKey>? onSortKeyChanged;
@@ -202,6 +201,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   bool get _currentSearchVisible => _externallyControlSearchVisible ? widget.isSearchVisible! : _internalSearchVisible;
 
   bool get _useBuiltInRefresh => widget.dataManager != null && widget.fundService != null;
+  bool get _hasData => widget.dataManager?.holdings.isNotEmpty ?? false;
 
   @override
   void initState() {
@@ -306,54 +306,107 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 构建左侧按钮组（刷新、排序）
+  // 磨玻璃容器包装（支持禁用状态）
+  Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
+    if (!enabled) return child;
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final bgColor = isDarkMode
+        ? const Color(0xFF2C2C2E).withOpacity(0.85)
+        : CupertinoColors.white.withOpacity(0.85);
+    final opacity = disabled ? 0.5 : 1.0;
+    return Opacity(
+      opacity: opacity,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: disabled ? null : [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+
   List<Widget> _buildLeftChildren() {
     final children = <Widget>[];
     if (widget.showRefresh) {
-      children.add(_buildRefreshButton());
+      children.add(_wrapWithGlass(_buildRefreshButton(), disabled: !_hasData));
     }
     if (widget.showSort) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_buildSortButton());
+      children.add(_buildSortButton(disabled: !_hasData));
     }
     return children;
   }
 
-  // 构建右侧按钮组（搜索、折叠、重置、筛选）按照期望顺序：搜索、折叠、重置、筛选（折叠在最右）
-  List<Widget> _buildRightChildren() {
+  // 将搜索和折叠按钮合并为一个磨玻璃容器
+  Widget _buildRightGroup() {
     final children = <Widget>[];
     if (widget.showSearch) {
-      children.add(_buildIconButton(
-        icon: _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
-        onPressed: () => _setSearchVisible(!_currentSearchVisible),
-      ));
+      children.add(
+        CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          onPressed: _hasData ? () => _setSearchVisible(!_currentSearchVisible) : null,
+          child: Icon(
+            _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
+            size: widget.iconSize,
+            color: widget.iconColor,
+          ),
+        ),
+      );
     }
     if (widget.showExpandCollapse) {
-      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_buildIconButton(
-        icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-        onPressed: widget.onToggleExpandAll,
-      ));
+      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
+      children.add(
+        CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          onPressed: _hasData ? widget.onToggleExpandAll : null,
+          child: Icon(
+            widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
+            size: widget.iconSize,
+            color: widget.iconColor,
+          ),
+        ),
+      );
     }
+    if (children.isEmpty) return const SizedBox.shrink();
+    return _wrapWithGlass(Row(mainAxisSize: MainAxisSize.min, children: children), disabled: !_hasData);
+  }
+
+  List<Widget> _buildRightChildren() {
+    final children = <Widget>[];
+    children.add(_buildRightGroup());
     if (widget.showReset) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_buildIconButton(
-        icon: CupertinoIcons.refresh_thin,
-        onPressed: _onReset,
+      children.add(_wrapWithGlass(
+        _buildIconButton(
+          icon: CupertinoIcons.refresh_thin,
+          onPressed: _onReset,
+        ),
+        disabled: !_hasData,
       ));
     }
     if (widget.showFilter) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_buildIconButton(
-        icon: CupertinoIcons.slider_horizontal_3,
-        onPressed: widget.onFilter,
+      children.add(_wrapWithGlass(
+        _buildIconButton(
+          icon: CupertinoIcons.slider_horizontal_3,
+          onPressed: widget.onFilter,
+        ),
+        disabled: !_hasData,
       ));
     }
     return children;
   }
 
   Widget _buildRefreshButton() {
-    final hasData = widget.dataManager?.holdings.isNotEmpty ?? false;
+    final hasData = _hasData;
 
     if (widget.refreshButtonBuilder != null) {
       final placeholder = Container();
@@ -371,7 +424,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return GestureDetector(
       onLongPress: hasData ? widget.onLongPressRefresh : null,
       child: CupertinoButton(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         onPressed: hasData ? widget.onRefresh : null,
         child: Icon(
           CupertinoIcons.arrow_clockwise,
@@ -382,76 +435,78 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
 
-  Widget _buildSortButton() {
+  Widget _buildSortButton({bool disabled = false}) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final bgColor = isDarkMode
+        ? const Color(0xFF2C2C2E).withOpacity(0.85)
+        : CupertinoColors.white.withOpacity(0.85);
+    final textColor = widget.sortKey == SortKey.none
+        ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label)
+        : widget.sortKey.color;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          onPressed: () => widget.onSortKeyChanged?.call(widget.sortKey.next),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: widget.sortKey == SortKey.none
-                  ? CupertinoColors.systemGrey.withOpacity(0.1)
-                  : widget.sortKey.color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: widget.sortKey == SortKey.none
-                    ? CupertinoColors.systemGrey.withOpacity(0.3)
-                    : widget.sortKey.color.withOpacity(0.3),
-                width: 1,
-              ),
+    return Opacity(
+      opacity: disabled ? 0.5 : 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: disabled ? null : [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  widget.sortKey == SortKey.none
-                      ? CupertinoIcons.line_horizontal_3_decrease_circle
-                      : CupertinoIcons.calendar,
-                  size: 16,
-                  color: widget.sortKey == SortKey.none ? textColor : widget.sortKey.color,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  widget.sortKey.displayName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: widget.sortKey == SortKey.none ? textColor : widget.sortKey.color,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
-        if (widget.sortKey != SortKey.none) ...[
-          const SizedBox(width: 4),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => widget.onSortOrderChanged?.call(
-              widget.sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending,
-            ),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: widget.sortKey.color,
-                shape: BoxShape.circle,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(widget.sortKey.next),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.sortKey == SortKey.none
+                        ? CupertinoIcons.line_horizontal_3_decrease_circle
+                        : CupertinoIcons.calendar,
+                    size: 16,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.sortKey.displayName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
+                ],
               ),
-              child: Icon(
-                widget.sortOrder == SortOrder.ascending ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
-                size: 14,
-                color: CupertinoColors.white,
-              ),
             ),
-          ),
-        ],
-      ],
+            if (widget.sortKey != SortKey.none) ...[
+              Container(
+                width: 1,
+                height: 20,
+                color: isDarkMode ? CupertinoColors.white.withOpacity(0.2) : CupertinoColors.black.withOpacity(0.1),
+              ),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                onPressed: disabled ? null : () => widget.onSortOrderChanged?.call(
+                  widget.sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending,
+                ),
+                child: Icon(
+                  widget.sortOrder == SortOrder.ascending ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                  size: 14,
+                  color: widget.sortKey.color,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -461,7 +516,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     bool isActive = false,
   }) {
     return CupertinoButton(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       onPressed: onPressed,
       child: Icon(
         icon,
@@ -511,10 +566,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                       ),
                       child: Row(
                         children: [
-                          // 左侧按钮组（刷新、排序）
                           ..._buildLeftChildren(),
                           const Spacer(),
-                          // 右侧按钮组（搜索、折叠、重置、筛选）
                           ..._buildRightChildren(),
                         ],
                       ),

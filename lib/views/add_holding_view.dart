@@ -218,34 +218,41 @@ class _AddHoldingViewState extends State<AddHoldingView> {
 
     final amount = double.parse(_purchaseAmountController.text.trim());
     final shares = double.parse(_purchaseSharesController.text.trim());
+    final fundCode = _fundCodeController.text.trim().toUpperCase();
+
+    // 先获取基金信息（包含收益率）
+    final fundInfo = await _fundService.fetchFundInfo(fundCode);
+    final fundName = fundInfo['fundName'] as String? ?? '待加载';
+    final currentNav = fundInfo['currentNav'] as double? ?? 0;
+    final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
+    final isValid = fundInfo['isValid'] as bool? ?? false;
+    final navReturn1m = fundInfo['navReturn1m'] as double?;
+    final navReturn3m = fundInfo['navReturn3m'] as double?;
+    final navReturn6m = fundInfo['navReturn6m'] as double?;
+    final navReturn1y = fundInfo['navReturn1y'] as double?;
 
     final newHolding = FundHolding(
       clientName: _clientNameController.text.trim(),
       clientId: _clientIdController.text.trim(),
-      fundCode: _fundCodeController.text.trim().toUpperCase(),
-      fundName: '待加载',
+      fundCode: fundCode,
+      fundName: fundName,
       purchaseAmount: amount,
       purchaseShares: shares,
       purchaseDate: _purchaseDate,
-      navDate: DateTime.now(),
-      currentNav: 0,
-      isValid: false,
+      navDate: navDate,
+      currentNav: currentNav,
+      isValid: isValid,
       remarks: _remarksController.text.trim(),
+      navReturn1m: navReturn1m,
+      navReturn3m: navReturn3m,
+      navReturn6m: navReturn6m,
+      navReturn1y: navReturn1y,
     );
 
     try {
       await _dataManager.addHolding(newHolding);
-      await _dataManager.addLog('新增持仓: ${newHolding.fundCode} - ${newHolding.clientName}', type: LogType.success);
+      await _dataManager.addLog('新增持仓: $fundCode - ${newHolding.clientName}', type: LogType.success);
       context.showToast('添加成功');
-
-      final fundInfo = await _fundService.fetchFundInfo(newHolding.fundCode);
-      final updatedHolding = newHolding.copyWith(
-        fundName: fundInfo['fundName'] as String? ?? '待加载',
-        currentNav: fundInfo['currentNav'] as double? ?? 0,
-        navDate: fundInfo['navDate'] as DateTime? ?? DateTime.now(),
-        isValid: fundInfo['isValid'] as bool? ?? false,
-      );
-      await _dataManager.updateHolding(updatedHolding);
 
       if (mounted) {
         Navigator.of(context).pop();

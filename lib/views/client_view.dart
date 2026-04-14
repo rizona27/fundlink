@@ -188,6 +188,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
     final hasPinned = _filteredPinnedHoldings.isNotEmpty;
     final hasGroups = _groupedHoldings.isNotEmpty;
     final hasData = hasPinned || hasGroups;
+    final enableButtons = hasData; // 无数据时禁用搜索和折叠按钮
 
     return Container(
       color: backgroundColor,
@@ -204,16 +205,17 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
                 showRefresh: true,
-                showExpandCollapse: true,
-                showSearch: true,
-                showReset: false,        // ClientView 不需要重置按钮
+                showExpandCollapse: enableButtons,
+                showSearch: enableButtons,
+                showReset: false,
                 showFilter: false,
-                showSort: false,         // ClientView 不需要排序
+                showSort: false,
                 isAllExpanded: _areAnyCardsExpanded,
                 searchText: _searchText,
                 dataManager: _dataManager,
                 fundService: _fundService,
-                onToggleExpandAll: () {
+                onToggleExpandAll: enableButtons
+                    ? () {
                   setState(() {
                     if (_areAnyCardsExpanded) {
                       _collapseAll();
@@ -221,17 +223,22 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                       _expandAll();
                     }
                   });
-                },
-                onSearchChanged: (value) {
+                }
+                    : null,
+                onSearchChanged: enableButtons
+                    ? (value) {
                   setState(() {
                     _searchText = value;
                   });
-                },
-                onSearchClear: () {
+                }
+                    : null,
+                onSearchClear: enableButtons
+                    ? () {
                   setState(() {
                     _searchText = '';
                   });
-                },
+                }
+                    : null,
                 backgroundColor: Colors.transparent,
                 iconColor: CupertinoTheme.of(context).primaryColor,
                 iconSize: 24,
