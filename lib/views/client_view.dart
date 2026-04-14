@@ -9,10 +9,8 @@ import '../widgets/gradient_card.dart';
 import '../widgets/fund_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
-import '../widgets/refresh_button.dart';
-import '../widgets/search.dart';
-import '../widgets/glass_button.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../widgets/glass_button.dart';
 import 'add_holding_view.dart';
 
 class ClientView extends StatefulWidget {
@@ -66,11 +64,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
         context.showToast('修复完成');
       }
     }
-  }
-
-  void _cancelDebounce() {
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
   }
 
   void _onScrollUpdate(double offset) {
@@ -213,8 +206,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                 showRefresh: true,
                 showExpandCollapse: true,
                 showSearch: true,
-                showReset: true,
+                showReset: false,        // ClientView 不需要重置按钮
                 showFilter: false,
+                showSort: false,         // ClientView 不需要排序
                 isAllExpanded: _areAnyCardsExpanded,
                 searchText: _searchText,
                 dataManager: _dataManager,
@@ -229,14 +223,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                   });
                 },
                 onSearchChanged: (value) {
-                  setState(() => _searchText = value);
+                  setState(() {
+                    _searchText = value;
+                  });
                 },
                 onSearchClear: () {
-                  setState(() => _searchText = '');
-                },
-                onReset: () {
-                  setState(() => _searchText = '');
-                  context.showToast('已重置搜索');
+                  setState(() {
+                    _searchText = '';
+                  });
                 },
                 backgroundColor: Colors.transparent,
                 iconColor: CupertinoTheme.of(context).primaryColor,
@@ -248,8 +242,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                 child: !hasData
                     ? EmptyState(
                   icon: CupertinoIcons.person,
-                  title: '暂无客户数据',
-                  message: '点击开始添加吧～',
+                  title: '点击开始添加吧～',
+                  message: '',
                   titleFontWeight: FontWeight.normal,
                   titleFontSize: 18,
                   customButton: GlassButton(

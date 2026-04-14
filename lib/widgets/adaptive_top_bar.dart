@@ -6,6 +6,94 @@ import 'refresh_button.dart';
 import 'search.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../models/fund_holding.dart';
+
+// 排序字段枚举（与外部共享）
+enum SortKey {
+  none,
+  navReturn1m,
+  navReturn3m,
+  navReturn6m,
+  navReturn1y,
+}
+
+extension SortKeyExtension on SortKey {
+  String get displayName {
+    switch (this) {
+      case SortKey.none:
+        return '无排序';
+      case SortKey.navReturn1m:
+        return '近1月';
+      case SortKey.navReturn3m:
+        return '近3月';
+      case SortKey.navReturn6m:
+        return '近6月';
+      case SortKey.navReturn1y:
+        return '近1年';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case SortKey.none:
+        return CupertinoColors.systemGrey;
+      case SortKey.navReturn1m:
+        return CupertinoColors.systemBlue;
+      case SortKey.navReturn3m:
+        return CupertinoColors.systemPurple;
+      case SortKey.navReturn6m:
+        return CupertinoColors.systemOrange;
+      case SortKey.navReturn1y:
+        return CupertinoColors.systemRed;
+    }
+  }
+
+  SortKey get next {
+    switch (this) {
+      case SortKey.none:
+        return SortKey.navReturn1m;
+      case SortKey.navReturn1m:
+        return SortKey.navReturn3m;
+      case SortKey.navReturn3m:
+        return SortKey.navReturn6m;
+      case SortKey.navReturn6m:
+        return SortKey.navReturn1y;
+      case SortKey.navReturn1y:
+        return SortKey.none;
+    }
+  }
+
+  double? getValue(FundHolding holding) {
+    switch (this) {
+      case SortKey.navReturn1m:
+        return holding.navReturn1m;
+      case SortKey.navReturn3m:
+        return holding.navReturn3m;
+      case SortKey.navReturn6m:
+        return holding.navReturn6m;
+      case SortKey.navReturn1y:
+        return holding.navReturn1y;
+      case SortKey.none:
+        return null;
+    }
+  }
+}
+
+enum SortOrder {
+  ascending,
+  descending,
+}
+
+extension SortOrderExtension on SortOrder {
+  String get displayName {
+    switch (this) {
+      case SortOrder.ascending:
+        return '升序';
+      case SortOrder.descending:
+        return '降序';
+    }
+  }
+}
 
 class AdaptiveTopBar extends StatefulWidget {
   final double scrollOffset;
@@ -15,10 +103,17 @@ class AdaptiveTopBar extends StatefulWidget {
   final bool showSearch;
   final bool showReset;
   final bool showFilter;
+  final bool showSort; // 是否显示排序按钮
 
   final bool isAllExpanded;
   final String? searchText;
   final bool? isSearchVisible;
+
+  // 排序相关参数
+  final SortKey sortKey;
+  final SortOrder sortOrder;
+  final ValueChanged<SortKey>? onSortKeyChanged;
+  final ValueChanged<SortOrder>? onSortOrderChanged;
 
   final DataManager? dataManager;
   final FundService? fundService;
@@ -55,9 +150,14 @@ class AdaptiveTopBar extends StatefulWidget {
     this.showSearch = true,
     this.showReset = false,
     this.showFilter = false,
+    this.showSort = false,
     this.isAllExpanded = false,
     this.searchText,
     this.isSearchVisible,
+    this.sortKey = SortKey.none,
+    this.sortOrder = SortOrder.descending,
+    this.onSortKeyChanged,
+    this.onSortOrderChanged,
     this.dataManager,
     this.fundService,
     this.onRefresh,
@@ -206,6 +306,52 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
+  // 构建左侧按钮组（刷新、排序）
+  List<Widget> _buildLeftChildren() {
+    final children = <Widget>[];
+    if (widget.showRefresh) {
+      children.add(_buildRefreshButton());
+    }
+    if (widget.showSort) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
+      children.add(_buildSortButton());
+    }
+    return children;
+  }
+
+  // 构建右侧按钮组（搜索、折叠、重置、筛选）按照期望顺序：搜索、折叠、重置、筛选（折叠在最右）
+  List<Widget> _buildRightChildren() {
+    final children = <Widget>[];
+    if (widget.showSearch) {
+      children.add(_buildIconButton(
+        icon: _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
+        onPressed: () => _setSearchVisible(!_currentSearchVisible),
+      ));
+    }
+    if (widget.showExpandCollapse) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
+      children.add(_buildIconButton(
+        icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
+        onPressed: widget.onToggleExpandAll,
+      ));
+    }
+    if (widget.showReset) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
+      children.add(_buildIconButton(
+        icon: CupertinoIcons.refresh_thin,
+        onPressed: _onReset,
+      ));
+    }
+    if (widget.showFilter) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
+      children.add(_buildIconButton(
+        icon: CupertinoIcons.slider_horizontal_3,
+        onPressed: widget.onFilter,
+      ));
+    }
+    return children;
+  }
+
   Widget _buildRefreshButton() {
     final hasData = widget.dataManager?.holdings.isNotEmpty ?? false;
 
@@ -233,6 +379,79 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
         ),
       ),
+    );
+  }
+
+  Widget _buildSortButton() {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          onPressed: () => widget.onSortKeyChanged?.call(widget.sortKey.next),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: widget.sortKey == SortKey.none
+                  ? CupertinoColors.systemGrey.withOpacity(0.1)
+                  : widget.sortKey.color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: widget.sortKey == SortKey.none
+                    ? CupertinoColors.systemGrey.withOpacity(0.3)
+                    : widget.sortKey.color.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  widget.sortKey == SortKey.none
+                      ? CupertinoIcons.line_horizontal_3_decrease_circle
+                      : CupertinoIcons.calendar,
+                  size: 16,
+                  color: widget.sortKey == SortKey.none ? textColor : widget.sortKey.color,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  widget.sortKey.displayName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: widget.sortKey == SortKey.none ? textColor : widget.sortKey.color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (widget.sortKey != SortKey.none) ...[
+          const SizedBox(width: 4),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => widget.onSortOrderChanged?.call(
+              widget.sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending,
+            ),
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: widget.sortKey.color,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                widget.sortOrder == SortOrder.ascending ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                size: 14,
+                color: CupertinoColors.white,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -291,33 +510,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                         ),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          if (widget.showRefresh) _buildRefreshButton(),
-                          if (widget.showRefresh && widget.showExpandCollapse) SizedBox(width: widget.buttonSpacing),
-                          if (widget.showExpandCollapse)
-                            _buildIconButton(
-                              icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-                              onPressed: widget.onToggleExpandAll,
-                            ),
-                          if (widget.showExpandCollapse && widget.showSearch) SizedBox(width: widget.buttonSpacing),
-                          if (widget.showSearch)
-                            _buildIconButton(
-                              icon: _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
-                              onPressed: () => _setSearchVisible(!_currentSearchVisible),
-                            ),
-                          if (widget.showSearch && widget.showReset) SizedBox(width: widget.buttonSpacing),
-                          if (widget.showReset)
-                            _buildIconButton(
-                              icon: CupertinoIcons.refresh_thin,
-                              onPressed: _onReset,
-                            ),
-                          if (widget.showReset && widget.showFilter) SizedBox(width: widget.buttonSpacing),
-                          if (widget.showFilter)
-                            _buildIconButton(
-                              icon: CupertinoIcons.slider_horizontal_3,
-                              onPressed: widget.onFilter,
-                            ),
+                          // 左侧按钮组（刷新、排序）
+                          ..._buildLeftChildren(),
+                          const Spacer(),
+                          // 右侧按钮组（搜索、折叠、重置、筛选）
+                          ..._buildRightChildren(),
                         ],
                       ),
                     ),

@@ -18,12 +18,20 @@ class Search extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.white,
+        color: isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white,
         borderRadius: BorderRadius.circular(10),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 1))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: CupertinoSearchTextField(
         controller: controller,
@@ -33,9 +41,11 @@ class Search extends StatelessWidget {
         style: const TextStyle(fontSize: 16),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         onChanged: onChanged,
+        // 确保清除按钮触发 onClear
         onSuffixTap: () {
           controller.clear();
           onClear();
+          onChanged('');
         },
       ),
     );

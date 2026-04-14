@@ -6,6 +6,8 @@ import '../models/fund_holding.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/gradient_card.dart';
+import '../widgets/glass_button.dart';
+import 'add_holding_view.dart';
 
 class SummaryView extends StatefulWidget {
   const SummaryView({super.key});
@@ -20,7 +22,11 @@ class _SummaryViewState extends State<SummaryView> {
   late VoidCallback _dataListener;
 
   String _searchText = '';
+  bool _isSearchVisible = false;
   final Set<String> _expandedFundCodes = {};
+
+  SortKey _sortKey = SortKey.none;
+  SortOrder _sortOrder = SortOrder.descending;
 
   bool get _isAllExpanded {
     final groups = _filteredGroupedFunds;
@@ -75,7 +81,29 @@ class _SummaryViewState extends State<SummaryView> {
 
   List<String> get _sortedFundCodes {
     final codes = _filteredGroupedFunds.keys.toList();
-    codes.sort();
+    if (_sortKey == SortKey.none) {
+      codes.sort();
+      return codes;
+    }
+
+    codes.sort((a, b) {
+      final fundsA = _filteredGroupedFunds[a]!;
+      final fundsB = _filteredGroupedFunds[b]!;
+      final firstA = fundsA.first;
+      final firstB = fundsB.first;
+      final valueA = _sortKey.getValue(firstA);
+      final valueB = _sortKey.getValue(firstB);
+
+      if (valueA == null && valueB == null) return a.compareTo(b);
+      if (valueA == null) return 1;
+      if (valueB == null) return -1;
+
+      if (_sortOrder == SortOrder.ascending) {
+        return valueA.compareTo(valueB);
+      } else {
+        return valueB.compareTo(valueA);
+      }
+    });
     return codes;
   }
 
@@ -194,7 +222,6 @@ class _SummaryViewState extends State<SummaryView> {
             ],
           ),
           Divider(height: 24),
-          // 持有客户不换行：放在同一行
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -248,6 +275,7 @@ class _SummaryViewState extends State<SummaryView> {
     final sortedCodes = _sortedFundCodes;
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final hasData = groups.isNotEmpty;
 
     return Container(
       color: backgroundColor,
@@ -261,24 +289,20 @@ class _SummaryViewState extends State<SummaryView> {
               showSearch: true,
               showReset: false,
               showFilter: false,
+              showSort: true,
               isAllExpanded: _isAllExpanded,
               searchText: _searchText,
-              // 不传 isSearchVisible，让组件内部管理搜索框显隐
+              isSearchVisible: _isSearchVisible,
+              sortKey: _sortKey,
+              sortOrder: _sortOrder,
+              onSortKeyChanged: (key) => setState(() => _sortKey = key),
+              onSortOrderChanged: (order) => setState(() => _sortOrder = order),
               dataManager: _dataManager,
               fundService: _fundService,
               onToggleExpandAll: _toggleExpandAll,
-              onSearchChanged: (text) {
-                setState(() {
-                  _searchText = text;
-                });
-              },
-              onSearchClear: () {
-                setState(() {
-                  _searchText = '';
-                });
-              },
+              onSearchChanged: (text) => setState(() => _searchText = text),
+              onSearchClear: () => setState(() => _searchText = ''),
               onLongPressRefresh: () {},
-              // 与 ClientView 保持一致的样式
               backgroundColor: Colors.transparent,
               iconColor: CupertinoTheme.of(context).primaryColor,
               iconSize: 24,
@@ -286,13 +310,24 @@ class _SummaryViewState extends State<SummaryView> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             Expanded(
-              child: groups.isEmpty
+              child: !hasData
                   ? EmptyState(
                 icon: CupertinoIcons.chart_bar,
-                title: '暂无基金数据',
-                message: _searchText.isEmpty
-                    ? '还没有添加任何基金持仓'
-                    : '没有找到与“$_searchText”相关的基金，试试其他关键词',
+                title: '点击开始添加吧～',
+                message: '',
+                titleFontWeight: FontWeight.normal,
+                titleFontSize: 18,
+                customButton: GlassButton(
+                  label: 'Go!',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                    );
+                  },
+                  isPrimary: false,
+                  width: null,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                ),
               )
                   : ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
