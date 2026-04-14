@@ -147,6 +147,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
     return [softColors[hash % softColors.length], CupertinoColors.white];
   }
 
+  Color _colorForHoldingCount(int count) {
+    if (count == 1) return const Color(0xFFD4A84B);
+    if (count <= 3) return const Color(0xFFD4844B);
+    return const Color(0xFFD46B6B);
+  }
+
   List<Widget> _buildPinnedCards() {
     final pinned = _filteredPinnedHoldings;
     return [
@@ -188,7 +194,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
     final hasPinned = _filteredPinnedHoldings.isNotEmpty;
     final hasGroups = _groupedHoldings.isNotEmpty;
     final hasData = hasPinned || hasGroups;
-    final enableButtons = hasData; // 无数据时禁用搜索和折叠按钮
+    final enableButtons = hasData;
 
     return Container(
       color: backgroundColor,
@@ -266,17 +272,48 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                   ),
                 )
                     : ListView(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
+                  padding: EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom: totalBottomPadding,
+                  ),
                   children: [
                     if (hasPinned) ...[
                       GradientCard(
                         title: '置顶',
-                        subtitle: '数量:',
-                        countValue: _filteredPinnedHoldings.length,
                         gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
                         isExpanded: _isPinnedSectionExpanded,
                         isDarkMode: isDarkMode,
                         onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '数量: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                            Text(
+                              '${_filteredPinnedHoldings.length}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                fontStyle: FontStyle.italic,
+                                color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                              ),
+                            ),
+                            Text(
+                              '支',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       AnimatedSize(
@@ -309,6 +346,37 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
       if (holdings == null || holdings.isEmpty) continue;
       final isExpanded = _expandedClients.contains(name);
       final gradient = _getGradientForOriginalName(holdings.first.clientName);
+      final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+      final trailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '持仓数: ',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+            ),
+          ),
+          Text(
+            '${holdings.length}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              fontStyle: FontStyle.italic,
+              color: _colorForHoldingCount(holdings.length),
+            ),
+          ),
+          Text(
+            '支',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
+      );
+
       groups.add(
         RepaintBoundary(
           key: ValueKey('repaint_$name'),
@@ -320,19 +388,18 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
                 GradientCard(
                   title: name,
                   clientId: holdings.first.clientId,
-                  subtitle: '持仓数:',
-                  countValue: holdings.length,
                   gradient: gradient,
                   isExpanded: isExpanded,
-                  isDarkMode: CupertinoTheme.brightnessOf(context) == Brightness.dark,
+                  isDarkMode: isDarkMode,
                   onTap: () => setState(() => isExpanded ? _expandedClients.remove(name) : _expandedClients.add(name)),
+                  trailing: trailing,
                 ),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
                   child: isExpanded
                       ? Container(
-                    margin: const EdgeInsets.only(left: 16, top: 8),
+                    margin: const EdgeInsets.only(top: 8),
                     child: Column(children: _buildAnimatedFundCards(holdings)),
                   )
                       : const SizedBox.shrink(),
