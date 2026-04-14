@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
+import 'dart:ui' show ImageFilter;
 import 'refresh_button.dart';
 import 'search.dart';
-import '../services/data_manager.dart';  // 添加导入
-import '../services/fund_service.dart';  // 添加导入
+import '../services/data_manager.dart';
+import '../services/fund_service.dart';
 
 class AdaptiveTopBar extends StatefulWidget {
   final double scrollOffset;
@@ -19,11 +20,10 @@ class AdaptiveTopBar extends StatefulWidget {
   final String? searchText;
   final bool? isSearchVisible;
 
-  // 刷新所需参数（二选一：传入 dataManager+fundService 或 回调）
   final DataManager? dataManager;
   final FundService? fundService;
-  final VoidCallback? onRefresh;           // 自定义刷新回调（不使用内置 RefreshButton 时）
-  final VoidCallback? onLongPressRefresh;  // 自定义长按强制刷新回调
+  final VoidCallback? onRefresh;
+  final VoidCallback? onLongPressRefresh;
 
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
@@ -129,21 +129,27 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   void _updateHideProgress() {
     _scrollTimer?.cancel();
-    _scrollTimer = Timer(const Duration(milliseconds: 16), () {
+    _scrollTimer = Timer(const Duration(milliseconds: 8), () {
       if (!mounted) return;
       final hasText = _currentSearchText.isNotEmpty;
       if (hasText && !_currentSearchVisible) {
         _setSearchVisible(true);
         return;
       }
-      double rawProgress = 1.0 - (widget.scrollOffset / 100).clamp(0.0, 1.0);
-      double targetProgress = widget.animationCurve.transform(rawProgress);
+      double rawProgress = 1.0 - (widget.scrollOffset / 150).clamp(0.0, 1.0);
+      double targetProgress = Curves.easeOutCubic.transform(rawProgress);
+
       if ((targetProgress - _lastProgress).abs() > 0.01) {
         _lastProgress = targetProgress;
-        _hideController.animateTo(targetProgress, duration: widget.animationDuration);
+        _hideController.animateTo(targetProgress,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOutCubic,
+        );
       }
       if (targetProgress < 0.05 && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
-        _setSearchVisible(false);
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) _setSearchVisible(false);
+        });
       }
     });
   }
@@ -186,7 +192,23 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
+  Color _getBackgroundColor(double progress, bool isDarkMode) {
+    if (progress >= 0.95) {
+      return isDarkMode
+          ? Colors.black.withOpacity(0.8)
+          : CupertinoColors.systemBackground.withOpacity(0.9);
+    } else if (progress >= 0.5) {
+      return isDarkMode
+          ? Colors.black.withOpacity(0.5 + (progress - 0.5) * 0.6)
+          : CupertinoColors.systemBackground.withOpacity(0.4 + (progress - 0.5) * 1.0);
+    } else {
+      return Colors.transparent;
+    }
+  }
+
   Widget _buildRefreshButton() {
+    final hasData = widget.dataManager?.holdings.isNotEmpty ?? false;
+
     if (widget.refreshButtonBuilder != null) {
       final placeholder = Container();
       return widget.refreshButtonBuilder!(context, placeholder);
@@ -201,12 +223,15 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
 
     return GestureDetector(
-      onTap: widget.onRefresh,
-      onLongPress: widget.onLongPressRefresh,
-      child: Icon(
-        CupertinoIcons.arrow_clockwise,
-        size: widget.iconSize,
-        color: widget.iconColor,
+      onLongPress: hasData ? widget.onLongPressRefresh : null,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: hasData ? widget.onRefresh : null,
+        child: Icon(
+          CupertinoIcons.arrow_clockwise,
+          size: widget.iconSize,
+          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+        ),
       ),
     );
   }
@@ -240,82 +265,90 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Widget build(BuildContext context) {
     final progress = _hideController.value;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = widget.backgroundColor ??
-        (isDarkMode ? Colors.black.withOpacity(0.7) : CupertinoColors.systemBackground.withOpacity(0.8));
+    final bgColor = widget.backgroundColor ?? _getBackgroundColor(progress, isDarkMode);
+    final blurAmount = (1 - progress) * 8;
 
     return AnimatedBuilder(
       animation: _hideController,
       builder: (context, _) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: widget.maxHeight * progress,
-              child: Opacity(
-                opacity: progress,
-                child: Transform.scale(
-                  scale: 0.8 + progress * 0.2,
-                  child: Container(
-                    padding: widget.padding,
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (widget.showRefresh) _buildRefreshButton(),
-                        if (widget.showRefresh && widget.showExpandCollapse) SizedBox(width: widget.buttonSpacing),
-                        if (widget.showExpandCollapse)
-                          _buildIconButton(
-                            icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-                            onPressed: widget.onToggleExpandAll,
-                          ),
-                        if (widget.showExpandCollapse && widget.showSearch) SizedBox(width: widget.buttonSpacing),
-                        if (widget.showSearch)
-                          _buildIconButton(
-                            icon: _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
-                            onPressed: () => _setSearchVisible(!_currentSearchVisible),
-                          ),
-                        if (widget.showSearch && widget.showReset) SizedBox(width: widget.buttonSpacing),
-                        if (widget.showReset)
-                          _buildIconButton(
-                            icon: CupertinoIcons.refresh_thin,
-                            onPressed: _onReset,
-                          ),
-                        if (widget.showReset && widget.showFilter) SizedBox(width: widget.buttonSpacing),
-                        if (widget.showFilter)
-                          _buildIconButton(
-                            icon: CupertinoIcons.slider_horizontal_3,
-                            onPressed: widget.onFilter,
-                          ),
-                      ],
+        return ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Opacity(
+                  opacity: progress,
+                  child: Transform.translate(
+                    offset: Offset(0, -16 * (1 - progress)),
+                    child: Container(
+                      height: widget.maxHeight * progress,
+                      padding: widget.padding,
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.vertical(
+                          bottom: Radius.circular(16 * progress),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (widget.showRefresh) _buildRefreshButton(),
+                          if (widget.showRefresh && widget.showExpandCollapse) SizedBox(width: widget.buttonSpacing),
+                          if (widget.showExpandCollapse)
+                            _buildIconButton(
+                              icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
+                              onPressed: widget.onToggleExpandAll,
+                            ),
+                          if (widget.showExpandCollapse && widget.showSearch) SizedBox(width: widget.buttonSpacing),
+                          if (widget.showSearch)
+                            _buildIconButton(
+                              icon: _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
+                              onPressed: () => _setSearchVisible(!_currentSearchVisible),
+                            ),
+                          if (widget.showSearch && widget.showReset) SizedBox(width: widget.buttonSpacing),
+                          if (widget.showReset)
+                            _buildIconButton(
+                              icon: CupertinoIcons.refresh_thin,
+                              onPressed: _onReset,
+                            ),
+                          if (widget.showReset && widget.showFilter) SizedBox(width: widget.buttonSpacing),
+                          if (widget.showFilter)
+                            _buildIconButton(
+                              icon: CupertinoIcons.slider_horizontal_3,
+                              onPressed: widget.onFilter,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            Opacity(
-              opacity: progress,
-              child: Container(
-                height: _currentSearchVisible ? 52 * progress : 0,
-                child: SingleChildScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 200),
-                    crossFadeState: _currentSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                    firstChild: Search(
-                      controller: _internalSearchController,
-                      focusNode: _internalFocusNode,
-                      onChanged: _onSearchChanged,
-                      onClear: _onSearchClear,
+                Opacity(
+                  opacity: progress,
+                  child: Transform.translate(
+                    offset: Offset(0, -8 * (1 - progress)),
+                    child: Container(
+                      height: _currentSearchVisible ? 52 * progress : 0,
+                      child: SingleChildScrollView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 200),
+                          crossFadeState: _currentSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          firstChild: Search(
+                            controller: _internalSearchController,
+                            focusNode: _internalFocusNode,
+                            onChanged: _onSearchChanged,
+                            onClear: _onSearchClear,
+                          ),
+                          secondChild: const SizedBox.shrink(),
+                        ),
+                      ),
                     ),
-                    secondChild: const SizedBox.shrink(),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );

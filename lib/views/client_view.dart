@@ -22,7 +22,7 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> {
+class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
@@ -31,10 +31,16 @@ class _ClientViewState extends State<ClientView> {
   double _scrollOffset = 0;
   bool _autoFixTriggered = false;
   Timer? _debounceTimer;
+  Timer? _scrollThrottleTimer;
+  late AnimationController _scrollAnimationController;
 
   @override
   void initState() {
     super.initState();
+    _scrollAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
     });
@@ -67,9 +73,25 @@ class _ClientViewState extends State<ClientView> {
     _debounceTimer = null;
   }
 
+  void _onScrollUpdate(double offset) {
+    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
+      return;
+    }
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+      if (mounted && _scrollOffset != offset) {
+        setState(() {
+          _scrollOffset = offset;
+        });
+      }
+      _scrollThrottleTimer = null;
+    });
+  }
+
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
     _debounceTimer?.cancel();
+    _scrollAnimationController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
@@ -172,6 +194,7 @@ class _ClientViewState extends State<ClientView> {
 
     final hasPinned = _filteredPinnedHoldings.isNotEmpty;
     final hasGroups = _groupedHoldings.isNotEmpty;
+    final hasData = hasPinned || hasGroups;
 
     return Container(
       color: backgroundColor,
@@ -179,9 +202,7 @@ class _ClientViewState extends State<ClientView> {
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollUpdateNotification) {
-              setState(() {
-                _scrollOffset = notification.metrics.pixels;
-              });
+              _onScrollUpdate(notification.metrics.pixels);
             }
             return false;
           },
@@ -196,7 +217,6 @@ class _ClientViewState extends State<ClientView> {
                 showFilter: false,
                 isAllExpanded: _areAnyCardsExpanded,
                 searchText: _searchText,
-                // 传入 dataManager 和 fundService 以使用内置 RefreshButton（全屏遮罩、长按强制刷新）
                 dataManager: _dataManager,
                 fundService: _fundService,
                 onToggleExpandAll: () {
@@ -225,7 +245,7 @@ class _ClientViewState extends State<ClientView> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
               Expanded(
-                child: (!hasPinned && !hasGroups)
+                child: !hasData
                     ? EmptyState(
                   icon: CupertinoIcons.person,
                   title: '暂无客户数据',
@@ -289,32 +309,35 @@ class _ClientViewState extends State<ClientView> {
       final isExpanded = _expandedClients.contains(name);
       final gradient = _getGradientForOriginalName(holdings.first.clientName);
       groups.add(
-        Container(
-          key: ValueKey('client_$name'),
-          margin: EdgeInsets.only(bottom: i == _sortedClientNames.length - 1 ? 0 : 8),
-          child: Column(
-            children: [
-              GradientCard(
-                title: name,
-                clientId: holdings.first.clientId,
-                subtitle: '持仓数:',
-                countValue: holdings.length,
-                gradient: gradient,
-                isExpanded: isExpanded,
-                isDarkMode: CupertinoTheme.brightnessOf(context) == Brightness.dark,
-                onTap: () => setState(() => isExpanded ? _expandedClients.remove(name) : _expandedClients.add(name)),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutCubic,
-                child: isExpanded
-                    ? Container(
-                  margin: const EdgeInsets.only(left: 16, top: 8),
-                  child: Column(children: _buildAnimatedFundCards(holdings)),
-                )
-                    : const SizedBox.shrink(),
-              ),
-            ],
+        RepaintBoundary(
+          key: ValueKey('repaint_$name'),
+          child: Container(
+            key: ValueKey('client_$name'),
+            margin: EdgeInsets.only(bottom: i == _sortedClientNames.length - 1 ? 0 : 8),
+            child: Column(
+              children: [
+                GradientCard(
+                  title: name,
+                  clientId: holdings.first.clientId,
+                  subtitle: '持仓数:',
+                  countValue: holdings.length,
+                  gradient: gradient,
+                  isExpanded: isExpanded,
+                  isDarkMode: CupertinoTheme.brightnessOf(context) == Brightness.dark,
+                  onTap: () => setState(() => isExpanded ? _expandedClients.remove(name) : _expandedClients.add(name)),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                  child: isExpanded
+                      ? Container(
+                    margin: const EdgeInsets.only(left: 16, top: 8),
+                    child: Column(children: _buildAnimatedFundCards(holdings)),
+                  )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -327,21 +350,24 @@ class _ClientViewState extends State<ClientView> {
     for (int i = 0; i < holdings.length; i++) {
       final holding = holdings[i];
       cards.add(
-        _FadeInWidget(
-          key: ValueKey('fade_${holding.id}'),
-          delay: Duration(milliseconds: 100 + i * 80),
-          duration: const Duration(milliseconds: 400),
-          child: FundCard(
-            key: ValueKey('card_${holding.id}'),
-            holding: holding,
-            hideClientInfo: true,
-            onCopyClientId: () {
-              _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-              context.showToast('客户号已复制');
-            },
-            onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
-            onShowToast: context.showToast,
-            onPinToggle: () => _dataManager.togglePinStatus(holding.id),
+        RepaintBoundary(
+          key: ValueKey('repaint_${holding.id}'),
+          child: _FadeInWidget(
+            key: ValueKey('fade_${holding.id}'),
+            delay: Duration(milliseconds: 100 + i * 80),
+            duration: const Duration(milliseconds: 400),
+            child: FundCard(
+              key: ValueKey('card_${holding.id}'),
+              holding: holding,
+              hideClientInfo: true,
+              onCopyClientId: () {
+                _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+                context.showToast('客户号已复制');
+              },
+              onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
+              onShowToast: context.showToast,
+              onPinToggle: () => _dataManager.togglePinStatus(holding.id),
+            ),
           ),
         ),
       );

@@ -28,49 +28,43 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     final topPadding = MediaQuery.of(context).padding.top;
-
-    // 获取页面背景色（与 CupertinoPageScaffold 默认背景匹配）
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      color: backgroundColor,
+      width: double.infinity,
+      height: double.infinity,
+      color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
       child: Stack(
         children: [
-          // 装饰层：扩展到全屏（包括导航栏区域）
-          Positioned(
-            top: -topPadding, // 向上扩展，覆盖状态栏区域
-            left: 0,
-            right: 0,
-            bottom: 0,
+          Positioned.fill(
             child: Stack(
               children: [
-                // 模糊色块
                 Positioned(
-                  top: -50,
+                  top: -topPadding - 50,
                   right: -50,
                   child: _BlurredBlob(
-                    size: 200,
+                    size: 250,
                     color: CupertinoColors.activeBlue.withOpacity(isDarkMode ? 0.12 : 0.08),
                   ),
                 ),
                 Positioned(
                   bottom: 100,
-                  left: -30,
+                  left: -50,
                   child: _BlurredBlob(
-                    size: 150,
+                    size: 200,
                     color: CupertinoColors.systemPurple.withOpacity(isDarkMode ? 0.1 : 0.05),
                   ),
                 ),
                 Positioned(
-                  top: 200,
-                  left: 100,
+                  top: screenHeight * 0.3,
+                  left: screenWidth * 0.7,
                   child: _BlurredBlob(
-                    size: 120,
+                    size: 180,
                     color: CupertinoColors.systemOrange.withOpacity(isDarkMode ? 0.08 : 0.04),
                   ),
                 ),
-                // 极淡网格纹理
                 Opacity(
                   opacity: isDarkMode ? 0.03 : 0.01,
                   child: const _GridBackground(),
@@ -78,47 +72,49 @@ class EmptyState extends StatelessWidget {
               ],
             ),
           ),
-          // 内容区域：保留安全区，避免被状态栏遮挡
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _AnimatedIconContainer(icon: icon, isDarkMode: isDarkMode),
-                    const SizedBox(height: 40),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: titleFontSize ?? (screenWidth > 600 ? 24 : 22),
-                        fontWeight: titleFontWeight,
-                        letterSpacing: -0.5,
-                        color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                      ),
-                      textAlign: TextAlign.center,
+          Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 40,
+                right: 40,
+                top: topPadding + 20,
+                bottom: bottomPadding + 20,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _AnimatedIconContainer(icon: icon, isDarkMode: isDarkMode),
+                  const SizedBox(height: 40),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: titleFontSize ?? (screenWidth > 600 ? 24 : 22),
+                      fontWeight: titleFontWeight,
+                      letterSpacing: -0.5,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      message,
-                      style: TextStyle(
-                        fontSize: screenWidth > 600 ? 16 : 15,
-                        height: 1.5,
-                        color: isDarkMode
-                            ? CupertinoColors.secondaryLabel
-                            : CupertinoColors.systemGrey,
-                      ),
-                      textAlign: TextAlign.center,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: screenWidth > 600 ? 16 : 15,
+                      height: 1.5,
+                      color: isDarkMode
+                          ? CupertinoColors.secondaryLabel
+                          : CupertinoColors.systemGrey,
                     ),
-                    if (customButton != null) ...[
-                      const SizedBox(height: 48),
-                      customButton!,
-                    ] else if (actionText != null && onAction != null) ...[
-                      const SizedBox(height: 48),
-                      _GlassButton(text: actionText!, onTap: onAction!),
-                    ],
+                    textAlign: TextAlign.center,
+                  ),
+                  if (customButton != null) ...[
+                    const SizedBox(height: 48),
+                    customButton!,
+                  ] else if (actionText != null && onAction != null) ...[
+                    const SizedBox(height: 48),
+                    _GlassButton(text: actionText!, onTap: onAction!),
                   ],
-                ),
+                ],
               ),
             ),
           ),
@@ -128,7 +124,6 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-// 以下为辅助组件（保持不变）
 class _BlurredBlob extends StatelessWidget {
   final double size;
   final Color color;

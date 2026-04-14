@@ -6,7 +6,6 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
 
-/// 刷新按钮组件 - 支持普通刷新（仅更新过时数据）和长按强制刷新（全部更新）
 class RefreshButton extends StatefulWidget {
   final DataManager dataManager;
   final FundService fundService;
@@ -134,13 +133,11 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     _fadeController!.forward();
   }
 
-  // 普通刷新：仅更新过时的基金
   Future<void> _refresh() async {
     if (_isRefreshing) return;
     await _performRefresh(forceAll: false);
   }
 
-  // 强制刷新：更新所有基金（忽略日期检查）
   Future<void> _forceRefresh() async {
     if (_isRefreshing) return;
     await _performRefresh(forceAll: true);
@@ -247,18 +244,24 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final hasData = widget.dataManager.holdings.isNotEmpty;
+
     return GestureDetector(
-      onLongPress: _isRefreshing ? null : _forceRefresh,
+      onLongPress: (hasData && !_isRefreshing) ? _forceRefresh : null,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
-        onPressed: _isRefreshing ? null : _refresh,
+        onPressed: (hasData && !_isRefreshing) ? _refresh : null,
         child: _isRefreshing
             ? const SizedBox(
           width: 22,
           height: 22,
           child: CupertinoActivityIndicator(),
         )
-            : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+            : Icon(
+          CupertinoIcons.arrow_clockwise,
+          size: 20,
+          color: hasData ? null : CupertinoColors.systemGrey3,
+        ),
       ),
     );
   }
