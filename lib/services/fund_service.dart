@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-// 不再需要 GBK 解码，移除 fast_gbk 导入
 import '../models/log_entry.dart';
 import 'data_manager.dart';
 
@@ -104,11 +103,10 @@ class FundService {
 
       // 1. 提取基金名称（支持双引号、单引号、无引号）
       String fundName = '未知基金';
-      // 匹配 fS_name = "xxx" 或 fS_name = 'xxx' 或 fS_name = xxx
       final namePatterns = [
         RegExp(r'fS_name\s*=\s*"([^"]+)"'),   // 双引号
         RegExp(r"fS_name\s*=\s*'([^']+)'"),   // 单引号
-        RegExp(r'fS_name\s*=\s*([^;]+)'),     // 无引号（直到分号）
+        RegExp(r'fS_name\s*=\s*([^;]+)'),     // 无引号
       ];
       for (final pattern in namePatterns) {
         final match = pattern.firstMatch(jsString);
@@ -133,7 +131,7 @@ class FundService {
           if (trendList.isNotEmpty) {
             final latest = trendList.last;
             currentNav = (latest['y'] as num).toDouble();
-            final timestamp = latest['x'] as int; // 毫秒时间戳
+            final timestamp = latest['x'] as int;
             navDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
             debugPrint('📈 最新净值: $currentNav，日期: $navDate');
           }
@@ -144,23 +142,76 @@ class FundService {
         debugPrint('⚠️ 未找到 Data_netWorthTrend');
       }
 
-      // 3. 提取收益率（可选）
+      // 3. 提取收益率（修正正则：使用双引号，并兼容无引号情况）
       double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
-      final ret1mRegex = RegExp(r"syl_1y\s*=\s*'([^']+)'");
-      final ret1mMatch = ret1mRegex.firstMatch(jsString);
-      if (ret1mMatch != null) navReturn1m = double.tryParse(ret1mMatch.group(1)!);
 
-      final ret3mRegex = RegExp(r"syl_3y\s*=\s*'([^']+)'");
-      final ret3mMatch = ret3mRegex.firstMatch(jsString);
-      if (ret3mMatch != null) navReturn3m = double.tryParse(ret3mMatch.group(1)!);
+      // 近1月：syl_1y
+      final ret1mPatterns = [
+        RegExp(r'syl_1y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_1y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_1y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret1mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn1m = double.tryParse(val);
+            if (navReturn1m != null) break;
+          }
+        }
+      }
 
-      final ret6mRegex = RegExp(r"syl_6y\s*=\s*'([^']+)'");
-      final ret6mMatch = ret6mRegex.firstMatch(jsString);
-      if (ret6mMatch != null) navReturn6m = double.tryParse(ret6mMatch.group(1)!);
+      // 近3月：syl_3y
+      final ret3mPatterns = [
+        RegExp(r'syl_3y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_3y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_3y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret3mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn3m = double.tryParse(val);
+            if (navReturn3m != null) break;
+          }
+        }
+      }
 
-      final ret1yRegex = RegExp(r"syl_1n\s*=\s*'([^']+)'");
-      final ret1yMatch = ret1yRegex.firstMatch(jsString);
-      if (ret1yMatch != null) navReturn1y = double.tryParse(ret1yMatch.group(1)!);
+      // 近6月：syl_6y
+      final ret6mPatterns = [
+        RegExp(r'syl_6y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_6y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_6y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret6mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn6m = double.tryParse(val);
+            if (navReturn6m != null) break;
+          }
+        }
+      }
+
+      // 近1年：syl_1n
+      final ret1yPatterns = [
+        RegExp(r'syl_1n\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_1n\s*=\s*'([^']*)'"),
+        RegExp(r'syl_1n\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret1yPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn1y = double.tryParse(val);
+            if (navReturn1y != null) break;
+          }
+        }
+      }
 
       debugPrint('📈 收益率: 1月=$navReturn1m, 3月=$navReturn3m, 6月=$navReturn6m, 1年=$navReturn1y');
 

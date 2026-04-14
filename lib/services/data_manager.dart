@@ -5,8 +5,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
-import '../widgets/theme_switch.dart';
 import '../services/fund_service.dart';
+import '../widgets/theme_switch.dart' show ThemeMode;
+
+// 扩展 ThemeMode 显示名称
+extension ThemeModeDisplayName on ThemeMode {
+  String get displayName {
+    switch (this) {
+      case ThemeMode.light:
+        return '浅色';
+      case ThemeMode.dark:
+        return '深色';
+      case ThemeMode.system:
+        return '跟随系统';
+    }
+  }
+}
 
 class DataManager extends ChangeNotifier {
   static const String _holdingsKey = 'fund_holdings';
@@ -24,12 +38,10 @@ class DataManager extends ChangeNotifier {
   bool get isPrivacyMode => _isPrivacyMode;
   ThemeMode get themeMode => _themeMode;
 
-  // 获取置顶的持仓
   List<FundHolding> get pinnedHoldings {
     return _holdings.where((h) => h.isPinned).toList();
   }
 
-  // 获取非置顶的持仓
   List<FundHolding> get unpinnedHoldings {
     return _holdings.where((h) => !h.isPinned).toList();
   }
@@ -159,7 +171,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 切换置顶状态
   Future<void> togglePinStatus(String holdingId) async {
     final index = _holdings.indexWhere((h) => h.id == holdingId);
     if (index != -1) {
@@ -172,7 +183,6 @@ class DataManager extends ChangeNotifier {
       );
       newHoldings[index] = newHolding;
 
-      // 重新排序：置顶的放在前面，按置顶时间倒序
       newHoldings.sort((a, b) {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
@@ -191,7 +201,6 @@ class DataManager extends ChangeNotifier {
     }
   }
 
-  // ========== 新增：强制刷新所有持仓的基金信息（忽略日期检查） ==========
   Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
     final total = _holdings.length;
     for (int i = 0; i < total; i++) {
@@ -203,6 +212,10 @@ class DataManager extends ChangeNotifier {
           currentNav: fetched['currentNav'],
           navDate: fetched['navDate'],
           isValid: true,
+          navReturn1m: fetched['navReturn1m'],
+          navReturn3m: fetched['navReturn3m'],
+          navReturn6m: fetched['navReturn6m'],
+          navReturn1y: fetched['navReturn1y'],
         );
         await updateHolding(updated);
       } else {

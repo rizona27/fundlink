@@ -32,19 +32,12 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   AnimationController? _fadeController;
   double _overlayOpacity = 0.0;
 
-  DateTime _getPreviousWorkday(DateTime date) {
-    var result = DateTime(date.year, date.month, date.day);
-    while (true) {
-      result = result.subtract(const Duration(days: 1));
-      final weekday = result.weekday;
-      if (weekday >= 1 && weekday <= 5) {
-        return result;
-      }
-    }
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+  /// 判断基金是否缺失所有收益率字段（近1/3/6月、近1年全为 null）
+  bool _hasNoReturnData(FundHolding holding) {
+    return holding.navReturn1m == null &&
+        holding.navReturn3m == null &&
+        holding.navReturn6m == null &&
+        holding.navReturn1y == null;
   }
 
   Future<(String, FundHolding?)> _fetchHoldingWithRetry(FundHolding holding, {bool forceRefresh = false}) async {
@@ -60,6 +53,10 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
           currentNav: fundInfo['currentNav'] as double? ?? holding.currentNav,
           navDate: fundInfo['navDate'] as DateTime? ?? holding.navDate,
           isValid: true,
+          navReturn1m: fundInfo['navReturn1m'] as double?,
+          navReturn3m: fundInfo['navReturn3m'] as double?,
+          navReturn6m: fundInfo['navReturn6m'] as double?,
+          navReturn1y: fundInfo['navReturn1y'] as double?,
         );
         return (holding.id, updatedHolding);
       }
@@ -156,20 +153,18 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
 
     await widget.dataManager.addLog(forceAll ? '开始强制刷新所有基金信息' : '开始刷新基金信息', type: LogType.info);
 
-    final previousWorkday = _getPreviousWorkday(DateTime.now());
     final holdings = widget.dataManager.holdings;
     final totalCount = holdings.length;
 
+    // 决定哪些基金需要刷新
     List<FundHolding> needsRefreshHoldings;
     if (forceAll) {
       needsRefreshHoldings = List.from(holdings);
     } else {
       needsRefreshHoldings = [];
       for (final holding in holdings) {
-        final isLatest = holding.isValid &&
-            holding.currentNav > 0 &&
-            _isSameDay(holding.navDate, previousWorkday);
-        if (!isLatest) {
+        // 只刷新那些没有任何收益率数据的基金（近1/3/6月、近1年全为 null）
+        if (_hasNoReturnData(holding)) {
           needsRefreshHoldings.add(holding);
         }
       }
@@ -224,8 +219,12 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
       if (forceAll) {
         message = '强制刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}';
       } else {
-        if (successCount > 0 || skipCount > 0) {
-          message = '刷新完成: 成功 $successCount, 跳过 $skipCount${failCount > 0 ? ', 失败 $failCount' : ''}';
+        if (successCount > 0) {
+          message = '刷新完成: 成功更新 $successCount 支基金${failCount > 0 ? ', 失败 $failCount' : ''}';
+        } else if (skipCount > 0 && skipCount == totalCount) {
+          message = '所有基金已有收益率数据，无需刷新';
+        } else if (skipCount > 0) {
+          message = '已有收益率数据的基金已跳过，未发现需要更新的基金';
         } else if (failCount > 0) {
           message = '刷新失败，请检查网络';
         } else {
