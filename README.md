@@ -23,6 +23,7 @@ lib/
 │   └── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
 │
 └── widgets/
+    ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含是刷新、搜索、筛选等
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart	           # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
     ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，支持深色模式

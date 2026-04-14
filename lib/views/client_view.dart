@@ -12,6 +12,7 @@ import '../widgets/toast.dart';
 import '../widgets/refresh_button.dart';
 import '../widgets/search.dart';
 import '../widgets/glass_button.dart';
+import '../widgets/adaptive_top_bar.dart';
 import 'add_holding_view.dart';
 
 class ClientView extends StatefulWidget {
@@ -21,37 +22,19 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> with SingleTickerProviderStateMixin {
+class _ClientViewState extends State<ClientView> {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
   final Set<String> _expandedClients = {};
-  bool _isSearchVisible = false;
   bool _isPinnedSectionExpanded = false;
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-
-  late AnimationController _topBarController;
-  Timer? _scrollTimer;
-  double _lastTargetProgress = 1.0;
-  double _currentScrollOffset = 0;
-  bool _searchVisibleBeforeScroll = false;
-  String _searchTextBeforeScroll = '';
-
+  double _scrollOffset = 0;
   bool _autoFixTriggered = false;
   Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
-    _topBarController = AnimationController(duration: const Duration(milliseconds: 200), vsync: this)..value = 1.0;
-
-    _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus && !_isSearchVisible && mounted) {
-        setState(() => _isSearchVisible = true);
-      }
-    });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
     });
@@ -79,84 +62,14 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
     }
   }
 
-  void _handleScroll(double offset) {
-    _currentScrollOffset = offset;
-    _scrollTimer?.cancel();
-    _scrollTimer = Timer(const Duration(milliseconds: 16), () {
-      if (!mounted) return;
-
-      final hasText = _searchController.text.isNotEmpty;
-      if (hasText) {
-        if (!_isSearchVisible) {
-          setState(() => _isSearchVisible = true);
-        }
-        return;
-      }
-
-      double rawProgress = 1.0 - (_currentScrollOffset / 100).clamp(0.0, 1.0);
-      double targetProgress = Curves.easeOutCubic.transform(rawProgress);
-      if ((targetProgress - _lastTargetProgress).abs() > 0.01) {
-        _lastTargetProgress = targetProgress;
-        _topBarController.animateTo(targetProgress, duration: const Duration(milliseconds: 150));
-      }
-
-      if (targetProgress < 0.3 && _topBarController.value > 0.3) {
-        _searchVisibleBeforeScroll = _isSearchVisible;
-        _searchTextBeforeScroll = _searchText;
-      }
-
-      if (targetProgress < 0.05 && _isSearchVisible && _searchText.isEmpty && !_searchFocusNode.hasFocus) {
-        setState(() => _isSearchVisible = false);
-      }
-
-      if (targetProgress > 0.5 && _topBarController.value < 0.5) {
-        if (_searchTextBeforeScroll.isNotEmpty) {
-          setState(() => _isSearchVisible = _searchVisibleBeforeScroll);
-        }
-      }
-    });
-  }
-
-  void _toggleSearch() => setState(() {
-    _isSearchVisible = !_isSearchVisible;
-    if (!_isSearchVisible) {
-      _searchText = '';
-      _searchController.clear();
-      _cancelDebounce();
-    }
-  });
-
   void _cancelDebounce() {
     _debounceTimer?.cancel();
     _debounceTimer = null;
   }
 
-  void _onSearchChanged(String value) {
-    _cancelDebounce();
-    setState(() {
-      _searchText = value;
-    });
-
-    if (value.isNotEmpty && !_isSearchVisible) {
-      setState(() => _isSearchVisible = true);
-    }
-  }
-
-  void _onSearchClear() {
-    _cancelDebounce();
-    setState(() {
-      _searchText = '';
-      _searchController.clear();
-    });
-  }
-
   @override
   void dispose() {
-    _scrollTimer?.cancel();
-    _topBarController.dispose();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _cancelDebounce();
+    _debounceTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
@@ -265,120 +178,102 @@ class _ClientViewState extends State<ClientView> with SingleTickerProviderStateM
       child: SafeArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
-            if (notification is ScrollUpdateNotification) _handleScroll(notification.metrics.pixels);
+            if (notification is ScrollUpdateNotification) {
+              setState(() {
+                _scrollOffset = notification.metrics.pixels;
+              });
+            }
             return false;
           },
-          child: AnimatedBuilder(
-            animation: _topBarController,
-            builder: (context, _) {
-              final progress = _topBarController.value;
-              return Column(
-                children: [
-                  Container(
-                    height: 52 * progress,
-                    child: Opacity(
-                      opacity: progress,
-                      child: Transform.scale(
-                        scale: 0.8 + progress * 0.2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            children: [
-                              RefreshButton(dataManager: _dataManager, fundService: _fundService),
-                              const Spacer(),
-                              CupertinoButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: _areAnyCardsExpanded ? _collapseAll : _expandAll,
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Icon(_areAnyCardsExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-                                      key: ValueKey(_areAnyCardsExpanded), size: 22),
-                                ),
-                              ),
-                              CupertinoButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: _toggleSearch,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  child: _isSearchVisible ? const Icon(CupertinoIcons.search_circle_fill, size: 24) : const Icon(CupertinoIcons.search, size: 22),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+          child: Column(
+            children: [
+              AdaptiveTopBar(
+                scrollOffset: _scrollOffset,
+                showRefresh: true,
+                showExpandCollapse: true,
+                showSearch: true,
+                showReset: true,
+                showFilter: false,
+                isAllExpanded: _areAnyCardsExpanded,
+                searchText: _searchText,
+                // 传入 dataManager 和 fundService 以使用内置 RefreshButton（全屏遮罩、长按强制刷新）
+                dataManager: _dataManager,
+                fundService: _fundService,
+                onToggleExpandAll: () {
+                  setState(() {
+                    if (_areAnyCardsExpanded) {
+                      _collapseAll();
+                    } else {
+                      _expandAll();
+                    }
+                  });
+                },
+                onSearchChanged: (value) {
+                  setState(() => _searchText = value);
+                },
+                onSearchClear: () {
+                  setState(() => _searchText = '');
+                },
+                onReset: () {
+                  setState(() => _searchText = '');
+                  context.showToast('已重置搜索');
+                },
+                backgroundColor: Colors.transparent,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+                iconSize: 24,
+                buttonSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              Expanded(
+                child: (!hasPinned && !hasGroups)
+                    ? EmptyState(
+                  icon: CupertinoIcons.person,
+                  title: '暂无客户数据',
+                  message: '点击开始添加吧～',
+                  titleFontWeight: FontWeight.normal,
+                  titleFontSize: 18,
+                  customButton: GlassButton(
+                    label: 'Go!',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                      );
+                    },
+                    isPrimary: false,
+                    width: null,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   ),
-                  Opacity(
-                    opacity: progress,
-                    child: Container(
-                      height: _isSearchVisible ? 52 * progress : 0,
-                      child: SingleChildScrollView(
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: AnimatedCrossFade(
-                          duration: const Duration(milliseconds: 200),
-                          crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                          firstChild: Search(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            onChanged: _onSearchChanged,
-                            onClear: _onSearchClear,
-                          ),
-                          secondChild: const SizedBox(height: 0),
-                        ),
+                )
+                    : ListView(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
+                  children: [
+                    if (hasPinned) ...[
+                      GradientCard(
+                        title: '置顶',
+                        subtitle: '数量:',
+                        countValue: _filteredPinnedHoldings.length,
+                        gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+                        isExpanded: _isPinnedSectionExpanded,
+                        isDarkMode: isDarkMode,
+                        onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
                       ),
-                    ),
-                  ),
-                  Expanded(
-                    child: (!hasPinned && !hasGroups)
-                        ? EmptyState(
-                      icon: CupertinoIcons.person,
-                      title: '暂无客户数据',
-                      message: '点击开始添加吧～',
-                      titleFontWeight: FontWeight.normal,
-                      titleFontSize: 18,
-                      customButton: GlassButton(
-                        label: 'Go!',
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(builder: (_) => const AddHoldingView()),
-                          );
-                        },
-                        isPrimary: false,
-                        width: null,
-                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                      const SizedBox(height: 8),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutCubic,
+                        child: _isPinnedSectionExpanded
+                            ? Column(children: _buildPinnedCards())
+                            : const SizedBox.shrink(),
                       ),
-                    )
-                        : ListView(
-                      padding: EdgeInsets.fromLTRB(16, 12, 16, totalBottomPadding),
-                      children: [
-                        if (hasPinned) ...[
-                          GradientCard(
-                            title: '置顶',
-                            subtitle: '数量:',
-                            countValue: _filteredPinnedHoldings.length,
-                            gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
-                            isExpanded: _isPinnedSectionExpanded,
-                            isDarkMode: isDarkMode,
-                            onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
-                          ),
-                          const SizedBox(height: 8),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeOutCubic,
-                            child: _isPinnedSectionExpanded ? Column(children: _buildPinnedCards()) : const SizedBox.shrink(),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        if (hasGroups) ...[
-                          ..._buildClientGroups(),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
+                      const SizedBox(height: 16),
+                    ],
+                    if (hasGroups) ...[
+                      ..._buildClientGroups(),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
