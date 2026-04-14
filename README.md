@@ -17,6 +17,7 @@ lib/
 │   ├── client_view.dart                   # 客户视图页，按客户分组展示持仓，支持搜索、展开/折叠、刷新、隐私模式
 │   ├── config_view.dart                   # 设置页，隐私模式开关、主题切换、日志查询、新增/管理持仓入口
 │   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息，基金代码变更时重新获取基金数据
+│   ├── log_view.dart                      # 日志页面，按照日志类型进行分类，倒序显示（最新在上）
 │   ├── manage_holdings_view.dart          # 管理持仓页，批量修改客户姓名、批量删除客户、单个编辑/删除持仓
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示每个基金的持有人及收益
 │   └── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
