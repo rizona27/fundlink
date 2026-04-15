@@ -430,22 +430,27 @@ class FundService {
     return holdings.take(10).toList();
   }
 
+  /// 批量获取股票实时涨跌幅（腾讯接口，增强解析）
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
     if (stockCodes.isEmpty) return {};
     final codesParam = stockCodes.map((code) {
+      // 港股：5位数字
+      if (code.length == 5 && RegExp(r'^\d{5}$').hasMatch(code)) {
+        return 'hk$code';
+      }
       if (code.startsWith('6')) return 'sh$code';
       if (code.startsWith('0') || code.startsWith('3')) return 'sz$code';
-      if (code.startsWith('5')) return 'hk$code';
+      if (code.startsWith('5')) return 'sz$code';
       return code;
     }).join(',');
     final url = Uri.parse('https://qt.gtimg.cn/q=$codesParam');
+    debugPrint('📊 请求股票行情: $url');
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return {};
     String body;
     try {
       body = utf8.decode(response.bodyBytes);
     } catch (e) {
-      // 如果 UTF-8 解码失败，尝试 GBK 或直接忽略
       body = String.fromCharCodes(response.bodyBytes);
     }
     final Map<String, double> quoteMap = {};
@@ -461,6 +466,7 @@ class FundService {
           final lastClose = double.tryParse(parts[4]) ?? 0.0;
           final changePercent = lastClose > 0 ? ((currentPrice - lastClose) / lastClose) * 100 : 0.0;
           quoteMap[code] = changePercent;
+          debugPrint('📊 股票 $code 当前价=$currentPrice, 昨收=$lastClose, 涨跌幅=$changePercent%');
         }
       }
     }
