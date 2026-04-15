@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
+import '../views/fund_detail_page.dart';   // 导入详情页
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;
@@ -150,15 +151,16 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
     widget.onCopyClientId?.call();
   }
 
+  // 原有报告功能：复制文本报告
   void _onGenerateReport() {
-    final report = reportContent;
+    final report = _reportContent;
     Clipboard.setData(ClipboardData(text: report)).then((_) {
       widget.onShowToast?.call(report);
     });
     widget.onGenerateReport?.call();
   }
 
-  String get reportContent {
+  String get _reportContent {
     final profit = widget.holding.profit;
     final annualizedReturn = widget.holding.annualizedProfitRate;
     final purchaseAmountFormatted = _formatPurchaseAmountForReport(widget.holding.purchaseAmount);
@@ -205,6 +207,15 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
   }
 
   String _formatSwiftShortDate(DateTime date) => '${date.year.toString().substring(2)}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  // 新增：跳转到详情页
+  void _onNavigateToDetail() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => FundDetailPage(holding: widget.holding),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -391,22 +402,33 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                   ],
                   const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,  // 改为 spaceBetween，使左右按钮分开
                     children: [
+                      // 新增：左下角“详情”按钮
                       CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minSize: 0,
-                        onPressed: widget.holding.clientId.isEmpty ? null : _onCopyClientId,
-                        child: Text('复制客户号',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
-                                color: widget.holding.clientId.isEmpty ? CupertinoColors.systemGrey : const Color(0xFF007AFF).withOpacity(0.8))),
+                        onPressed: _onNavigateToDetail,
+                        child: const Text('详情', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
                       ),
-                      const SizedBox(width: 8),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        minSize: 0,
-                        onPressed: _onGenerateReport,
-                        child: const Text('报告', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
+                      Row(
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minSize: 0,
+                            onPressed: widget.holding.clientId.isEmpty ? null : _onCopyClientId,
+                            child: Text('复制客户号',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
+                                    color: widget.holding.clientId.isEmpty ? CupertinoColors.systemGrey : const Color(0xFF007AFF).withOpacity(0.8))),
+                          ),
+                          const SizedBox(width: 8),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minSize: 0,
+                            onPressed: _onGenerateReport,
+                            child: const Text('报告', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
+                          ),
+                        ],
                       ),
                     ],
                   ),

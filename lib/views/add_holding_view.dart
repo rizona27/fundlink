@@ -220,7 +220,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     final shares = double.parse(_purchaseSharesController.text.trim());
     final fundCode = _fundCodeController.text.trim().toUpperCase();
 
-    // 先获取基金信息（包含收益率）
     final fundInfo = await _fundService.fetchFundInfo(fundCode);
     final fundName = fundInfo['fundName'] as String? ?? '待加载';
     final currentNav = fundInfo['currentNav'] as double? ?? 0;
@@ -299,15 +298,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
-        middle: const SizedBox(),
-        leading: GlassButton(
-          label: '返回',
-          onPressed: () => Navigator.of(context).pop(),
-          isPrimary: false,
-          height: 36,
-          borderRadius: 30,
-          minWidth: 60,
+        // 移除返回按钮，设置空白leading，并添加标题
+        leading: const SizedBox.shrink(),
+        middle: const Text(
+          '新增持仓',
+          style: TextStyle(fontWeight: FontWeight.w600),
         ),
+        backgroundColor: Colors.transparent,
       ),
       child: SafeArea(
         child: _isLoading
@@ -517,7 +514,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 使用 Flexible 和 ConstrainedBox 让标签自适应，同时保持最小宽度
         Flexible(
           flex: 0,
           child: ConstrainedBox(

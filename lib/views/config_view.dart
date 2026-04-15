@@ -5,7 +5,7 @@ import '../models/log_entry.dart';
 import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
 import 'manage_holdings_view.dart';
-import 'log_view.dart';  // 新增导入
+import 'log_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -55,7 +55,9 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             children: [
               _buildGeneralSection(isDarkMode),
               const SizedBox(height: 16),
-              _buildDataSection(isDarkMode),
+              _buildHoldingsManagementSection(isDarkMode),
+              const SizedBox(height: 16),
+              _buildImportExportSection(isDarkMode),
               const SizedBox(height: 16),
               _buildLogSection(isDarkMode),
               const SizedBox(height: 16),
@@ -69,6 +71,151 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
+  // ================== 通用区块 ==================
+  Widget _buildGeneralSection(bool isDarkMode) {
+    return _buildSection(
+      title: '通用设置',
+      icon: '通用',
+      isDarkMode: isDarkMode,
+      children: [
+        _buildSwitchItem(
+          icon: CupertinoIcons.lock_fill,
+          title: '隐私模式',
+          subtitle: '开启后隐藏客户姓名中的部分字符',
+          value: _dataManager.isPrivacyMode,
+          isDarkMode: isDarkMode,
+          onChanged: (value) async {
+            await _dataManager.togglePrivacyMode();
+            setState(() {});
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildThemeItem(isDarkMode),
+      ],
+    );
+  }
+
+  // ================== 持仓管理区块 ==================
+  Widget _buildHoldingsManagementSection(bool isDarkMode) {
+    return _buildSection(
+      title: '持仓管理',
+      icon: '数据',
+      isDarkMode: isDarkMode,
+      children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.plus_circle_fill,
+          title: '新增持仓',
+          subtitle: '添加新的基金持仓记录',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const AddHoldingView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.pencil,
+          title: '编辑持仓',
+          subtitle: '修改或删除现有持仓',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const ManageHoldingsView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.trash,
+          title: '清空持仓',
+          subtitle: '删除所有持仓数据（不可恢复）',
+          isDarkMode: isDarkMode,
+          isDestructive: true,
+          onTap: () => _showClearAllConfirmDialog(),
+        ),
+      ],
+    );
+  }
+
+  // ================== 导入/导出区块 ==================
+  Widget _buildImportExportSection(bool isDarkMode) {
+    return _buildSection(
+      title: '数据导入导出',
+      icon: '通用', // 复用通用图标，也可单独定义
+      isDarkMode: isDarkMode,
+      children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.cloud_download,
+          title: '导入数据',
+          subtitle: '从文件导入持仓数据',
+          isDarkMode: isDarkMode,
+          onTap: () => _navigateToPlaceholder('导入功能'),
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.cloud_upload,
+          title: '导出数据',
+          subtitle: '导出持仓数据到文件',
+          isDarkMode: isDarkMode,
+          onTap: () => _navigateToPlaceholder('导出功能'),
+        ),
+      ],
+    );
+  }
+
+  // ================== 日志区块 ==================
+  Widget _buildLogSection(bool isDarkMode) {
+    return _buildSection(
+      title: '日志',
+      icon: '日志',
+      isDarkMode: isDarkMode,
+      children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.doc_text_search,
+          title: '查看日志',
+          subtitle: '查看API请求和操作日志记录',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const LogView()),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // ================== 关于区块 ==================
+  Widget _buildAboutSection(bool isDarkMode) {
+    return _buildSection(
+      title: '关于',
+      icon: '关于',
+      isDarkMode: isDarkMode,
+      children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.info_circle_fill,
+          title: '版本信息',
+          subtitle: 'v1.0.0',
+          isDarkMode: isDarkMode,
+          onTap: () => _showAboutDialog(),
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.heart_fill,
+          title: '开源许可',
+          subtitle: 'MIT License',
+          isDarkMode: isDarkMode,
+          onTap: () => _showNotImplementedToast(),
+        ),
+      ],
+    );
+  }
+
+  // ================== 通用UI组件 ==================
   Widget _buildSection({
     required String title,
     required String icon,
@@ -315,29 +462,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildGeneralSection(bool isDarkMode) {
-    return _buildSection(
-      title: '通用设置',
-      icon: '通用',
-      isDarkMode: isDarkMode,
-      children: [
-        _buildSwitchItem(
-          icon: CupertinoIcons.lock_fill,
-          title: '隐私模式',
-          subtitle: '开启后隐藏客户姓名中的部分字符',
-          value: _dataManager.isPrivacyMode,
-          isDarkMode: isDarkMode,
-          onChanged: (value) async {
-            await _dataManager.togglePrivacyMode();
-            setState(() {});
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildThemeItem(isDarkMode),
-      ],
-    );
-  }
-
   Widget _buildThemeItem(bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -390,88 +514,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildDataSection(bool isDarkMode) {
-    return _buildSection(
-      title: '数据管理',
-      icon: '数据',
-      isDarkMode: isDarkMode,
-      children: [
-        _buildMenuItem(
-          icon: CupertinoIcons.plus_circle_fill,
-          title: '新增持仓',
-          subtitle: '添加新的基金持仓记录',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const AddHoldingView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.folder_fill,
-          title: '管理持仓',
-          subtitle: '编辑或删除现有持仓',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const ManageHoldingsView()),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLogSection(bool isDarkMode) {
-    return _buildSection(
-      title: '日志',
-      icon: '日志',
-      isDarkMode: isDarkMode,
-      children: [
-        _buildMenuItem(
-          icon: CupertinoIcons.doc_text_search,
-          title: '查看日志',
-          subtitle: '查看API请求和操作日志记录',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const LogView()),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAboutSection(bool isDarkMode) {
-    return _buildSection(
-      title: '关于',
-      icon: '关于',
-      isDarkMode: isDarkMode,
-      children: [
-        _buildMenuItem(
-          icon: CupertinoIcons.info_circle_fill,
-          title: '版本信息',
-          subtitle: 'v1.0.0',
-          isDarkMode: isDarkMode,
-          onTap: () => _showAboutDialog(),
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.heart_fill,
-          title: '开源许可',
-          subtitle: 'MIT License',
-          isDarkMode: isDarkMode,
-          onTap: () => _showNotImplementedToast(),
-        ),
-      ],
-    );
-  }
-
   Widget _buildFooter(bool isDarkMode) {
     return Center(
       child: Column(
@@ -499,28 +541,76 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  void _showConfirmDialog({
-    required String title,
-    required String message,
-    required VoidCallback onConfirm,
-  }) {
+  void _showClearAllConfirmDialog() {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
+        title: const Text('清空所有持仓'),
+        content: const Text('此操作将删除所有持仓数据，且不可恢复。确定要继续吗？'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
           CupertinoDialogAction(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              onConfirm();
+              try {
+                await _dataManager.clearAllHoldings();
+                await _dataManager.addLog('已清空所有持仓', type: LogType.warning);
+                if (mounted) {
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (context) => CupertinoAlertDialog(
+                      title: const Text('操作成功'),
+                      content: const Text('所有持仓数据已清空。'),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('确定'),
+                        ),
+                      ],
+                    ),
+                  );
+                  setState(() {});
+                }
+              } catch (e) {
+                await _dataManager.addLog('清空持仓失败: $e', type: LogType.error);
+                if (mounted) {
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (context) => CupertinoAlertDialog(
+                      title: const Text('操作失败'),
+                      content: Text('清空数据时出错: $e'),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('确定'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
             },
             isDestructiveAction: true,
-            child: const Text('确定'),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToPlaceholder(String feature) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text('$feature开发中'),
+        content: const Text('该功能将在后续版本中提供。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('好的'),
           ),
         ],
       ),

@@ -10,13 +10,16 @@ lib/
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、购买金额/份额/日期、净值、收益计算属性
 │   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型（信息/成功/错误/警告/网络/缓存）、时间戳
-│   └── profit_result.dart                 # 收益结果模型，绝对收益、年化收益率
+│   ├── net_worth_point.dart               # 净值及趋势
+│   ├── profit_result.dart                 # 收益结果模型，绝对收益、年化收益率
+│   └── top_holding.dart                   # 十大重仓情况
 │
 ├── views/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户姓名/基金代码/金额/份额/日期，保存后自动获取基金信息
 │   ├── client_view.dart                   # 客户视图页，按客户分组展示持仓，支持搜索、展开/折叠、刷新、隐私模式
 │   ├── config_view.dart                   # 设置页，隐私模式开关、主题切换、日志查询、新增/管理持仓入口
 │   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息，基金代码变更时重新获取基金数据
+│   ├── fund_detail_page.dart              # 基金详情页，包含估值、净值趋势、十大重仓
 │   ├── log_view.dart                      # 日志页面，按照日志类型进行分类，倒序显示（最新在上）
 │   ├── manage_holdings_view.dart          # 管理持仓页，批量修改客户姓名、批量删除客户、单个编辑/删除持仓
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示每个基金的持有人及收益
