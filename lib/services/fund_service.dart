@@ -349,65 +349,87 @@ class FundService {
     return {'average': averagePoints, 'hs300': hs300Points};
   }
 
-  /// 获取基金十大重仓股（修复解析逻辑）
+  /// 获取基金十大重仓股（使用 HTML 解析，支持动态列定位）
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
     debugPrint('🔍 开始获取基金 $code 的十大重仓股...');
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
-    debugPrint('📍 请求URL: $url');
-
     final response = await http.get(
       url,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://fund.eastmoney.com/',
       },
     ).timeout(const Duration(seconds: 15));
-
-    debugPrint('📡 响应状态码: ${response.statusCode}');
     if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
-
     final htmlString = utf8.decode(response.bodyBytes);
-    debugPrint('📄 响应HTML长度: ${htmlString.length} 字符');
     final document = html_parser.parse(htmlString);
 
-    // 查找 tbody
     final tbody = document.querySelector('tbody');
     if (tbody == null) {
       debugPrint('❌ 未找到 tbody');
       return [];
     }
 
-    final rows = tbody.querySelectorAll('tr');
-    debugPrint('✅ 找到 tbody，共 ${rows.length} 行');
-    final holdings = <TopHolding>[];
+    // 获取表头 th，确定各列索引
+    final thead = document.querySelector('thead');
+    List<String> headers = [];
+    if (thead != null) {
+      final ths = thead.querySelectorAll('th');
+      headers = ths.map((th) => th.text.trim()).toList();
+      debugPrint('📋 表头: $headers');
+    }
 
+    // 根据表头定位“占净值比例”列索引
+    int ratioIndex = -1;
+    for (int i = 0; i < headers.length; i++) {
+      if (headers[i].contains('占净值比例') || headers[i].contains('占比')) {
+        ratioIndex = i;
+        break;
+      }
+    }
+    // 默认回退到第6列（0-indexed 5）
+    if (ratioIndex == -1) ratioIndex = 5;
+
+    final rows = tbody.querySelectorAll('tr');
+    final holdings = <TopHolding>[];
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
-      if (cells.length >= 7) {
-        // 表格列顺序: 序号, 股票代码, 股票名称, 最新价, 涨跌幅, 占净值比例, ...
-        final codeCell = cells[1].text.trim();      // 股票代码
-        final nameCell = cells[2].text.trim();      // 股票名称
-        final ratioCell = cells[5].text.trim();     // 占净值比例
-        debugPrint('  原始数据: 代码="$codeCell", 名称="$nameCell", 占比="$ratioCell"');
+      if (cells.length < 3) continue;
 
-        // 提取6位数字代码
-        final codeMatch = RegExp(r'(\d{6})').firstMatch(codeCell);
-        final stockCode = codeMatch?.group(1) ?? codeCell;
+      // 股票代码通常在第二列（索引1）
+      final codeRaw = cells[1].text.trim();
+      final codeMatch = RegExp(r'(\d{6})').firstMatch(codeRaw);
+      final stockCode = codeMatch?.group(1) ?? codeRaw;
 
-        final ratioRaw = ratioCell.replaceAll('%', '').trim();
-        final ratio = double.tryParse(ratioRaw) ?? 0.0;
+      // 股票名称通常在第三列（索引2）
+      final stockName = cells[2].text.trim();
 
-        holdings.add(TopHolding(stockCode: stockCode, stockName: nameCell, ratio: ratio));
+      // 占净值比例列
+      String ratioRaw = '';
+      if (cells.length > ratioIndex) {
+        ratioRaw = cells[ratioIndex].text.trim().replaceAll('%', '');
       } else {
-        debugPrint('⚠️ 行数据列数不足7列，跳过');
+        // 尝试从最后几列寻找百分比数字
+        for (int i = cells.length - 1; i >= 0; i--) {
+          final text = cells[i].text.trim();
+          if (text.contains('%')) {
+            ratioRaw = text.replaceAll('%', '');
+            break;
+          }
+        }
+      }
+      final ratio = double.tryParse(ratioRaw) ?? 0.0;
+
+      debugPrint('  解析: 代码=$stockCode, 名称=$stockName, 占比=$ratioRaw%');
+      if (stockCode.isNotEmpty && stockName.isNotEmpty && ratio > 0) {
+        holdings.add(TopHolding(stockCode: stockCode, stockName: stockName, ratio: ratio));
       }
     }
 
-    debugPrint('✅ 解析到 ${holdings.length} 条重仓股');
+    debugPrint('✅ 最终解析到 ${holdings.length} 条有效重仓股');
     return holdings.take(10).toList();
   }
 
-  /// 批量获取股票实时涨跌幅（腾讯接口）
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
     if (stockCodes.isEmpty) return {};
     final codesParam = stockCodes.map((code) {
@@ -419,7 +441,13 @@ class FundService {
     final url = Uri.parse('https://qt.gtimg.cn/q=$codesParam');
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return {};
-    final String body = utf8.decode(response.bodyBytes);
+    String body;
+    try {
+      body = utf8.decode(response.bodyBytes);
+    } catch (e) {
+      // 如果 UTF-8 解码失败，尝试 GBK 或直接忽略
+      body = String.fromCharCodes(response.bodyBytes);
+    }
     final Map<String, double> quoteMap = {};
     final lines = body.split('\n');
     for (var line in lines) {

@@ -621,7 +621,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
     );
   }
 
-  // 历史净值表格（带滚动条、自适应列宽、加载更多 Toast）
+  // 历史净值表格（已移除 Scrollbar，只保留 SingleChildScrollView）
   Widget _buildHistoryListWithLoadMore(bool isDark) {
     if (_historyList.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -631,49 +631,46 @@ class _FundDetailPageState extends State<FundDetailPage> {
         const SizedBox(height: 12),
         SizedBox(
           height: 300,
-          child: Scrollbar(
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.vertical,
-              child: Table(
-                border: TableBorder(
-                  horizontalInside: BorderSide(color: isDark ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey.withOpacity(0.2)),
-                ),
-                columnWidths: const {
-                  0: FlexColumnWidth(1),
-                  1: FlexColumnWidth(1),
-                  2: FlexColumnWidth(1),
-                },
-                children: [
-                  TableRow(
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.lightBackgroundGray,
-                    ),
-                    children: [
-                      Padding(padding: const EdgeInsets.all(8), child: Text('日期', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text('单位净值', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text('日涨幅', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                    ],
-                  ),
-                  ..._historyList.map((p) {
-                    final growth = p.growth ?? 0.0;
-                    return TableRow(
-                      children: [
-                        Padding(padding: const EdgeInsets.all(8), child: Text(_formatDate(p.date), textAlign: TextAlign.center)),
-                        Padding(padding: const EdgeInsets.all(8), child: Text(p.nav.toStringAsFixed(4), textAlign: TextAlign.center)),
-                        Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            growth == 0 ? '--' : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
-                            style: TextStyle(color: growth > 0 ? CupertinoColors.systemRed : (growth < 0 ? CupertinoColors.systemGreen : null)),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: Table(
+              border: TableBorder(
+                horizontalInside: BorderSide(color: isDark ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey.withOpacity(0.2)),
               ),
+              columnWidths: const {
+                0: FlexColumnWidth(1),
+                1: FlexColumnWidth(1),
+                2: FlexColumnWidth(1),
+              },
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.lightBackgroundGray,
+                  ),
+                  children: [
+                    Padding(padding: const EdgeInsets.all(8), child: Text('日期', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
+                    Padding(padding: const EdgeInsets.all(8), child: Text('单位净值', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
+                    Padding(padding: const EdgeInsets.all(8), child: Text('日涨幅', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
+                ),
+                ..._historyList.map((p) {
+                  final growth = p.growth ?? 0.0;
+                  return TableRow(
+                    children: [
+                      Padding(padding: const EdgeInsets.all(8), child: Text(_formatDate(p.date), textAlign: TextAlign.center)),
+                      Padding(padding: const EdgeInsets.all(8), child: Text(p.nav.toStringAsFixed(4), textAlign: TextAlign.center)),
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          growth == 0 ? '--' : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
+                          style: TextStyle(color: growth > 0 ? CupertinoColors.systemRed : (growth < 0 ? CupertinoColors.systemGreen : null)),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ],
             ),
           ),
         ),
