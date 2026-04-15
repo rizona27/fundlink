@@ -300,10 +300,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
         middle: const SizedBox(),
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
+        leading: GlassButton(
+          label: '返回',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(CupertinoIcons.back, size: 24),
+          isPrimary: false,
+          height: 36,
+          borderRadius: 30,
+          minWidth: 60,
         ),
       ),
       child: SafeArea(
@@ -505,6 +508,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     );
   }
 
+  // 修复溢出：使用 Flexible 替代固定宽度，让标签自适应
   Widget _buildRowField({
     required String label,
     required bool required,
@@ -513,20 +517,28 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: 80,
-          child: Row(
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              if (required)
-                const Text(' *', style: TextStyle(color: CupertinoColors.systemRed)),
-            ],
+        // 使用 Flexible 和 ConstrainedBox 让标签自适应，同时保持最小宽度
+        Flexible(
+          flex: 0,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 70,
+              maxWidth: 85,
+            ),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (required)
+                  const Text(' *', style: TextStyle(color: CupertinoColors.systemRed)),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(child: child),
       ],
     );
@@ -762,7 +774,6 @@ class _DatePickerModalState extends State<_DatePickerModal> {
                   ? CupertinoColors.separator
                   : CupertinoColors.opaqueSeparator,
             ),
-            // 修改点：移除 Expanded，改用 Row 右对齐，按钮宽度自适应
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(

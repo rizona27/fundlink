@@ -1,7 +1,8 @@
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 
-/// 封装的搜索组件（支持清空）
+/// 封装的搜索组件（磨玻璃风格）
 class Search extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -19,34 +20,55 @@ class Search extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final frostedBgColor = isDarkMode
+        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        : CupertinoColors.white.withValues(alpha: 0.85);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: CupertinoSearchTextField(
-        controller: controller,
-        focusNode: focusNode,
-        placeholder: '搜索客户名、客户号、基金代码、基金名称',
-        placeholderStyle: const TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
-        style: const TextStyle(fontSize: 16),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        onChanged: onChanged,
-        // 确保清除按钮触发 onClear
-        onSuffixTap: () {
-          controller.clear();
-          onClear();
-          onChanged('');
-        },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: frostedBgColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: CupertinoSearchTextField(
+              controller: controller,
+              focusNode: focusNode,
+              placeholder: '搜索客户名、客户号、基金代码、基金名称',
+              placeholderStyle: TextStyle(
+                fontSize: 16,
+                color: isDarkMode
+                    ? CupertinoColors.white.withValues(alpha: 0.5)
+                    : CupertinoColors.systemGrey.withValues(alpha: 0.8),
+              ),
+              style: TextStyle(
+                fontSize: 16,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              onChanged: onChanged,
+              onSuffixTap: () {
+                controller.clear();
+                onClear();
+                onChanged('');
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
