@@ -19,19 +19,16 @@ class FundDetailPage extends StatefulWidget {
 class _FundDetailPageState extends State<FundDetailPage> {
   late FundService _fundService;
 
-  // 原始数据
   List<NetWorthPoint> _fundPoints = [];
   List<NetWorthPoint> _avgPoints = [];
   List<NetWorthPoint> _hsPoints = [];
 
-  // 其他业务数据
   List<TopHolding> _topHoldings = [];
   Map<String, dynamic>? _valuation;
   bool _loading = true;
   String? _error;
   Map<String, double> _stockQuotes = {};
 
-  // 缓存 & 分页
   bool _isDataCached = false;
   static const Duration _cacheDuration = Duration(minutes: 10);
   DateTime? _lastFetchTime;
@@ -42,9 +39,14 @@ class _FundDetailPageState extends State<FundDetailPage> {
   bool _loadingMoreHistory = false;
   final ScrollController _historyScrollController = ScrollController();
 
-  // 估值刷新
   bool _isRefreshingValuation = false;
   int _refreshCountdown = 0;
+
+  bool _isTopHoldingsExpanded = false;
+  bool _isHistoryExpanded = false;
+
+  final GlobalKey _topHoldingsKey = GlobalKey();
+  final GlobalKey _historyKey = GlobalKey();
 
   @override
   void initState() {
@@ -239,16 +241,15 @@ class _FundDetailPageState extends State<FundDetailPage> {
             children: [
               _buildValuationCard(isDark),
               const SizedBox(height: 24),
-              // 使用独立组件
               FundPerformanceChart(
                 fundPoints: _fundPoints,
                 avgPoints: _avgPoints,
                 hsPoints: _hsPoints,
               ),
               const SizedBox(height: 24),
-              _buildHistoryTable(isDark),
+              _buildCollapsibleTopHoldings(isDark),
               const SizedBox(height: 24),
-              _buildTopHoldingsGrid(isDark),
+              _buildCollapsibleHistory(isDark),
             ],
           ),
         ),
@@ -301,7 +302,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
         color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -313,11 +317,17 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('估算净值', style: TextStyle(fontSize: 14, color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey)),
+                    Text('估算净值',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: isDark
+                                ? CupertinoColors.white.withOpacity(0.7)
+                                : CupertinoColors.systemGrey)),
                     const SizedBox(height: 4),
                     Text(
                       gsz.toStringAsFixed(4),
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -328,7 +338,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('估算涨幅', style: TextStyle(fontSize: 14, color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey)),
+                    Text('估算涨幅',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: isDark
+                                ? CupertinoColors.white.withOpacity(0.7)
+                                : CupertinoColors.systemGrey)),
                     const SizedBox(height: 4),
                     Text(
                       '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
@@ -348,8 +363,18 @@ class _FundDetailPageState extends State<FundDetailPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('估值时间: ${_formatGzTime(gztime)}', style: TextStyle(fontSize: 12, color: isDark ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey)),
-              Text('净值日期: ${jzrq.isNotEmpty ? jzrq : '--'}', style: TextStyle(fontSize: 12, color: isDark ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey)),
+              Text('估值时间: ${_formatGzTime(gztime)}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? CupertinoColors.white.withOpacity(0.5)
+                          : CupertinoColors.systemGrey)),
+              Text('净值日期: ${jzrq.isNotEmpty ? jzrq : '--'}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? CupertinoColors.white.withOpacity(0.5)
+                          : CupertinoColors.systemGrey)),
               _buildRefreshButton(isDark),
             ],
           ),
@@ -382,7 +407,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
           child: _isRefreshingValuation
               ? Text(
             '$_refreshCountdown',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: textColor),
           )
               : const Icon(CupertinoIcons.refresh, size: 18),
         ),
@@ -390,80 +418,117 @@ class _FundDetailPageState extends State<FundDetailPage> {
     );
   }
 
-  Widget _buildHistoryTable(bool isDark) {
-    if (_historyList.isEmpty) return const SizedBox.shrink();
+  // ========== 可折叠的「前10重仓股票」模块 ==========
+  Widget _buildCollapsibleTopHoldings(bool isDark) {
     return Container(
+      key: _topHoldingsKey,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('历史净值', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? CupertinoColors.white : CupertinoColors.black)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 220,
-            child: Column(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.lightBackgroundGray,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                  ),
-                  child: Table(
-                    columnWidths: const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
-                    children: [
-                      TableRow(
-                        children: [
-                          Padding(padding: const EdgeInsets.all(8), child: Text('日期', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                          Padding(padding: const EdgeInsets.all(8), child: Text('单位净值', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                          Padding(padding: const EdgeInsets.all(8), child: Text('日涨幅', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600))),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Scrollbar(
-                    child: ListView.builder(
-                      controller: _historyScrollController,
-                      itemCount: _historyList.length + (_loadingMoreHistory ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == _historyList.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Center(child: CupertinoActivityIndicator()),
-                          );
-                        }
-                        final p = _historyList[index];
-                        final growth = p.growth ?? 0.0;
-                        return Table(
-                          columnWidths: const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
-                          children: [
-                            TableRow(
-                              children: [
-                                Padding(padding: const EdgeInsets.all(8), child: Text(_formatDate(p.date), textAlign: TextAlign.center)),
-                                Padding(padding: const EdgeInsets.all(8), child: Text(p.nav.toStringAsFixed(4), textAlign: TextAlign.center)),
-                                Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Text(
-                                    growth == 0 ? '--' : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
-                                    style: TextStyle(color: growth > 0 ? CupertinoColors.systemRed : (growth < 0 ? CupertinoColors.systemGreen : null)),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              setState(() {
+                _isTopHoldingsExpanded = !_isTopHoldingsExpanded;
+              });
+              if (_isTopHoldingsExpanded) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  // 获取历史净值模块的顶部位置
+                  final historyContext = _historyKey.currentContext;
+                  if (historyContext != null) {
+                    final historyRenderBox = historyContext.findRenderObject() as RenderBox?;
+                    if (historyRenderBox != null) {
+                      final historyTop = historyRenderBox.localToGlobal(Offset.zero).dy;
+                      final screenHeight = MediaQuery.of(context).size.height;
+                      // 计算需要滚动的距离，使历史净值模块的顶部刚好出现在屏幕底部
+                      final targetOffset = historyTop - screenHeight + 20; // 留 20px 边距
+                      if (targetOffset > 0) {
+                        // 先滚动到前10重仓模块顶部
+                        Scrollable.ensureVisible(
+                          _topHoldingsKey.currentContext!,
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeInOut,
+                          alignment: 0.0,
                         );
-                      },
-                    ),
-                  ),
+                        // 然后微调滚动，使历史净值上移到屏幕底部边缘
+                        Future.delayed(const Duration(milliseconds: 420), () {
+                          final controller = PrimaryScrollController.of(context);
+                          controller?.animateTo(
+                            controller.offset + targetOffset,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        });
+                      } else {
+                        Scrollable.ensureVisible(
+                          _topHoldingsKey.currentContext!,
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeInOut,
+                          alignment: 0.0,
+                        );
+                      }
+                    } else {
+                      Scrollable.ensureVisible(
+                        _topHoldingsKey.currentContext!,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                        alignment: 0.0,
+                      );
+                    }
+                  } else {
+                    Scrollable.ensureVisible(
+                      _topHoldingsKey.currentContext!,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      alignment: 0.0,
+                    );
+                  }
+                });
+              }
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '前10重仓股票',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? CupertinoColors.white : CupertinoColors.black),
+                ),
+                Icon(
+                  _isTopHoldingsExpanded
+                      ? CupertinoIcons.chevron_down
+                      : CupertinoIcons.chevron_right,
+                  size: 20,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
                 ),
               ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: _isTopHoldingsExpanded ? 1.0 : 0.0,
+              child: _isTopHoldingsExpanded
+                  ? Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _buildTopHoldingsGrid(isDark),
+              )
+                  : const SizedBox.shrink(),
             ),
           ),
         ],
@@ -473,107 +538,287 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   Widget _buildTopHoldingsGrid(bool isDark) {
     if (_topHoldings.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
+      return Center(
+        child: Text(
+          '暂无重仓股数据',
+          style: TextStyle(
+              color: isDark
+                  ? CupertinoColors.white.withOpacity(0.5)
+                  : CupertinoColors.systemGrey),
         ),
-        child: Center(child: Text('暂无重仓股数据', style: TextStyle(color: isDark ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey))),
       );
     }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 2.8,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: _topHoldings.length,
+      itemBuilder: (context, index) {
+        final h = _topHoldings[index];
+        String fullCode = '';
+        final codeStr = h.stockCode;
+        if (codeStr.length == 5 && RegExp(r'^\d{5}$').hasMatch(codeStr)) {
+          fullCode = 'hk$codeStr';
+        } else if (codeStr.startsWith('6')) {
+          fullCode = 'sh$codeStr';
+        } else if (codeStr.startsWith('0') || codeStr.startsWith('3')) {
+          fullCode = 'sz$codeStr';
+        } else if (codeStr.startsWith('5')) {
+          fullCode = 'sz$codeStr';
+        } else {
+          fullCode = codeStr;
+        }
+        final changePercent = _stockQuotes[fullCode] ?? 0.0;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: isDark
+                    ? CupertinoColors.white.withOpacity(0.1)
+                    : CupertinoColors.systemGrey.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                h.stockName,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? CupertinoColors.white : CupertinoColors.black),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: changePercent > 0
+                          ? CupertinoColors.systemRed.withOpacity(0.2)
+                          : (changePercent < 0
+                          ? CupertinoColors.systemGreen.withOpacity(0.2)
+                          : CupertinoColors.systemGrey.withOpacity(0.2)),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: changePercent > 0
+                            ? CupertinoColors.systemRed
+                            : (changePercent < 0
+                            ? CupertinoColors.systemGreen
+                            : CupertinoColors.systemGrey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '占比 ${h.ratio.toStringAsFixed(2)}%',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.6)
+                            : CupertinoColors.systemGrey),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ========== 可折叠的「历史净值」模块 ==========
+  Widget _buildCollapsibleHistory(bool isDark) {
     return Container(
+      key: _historyKey,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('前10重仓股票', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? CupertinoColors.white : CupertinoColors.black)),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 2.8,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: _topHoldings.length,
-            itemBuilder: (context, index) {
-              final h = _topHoldings[index];
-              String fullCode = '';
-              final codeStr = h.stockCode;
-              if (codeStr.length == 5 && RegExp(r'^\d{5}$').hasMatch(codeStr)) {
-                fullCode = 'hk$codeStr';
-              } else if (codeStr.startsWith('6')) {
-                fullCode = 'sh$codeStr';
-              } else if (codeStr.startsWith('0') || codeStr.startsWith('3')) {
-                fullCode = 'sz$codeStr';
-              } else if (codeStr.startsWith('5')) {
-                fullCode = 'sz$codeStr';
-              } else {
-                fullCode = codeStr;
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              setState(() {
+                _isHistoryExpanded = !_isHistoryExpanded;
+              });
+              if (_isHistoryExpanded) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Scrollable.ensureVisible(
+                    _historyKey.currentContext!,
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeInOut,
+                    alignment: 0.2, // 顶部留出 20% 空间
+                  );
+                });
               }
-              final changePercent = _stockQuotes[fullCode] ?? 0.0;
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isDark ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey.withOpacity(0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      h.stockName,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? CupertinoColors.white : CupertinoColors.black),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: changePercent > 0 ? CupertinoColors.systemRed.withOpacity(0.2) : (changePercent < 0 ? CupertinoColors.systemGreen.withOpacity(0.2) : CupertinoColors.systemGrey.withOpacity(0.2)),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: changePercent > 0 ? CupertinoColors.systemRed : (changePercent < 0 ? CupertinoColors.systemGreen : CupertinoColors.systemGrey),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '占比 ${h.ratio.toStringAsFixed(2)}%',
-                          style: TextStyle(fontSize: 12, color: isDark ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
             },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '历史净值',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? CupertinoColors.white : CupertinoColors.black),
+                ),
+                Icon(
+                  _isHistoryExpanded
+                      ? CupertinoIcons.chevron_down
+                      : CupertinoIcons.chevron_right,
+                  size: 20,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                ),
+              ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: _isHistoryExpanded ? 1.0 : 0.0,
+              child: _isHistoryExpanded
+                  ? Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _buildHistoryTable(isDark),
+              )
+                  : const SizedBox.shrink(),
+            ),
           ),
         ],
       ),
     );
   }
 
-  String _formatDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  Widget _buildHistoryTable(bool isDark) {
+    if (_historyList.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 220,
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF2C2C2E)
+                  : CupertinoColors.lightBackgroundGray,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(1),
+                1: FlexColumnWidth(1),
+                2: FlexColumnWidth(1)
+              },
+              children: [
+                TableRow(
+                  children: [
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text('日期',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w600))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text('单位净值',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w600))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text('日涨幅',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Scrollbar(
+              child: ListView.builder(
+                controller: _historyScrollController,
+                itemCount: _historyList.length + (_loadingMoreHistory ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _historyList.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Center(child: CupertinoActivityIndicator()),
+                    );
+                  }
+                  final p = _historyList[index];
+                  final growth = p.growth ?? 0.0;
+                  return Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(1),
+                      1: FlexColumnWidth(1),
+                      2: FlexColumnWidth(1)
+                    },
+                    children: [
+                      TableRow(
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text(_formatDate(p.date),
+                                  textAlign: TextAlign.center)),
+                          Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text(p.nav.toStringAsFixed(4),
+                                  textAlign: TextAlign.center)),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              growth == 0
+                                  ? '--'
+                                  : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
+                              style: TextStyle(
+                                  color: growth > 0
+                                      ? CupertinoColors.systemRed
+                                      : (growth < 0
+                                      ? CupertinoColors.systemGreen
+                                      : null)),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
 }
