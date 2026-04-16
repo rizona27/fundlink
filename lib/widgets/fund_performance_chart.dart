@@ -43,6 +43,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   double _crosshairY = 0;
   double _chartWidth = 0;
   double _chartHeight = 0;
+  double _currentMinY = 0;
+  double _currentMaxY = 0;
+  int _maxIndex = 0;
 
   final GlobalKey _chartKey = GlobalKey();
 
@@ -257,7 +260,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   int _getBottomTitleInterval() {
     final length = _sliceDates.length;
     if (length <= 6) return 1;
-    // 最多显示 6 个标签，动态计算间隔
     return (length / 6).ceil();
   }
 
@@ -316,6 +318,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     if (minY > -0.05) minY = -0.05;
     if (maxY < 0.05) maxY = 0.05;
 
+    _currentMinY = minY;
+    _currentMaxY = maxY;
+    _maxIndex = fundSpots.length - 1;
+
     final interval = _getNiceInterval(minY, maxY);
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
     final bottomInterval = _getBottomTitleInterval();
@@ -329,7 +335,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final avgValue = _getHoverAvgReturn();
     final hsValue = _getHoverHsReturn();
 
-    // 中性色：深浅模式自适应
     final neutralColor = CupertinoColors.systemGrey;
 
     return Container(
@@ -414,7 +419,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                     return FadeTransition(opacity: animation, child: child);
                   },
                   child: Container(
-                    key: ValueKey(_selectedRange),
+                    key: _chartKey,
                     child: LineChart(
                       LineChartData(
                         gridData: FlGridData(
@@ -456,7 +461,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                 final idx = value.toInt();
                                 if (idx >= 0 && idx < _sliceDates.length) {
                                   return Transform.rotate(
-                                    angle: -0.5, // 约 -30 度
+                                    angle: -0.5,
                                     child: Padding(
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
@@ -487,7 +492,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                           ),
                         ),
                         minX: 0,
-                        maxX: (fundSpots.length - 1).toDouble(),
+                        maxX: _maxIndex.toDouble(),
                         minY: minY,
                         maxY: maxY,
                         lineTouchData: LineTouchData(
@@ -536,14 +541,30 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                             if (newIndex != _hoverIndex) {
                               setState(() {
                                 _hoverIndex = newIndex;
-                                // 使用 spot.location 获取精确像素坐标（fl_chart 0.70.2 支持）
-                                _crosshairX = spot.location.dx;
-                                _crosshairY = spot.location.dy;
-
+                                // 手动计算像素坐标，考虑轴留白
+                                const leftMargin = 45.0;
+                                const bottomMargin = 30.0;
+                                final plotWidth = _chartWidth - leftMargin;
+                                final plotHeight = _chartHeight - bottomMargin;
+                                if (plotWidth > 0 && plotHeight > 0 && _maxIndex > 0) {
+                                  _crosshairX = leftMargin + (newIndex / _maxIndex) * plotWidth;
+                                  final yRange = _currentMaxY - _currentMinY;
+                                  final normalized = yRange > 0 ? (spot.y - _currentMinY) / yRange : 0.5;
+                                  _crosshairY = plotHeight * (1 - normalized);
+                                }
                                 final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
                                 if (renderBox != null) {
                                   _chartWidth = renderBox.size.width;
                                   _chartHeight = renderBox.size.height;
+                                  // 重新计算（确保最新尺寸）
+                                  final newPlotWidth = _chartWidth - leftMargin;
+                                  final newPlotHeight = _chartHeight - bottomMargin;
+                                  if (newPlotWidth > 0 && newPlotHeight > 0 && _maxIndex > 0) {
+                                    _crosshairX = leftMargin + (newIndex / _maxIndex) * newPlotWidth;
+                                    final yRange2 = _currentMaxY - _currentMinY;
+                                    final normalized2 = yRange2 > 0 ? (spot.y - _currentMinY) / yRange2 : 0.5;
+                                    _crosshairY = newPlotHeight * (1 - normalized2);
+                                  }
                                 }
                               });
                             }
@@ -594,7 +615,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                     ),
                   ),
                 ),
-                // 自定义十字虚线（垂直+水平），贯穿整个图表
                 if (_hoverIndex >= 0 && _chartWidth > 0 && _chartHeight > 0)
                   Positioned.fill(
                     child: CustomPaint(
@@ -605,7 +625,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       ),
                     ),
                   ),
-                // X轴日期标签（在交叉点下方）
                 if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
                   Positioned(
                     left: _crosshairX - 40,
@@ -625,7 +644,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       ),
                     ),
                   ),
-                // Y轴本基金涨跌幅标签（在交叉点左侧）
                 if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
                   Positioned(
                     left: 0,
