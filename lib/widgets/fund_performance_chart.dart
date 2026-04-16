@@ -39,8 +39,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   List<double> _sliceHsValues = [];
 
   int _hoverIndex = -1;
-  double _tooltipX = 0;
-  double _tooltipY = 0;
+  double _crosshairX = 0;
+  double _crosshairY = 0;
+  double _chartWidth = 0;
+  double _chartHeight = 0;
+
+  final GlobalKey _chartKey = GlobalKey();
 
   @override
   void initState() {
@@ -220,14 +224,14 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   }
 
   double _getHoverAvgReturn() {
-    if (_hoverIndex >= 0 && _hoverIndex < _sliceAvgValues.length) {
+    if (_showAverage && _hoverIndex >= 0 && _hoverIndex < _sliceAvgValues.length) {
       return (_sliceAvgValues[_hoverIndex] - 1) * 100;
     }
     return 0.0;
   }
 
   double _getHoverHsReturn() {
-    if (_hoverIndex >= 0 && _hoverIndex < _sliceHsValues.length) {
+    if (_showHs300 && _hoverIndex >= 0 && _hoverIndex < _sliceHsValues.length) {
       return (_sliceHsValues[_hoverIndex] - 1) * 100;
     }
     return 0.0;
@@ -253,6 +257,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   int _getBottomTitleInterval() {
     final length = _sliceDates.length;
     if (length <= 6) return 1;
+    // 最多显示 6 个标签，动态计算间隔
     return (length / 6).ceil();
   }
 
@@ -279,7 +284,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       );
     }
 
-    // 转换为以0%为基准的收益率
     final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
     final transformedAvgValues = _sliceAvgValues.map((v) => v - 1.0).toList();
     final transformedHsValues = _sliceHsValues.map((v) => v - 1.0).toList();
@@ -316,10 +320,17 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
     final bottomInterval = _getBottomTitleInterval();
 
-    // 根据整体收益率正负决定填充颜色（红色正收益，绿色负收益）
     final fillColor = rangeReturn >= 0
         ? CupertinoColors.systemRed.withOpacity(0.15)
         : CupertinoColors.systemGreen.withOpacity(0.15);
+
+    final currentDate = _getHoverDate();
+    final fundValue = _getHoverFundReturn();
+    final avgValue = _getHoverAvgReturn();
+    final hsValue = _getHoverHsReturn();
+
+    // 中性色：深浅模式自适应
+    final neutralColor = CupertinoColors.systemGrey;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -395,182 +406,242 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                LineChart(
-                  LineChartData(
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: false,
-                      horizontalInterval: interval,
-                      getDrawingHorizontalLine: (value) => FlLine(
-                        color: isDark
-                            ? CupertinoColors.white.withOpacity(0.08)
-                            : CupertinoColors.systemGrey.withOpacity(0.15),
-                        strokeWidth: 0.5,
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 45,
-                          interval: interval,
-                          getTitlesWidget: (value, meta) {
-                            final percent = value * 100;
-                            String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
-                            if (percent > 0) label = '+$label%';
-                            if (percent < 0) label = '$label%';
-                            if (percent == 0) label = '0%';
-                            return Text(
-                              label,
-                              style: const TextStyle(fontSize: 10),
-                            );
-                          },
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeInOut,
+                  switchOutCurve: Curves.easeInOut,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  child: Container(
+                    key: ValueKey(_selectedRange),
+                    child: LineChart(
+                      LineChartData(
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: interval,
+                          getDrawingHorizontalLine: (value) => FlLine(
+                            color: isDark
+                                ? CupertinoColors.white.withOpacity(0.08)
+                                : CupertinoColors.systemGrey.withOpacity(0.15),
+                            strokeWidth: 0.5,
+                          ),
                         ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 30,
-                          interval: bottomInterval.toDouble(),
-                          getTitlesWidget: (value, meta) {
-                            final idx = value.toInt();
-                            if (idx >= 0 && idx < _sliceDates.length) {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  _formatDateShort(_sliceDates[idx]),
-                                  style: const TextStyle(fontSize: 10),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }
-                            return const Text('');
-                          },
-                        ),
-                      ),
-                      rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                    ),
-                    borderData: FlBorderData(
-                      show: true,
-                      border: Border.all(
-                        color: isDark
-                            ? CupertinoColors.white.withOpacity(0.2)
-                            : CupertinoColors.systemGrey.withOpacity(0.5),
-                      ),
-                    ),
-                    minX: 0,
-                    maxX: (fundSpots.length - 1).toDouble(),
-                    minY: minY,
-                    maxY: maxY,
-                    lineTouchData: LineTouchData(
-                      enabled: true,
-                      handleBuiltInTouches: true,
-                      getTouchedSpotIndicator: (barData, spotIndexes) {
-                        return spotIndexes.map((index) {
-                          return TouchedSpotIndicatorData(
-                            FlLine(
-                              color: isDark ? Colors.white30 : Colors.black26,
-                              strokeWidth: 1,
-                              dashArray: [4, 4],
-                            ),
-                            FlDotData(
-                              show: barData.color == fundLineColor,
-                              getDotPainter: (spot, percent, barData, index) {
-                                return FlDotCirclePainter(
-                                  radius: 3,
-                                  color: barData.color!,
-                                  strokeWidth: 2,
-                                  strokeColor: isDark ? Colors.black : Colors.white,
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 45,
+                              interval: interval,
+                              getTitlesWidget: (value, meta) {
+                                final percent = value * 100;
+                                String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
+                                if (percent > 0) label = '+$label%';
+                                if (percent < 0) label = '$label%';
+                                if (percent == 0) label = '0%';
+                                return Text(
+                                  label,
+                                  style: TextStyle(fontSize: 10, color: neutralColor),
                                 );
                               },
                             ),
-                          );
-                        }).toList();
-                      },
-                      touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                        // 实时更新悬停位置
-                        if (response != null && response.lineBarSpots != null && response.lineBarSpots!.isNotEmpty) {
-                          setState(() {
-                            final spot = response.lineBarSpots!.first;
-                            _hoverIndex = spot.x.toInt();
-                            _tooltipX = event.localPosition?.dx ?? 0;
-                            _tooltipY = event.localPosition?.dy ?? 0;
-                          });
-                        } else {
-                          // 手指离开屏幕时清除悬停
-                          if (event is FlPanEndEvent || event is FlTapUpEvent) {
-                            setState(() {
-                              _hoverIndex = -1;
-                            });
-                          }
-                        }
-                      },
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipItems: (touchedSpots) {
-                          // 返回空提示项，完全隐藏原生提示框
-                          return touchedSpots.map((spot) => LineTooltipItem('', const TextStyle(fontSize: 0))).toList();
-                        },
-                        tooltipRoundedRadius: 0,
-                        tooltipPadding: EdgeInsets.zero,
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 30,
+                              interval: bottomInterval.toDouble(),
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx >= 0 && idx < _sliceDates.length) {
+                                  return Transform.rotate(
+                                    angle: -0.5, // 约 -30 度
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        _formatDateShort(_sliceDates[idx]),
+                                        style: TextStyle(fontSize: 10, color: neutralColor),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return const Text('');
+                              },
+                            ),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                        ),
+                        borderData: FlBorderData(
+                          show: true,
+                          border: Border.all(
+                            color: isDark
+                                ? CupertinoColors.white.withOpacity(0.2)
+                                : CupertinoColors.systemGrey.withOpacity(0.5),
+                          ),
+                        ),
+                        minX: 0,
+                        maxX: (fundSpots.length - 1).toDouble(),
+                        minY: minY,
+                        maxY: maxY,
+                        lineTouchData: LineTouchData(
+                          enabled: true,
+                          handleBuiltInTouches: true,
+                          touchSpotThreshold: 20,
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipItems: (touchedSpots) {
+                              return List<LineTooltipItem?>.filled(touchedSpots.length, null);
+                            },
+                          ),
+                          getTouchedSpotIndicator: (barData, spotIndexes) {
+                            return spotIndexes.map((index) {
+                              return TouchedSpotIndicatorData(
+                                FlLine(color: Colors.transparent, strokeWidth: 0),
+                                FlDotData(
+                                  show: barData.color == fundLineColor,
+                                  getDotPainter: (spot, percent, barData, index) {
+                                    return FlDotCirclePainter(
+                                      radius: 3,
+                                      color: barData.color!,
+                                      strokeWidth: 2,
+                                      strokeColor: isDark ? Colors.black : Colors.white,
+                                    );
+                                  },
+                                ),
+                              );
+                            }).toList();
+                          },
+                          touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                            if (!event.isInterestedForInteractions ||
+                                response == null ||
+                                response.lineBarSpots == null ||
+                                response.lineBarSpots!.isEmpty) {
+                              if (_hoverIndex != -1) {
+                                setState(() => _hoverIndex = -1);
+                              }
+                              return;
+                            }
+
+                            final spot = response.lineBarSpots!.firstWhere(
+                                  (s) => s.bar.color == fundLineColor,
+                              orElse: () => response.lineBarSpots!.first,
+                            );
+                            final newIndex = spot.x.toInt();
+                            if (newIndex != _hoverIndex) {
+                              setState(() {
+                                _hoverIndex = newIndex;
+                                // 使用 spot.location 获取精确像素坐标（fl_chart 0.70.2 支持）
+                                _crosshairX = spot.location.dx;
+                                _crosshairY = spot.location.dy;
+
+                                final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+                                if (renderBox != null) {
+                                  _chartWidth = renderBox.size.width;
+                                  _chartHeight = renderBox.size.height;
+                                }
+                              });
+                            }
+                          },
+                        ),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: fundSpots,
+                            isCurved: true,
+                            color: fundLineColor,
+                            barWidth: 2,
+                            dotData: const FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: fillColor,
+                              cutOffY: 0,
+                              applyCutOffY: true,
+                            ),
+                            aboveBarData: BarAreaData(
+                              show: true,
+                              color: fillColor,
+                              cutOffY: 0,
+                              applyCutOffY: true,
+                            ),
+                          ),
+                          if (_showAverage && avgSpots.isNotEmpty)
+                            LineChartBarData(
+                              spots: avgSpots,
+                              isCurved: true,
+                              color: CupertinoColors.systemBlue,
+                              barWidth: 1.5,
+                              dotData: const FlDotData(show: false),
+                              belowBarData: BarAreaData(show: false),
+                              aboveBarData: BarAreaData(show: false),
+                            ),
+                          if (_showHs300 && hsSpots.isNotEmpty)
+                            LineChartBarData(
+                              spots: hsSpots,
+                              isCurved: true,
+                              color: CupertinoColors.systemGrey,
+                              barWidth: 1.5,
+                              dotData: const FlDotData(show: false),
+                              belowBarData: BarAreaData(show: false),
+                              aboveBarData: BarAreaData(show: false),
+                            ),
+                        ],
                       ),
                     ),
-                    lineBarsData: [
-                      LineChartBarData(
-                        spots: fundSpots,
-                        isCurved: true,
-                        color: fundLineColor,
-                        barWidth: 2,
-                        dotData: const FlDotData(show: false),
-                        // 填充曲线与0%线之间的区域（上下都填充，颜色统一）
-                        belowBarData: BarAreaData(
-                          show: true,
-                          color: fillColor,
-                          cutOffY: 0,
-                          applyCutOffY: true,
-                        ),
-                        aboveBarData: BarAreaData(
-                          show: true,
-                          color: fillColor,
-                          cutOffY: 0,
-                          applyCutOffY: true,
-                        ),
-                      ),
-                      if (_showAverage && avgSpots.isNotEmpty)
-                        LineChartBarData(
-                          spots: avgSpots,
-                          isCurved: true,
-                          color: CupertinoColors.systemBlue,
-                          barWidth: 1.5,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(show: false),
-                          aboveBarData: BarAreaData(show: false),
-                        ),
-                      if (_showHs300 && hsSpots.isNotEmpty)
-                        LineChartBarData(
-                          spots: hsSpots,
-                          isCurved: true,
-                          color: CupertinoColors.systemGrey,
-                          barWidth: 1.5,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(show: false),
-                          aboveBarData: BarAreaData(show: false),
-                        ),
-                    ],
                   ),
                 ),
-                if (_hoverIndex >= 0 && _hoverIndex < _sliceFundValues.length)
+                // 自定义十字虚线（垂直+水平），贯穿整个图表
+                if (_hoverIndex >= 0 && _chartWidth > 0 && _chartHeight > 0)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _CrosshairPainter(
+                        crossX: _crosshairX,
+                        crossY: _crosshairY,
+                        color: neutralColor,
+                      ),
+                    ),
+                  ),
+                // X轴日期标签（在交叉点下方）
+                if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
                   Positioned(
-                    left: _tooltipX > MediaQuery.of(context).size.width / 2
-                        ? _tooltipX - 170
-                        : _tooltipX + 20,
-                    top: _tooltipY - 60,
+                    left: _crosshairX - 40,
+                    bottom: 0,
                     child: IgnorePointer(
-                      child: _buildCustomTooltip(isDark, fundLineColor),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? CupertinoColors.darkBackgroundGray : CupertinoColors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                        ),
+                        child: Text(
+                          _getHoverDate(),
+                          style: TextStyle(fontSize: 10, color: neutralColor),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Y轴本基金涨跌幅标签（在交叉点左侧）
+                if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
+                  Positioned(
+                    left: 0,
+                    top: _crosshairY - 12,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: fundLineColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${fundValue >= 0 ? '+' : ''}${fundValue.toStringAsFixed(2)}%',
+                          style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -581,90 +652,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildLegendItem('本基金', fundLineColor, isDark, null),
-                _buildLegendItem('同类平均', CupertinoColors.systemBlue, isDark, _toggleAverage),
-                _buildLegendItem('沪深300', CupertinoColors.systemGrey, isDark, _toggleHs300),
+                _buildLegendItemWithValue('本基金', fundLineColor, fundValue, isDark, null),
+                _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, avgValue, isDark, _toggleAverage),
+                _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, hsValue, isDark, _toggleHs300),
               ],
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCustomTooltip(bool isDark, Color fundLineColor) {
-    return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      color: isDark ? const Color(0xFF2C2C2E) : Colors.white.withOpacity(0.95),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.black12,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _getHoverDate(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.grey[400] : Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 6),
-            _buildTooltipRow(
-              label: '本基金',
-              color: fundLineColor,
-              value: _getHoverFundReturn(),
-              isDark: isDark,
-            ),
-            if (_showAverage && _hoverIndex < _sliceAvgValues.length)
-              _buildTooltipRow(
-                label: '同类平均',
-                color: CupertinoColors.systemBlue,
-                value: _getHoverAvgReturn(),
-                isDark: isDark,
-              ),
-            if (_showHs300 && _hoverIndex < _sliceHsValues.length)
-              _buildTooltipRow(
-                label: '沪深300',
-                color: CupertinoColors.systemGrey,
-                value: _getHoverHsReturn(),
-                isDark: isDark,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTooltipRow({
-    required String label,
-    required Color color,
-    required double value,
-    required bool isDark,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Container(width: 10, height: 10, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
-          const SizedBox(width: 12),
-          Text(
-            '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen,
-            ),
-          ),
         ],
       ),
     );
@@ -708,26 +700,89 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  Widget _buildLegendItem(String label, Color color, bool isDark, VoidCallback? onToggle) {
+  Widget _buildLegendItemWithValue(String label, Color color, double value, bool isDark, VoidCallback? onToggle) {
+    final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
+    final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
     return GestureDetector(
       onTap: onToggle,
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 12, height: 12, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 11)),
-          if (onToggle != null) ...[
-            const SizedBox(width: 4),
-            Icon(
-              (onToggle == _toggleAverage ? _showAverage : _showHs300)
-                  ? CupertinoIcons.eye
-                  : CupertinoIcons.eye_slash,
-              size: 14,
-              color: isDark ? CupertinoColors.white : CupertinoColors.black,
-            ),
-          ],
+          Row(
+            children: [
+              Container(width: 12, height: 12, color: color),
+              const SizedBox(width: 4),
+              Text(label, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+              if (onToggle != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  (onToggle == _toggleAverage ? _showAverage : _showHs300)
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
+                  size: 14,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            valueStr,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: valueColor),
+          ),
         ],
       ),
     );
+  }
+}
+
+/// 绘制完整的十字虚线（垂直+水平），确保贯穿整个图表
+class _CrosshairPainter extends CustomPainter {
+  final double crossX;
+  final double crossY;
+  final Color color;
+
+  _CrosshairPainter({
+    required this.crossX,
+    required this.crossY,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    if (crossX >= 0 && crossX <= size.width) {
+      _drawDashedLine(canvas, Offset(crossX, 0), Offset(crossX, size.height), paint);
+    }
+    if (crossY >= 0 && crossY <= size.height) {
+      _drawDashedLine(canvas, Offset(0, crossY), Offset(size.width, crossY), paint);
+    }
+  }
+
+  void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint) {
+    const dashLength = 4.0;
+    const gapLength = 4.0;
+    final distance = (p2 - p1).distance;
+    final steps = (distance / (dashLength + gapLength)).ceil();
+    if (steps == 0) return;
+    final dx = (p2.dx - p1.dx) / steps;
+    final dy = (p2.dy - p1.dy) / steps;
+    for (int i = 0; i < steps; i++) {
+      final start = Offset(p1.dx + i * dx, p1.dy + i * dy);
+      final end = Offset(
+        start.dx + dx * (dashLength / (dashLength + gapLength)),
+        start.dy + dy * (dashLength / (dashLength + gapLength)),
+      );
+      canvas.drawLine(start, end, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CrosshairPainter oldDelegate) {
+    return oldDelegate.crossX != crossX || oldDelegate.crossY != crossY;
   }
 }
