@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
 import '../services/fund_service.dart';
+import '../widgets/fund_performance_chart.dart';
 import '../widgets/toast.dart';
 
 class FundDetailPage extends StatefulWidget {
@@ -19,35 +19,22 @@ class FundDetailPage extends StatefulWidget {
 class _FundDetailPageState extends State<FundDetailPage> {
   late FundService _fundService;
 
-  List<DateTime> _alignedDates = [];
-  List<double> _fundPcts = [];
-  List<double> _avgPcts = [];
-  List<double> _hsPcts = [];
-
+  // 原始数据
   List<NetWorthPoint> _fundPoints = [];
+  List<NetWorthPoint> _avgPoints = [];
+  List<NetWorthPoint> _hsPoints = [];
 
+  // 其他业务数据
   List<TopHolding> _topHoldings = [];
   Map<String, dynamic>? _valuation;
   bool _loading = true;
   String? _error;
   Map<String, double> _stockQuotes = {};
 
+  // 缓存 & 分页
   bool _isDataCached = false;
   static const Duration _cacheDuration = Duration(minutes: 10);
   DateTime? _lastFetchTime;
-
-  String _selectedRange = '3m';
-  final Map<String, String> _rangeLabels = {
-    '1m': '近1月',
-    '3m': '近3月',
-    '6m': '近6月',
-    '1y': '近1年',
-    '3y': '近3年',
-    'all': '成立来',
-  };
-  bool _showAverage = true;
-  bool _showHs300 = true;
-
   List<NetWorthPoint> _historyList = [];
   int _historyPage = 1;
   final int _historyPageSize = 5;
@@ -55,6 +42,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   bool _loadingMoreHistory = false;
   final ScrollController _historyScrollController = ScrollController();
 
+  // 估值刷新
   bool _isRefreshingValuation = false;
   int _refreshCountdown = 0;
 
@@ -100,16 +88,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
       _fundPoints = _calculateDailyChanges(_fundPoints);
 
       final benchmark = await _fundService.fetchBenchmarkData(widget.holding.fundCode);
-      List<NetWorthPoint> avgPoints = benchmark['average'] ?? [];
-      List<NetWorthPoint> hsPoints = benchmark['hs300'] ?? [];
-      avgPoints.sort((a, b) => a.date.compareTo(b.date));
-      hsPoints.sort((a, b) => a.date.compareTo(b.date));
-
-      final aligned = _normalizeCurves(_fundPoints, avgPoints, hsPoints);
-      _alignedDates = aligned.dates;
-      _fundPcts = aligned.fundPcts;
-      _avgPcts = aligned.avgPcts;
-      _hsPcts = aligned.hsPcts;
+      _avgPoints = (benchmark['average'] as List<NetWorthPoint>)
+        ..sort((a, b) => a.date.compareTo(b.date));
+      _hsPoints = (benchmark['hs300'] as List<NetWorthPoint>)
+        ..sort((a, b) => a.date.compareTo(b.date));
 
       final holdings = await _fundService.fetchTopHoldingsFromHtml(widget.holding.fundCode);
       final valuation = await _fundService.fetchRealtimeValuation(widget.holding.fundCode);
@@ -130,65 +112,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
         _loading = false;
       });
     }
-  }
-
-  _NormalizedResult _normalizeCurves(
-      List<NetWorthPoint> fund,
-      List<NetWorthPoint> avg,
-      List<NetWorthPoint> hs,
-      ) {
-    if (fund.isEmpty) {
-      return _NormalizedResult(dates: [], fundPcts: [], avgPcts: [], hsPcts: []);
-    }
-
-    final sortedFund = List<NetWorthPoint>.from(fund)..sort((a, b) => a.date.compareTo(b.date));
-    final sortedAvg = List<NetWorthPoint>.from(avg)..sort((a, b) => a.date.compareTo(b.date));
-    final sortedHs = List<NetWorthPoint>.from(hs)..sort((a, b) => a.date.compareTo(b.date));
-
-    String dateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    final Map<String, double> avgMap = {for (var p in sortedAvg) dateKey(p.date): p.nav};
-    final Map<String, double> hsMap = {for (var p in sortedHs) dateKey(p.date): p.nav};
-
-    final baseDate = sortedFund.first.date;
-    final baseDateStr = dateKey(baseDate);
-    final fundBase = sortedFund.first.nav;
-
-    final avgBase = avgMap[baseDateStr] ?? (sortedAvg.isNotEmpty ? sortedAvg.first.nav : 1.0);
-    final hsBase = hsMap[baseDateStr] ?? (sortedHs.isNotEmpty ? sortedHs.first.nav : 1.0);
-
-    final dates = <DateTime>[];
-    final fundPcts = <double>[];
-    final avgPcts = <double>[];
-    final hsPcts = <double>[];
-
-    for (final p in sortedFund) {
-      final dateStr = dateKey(p.date);
-      dates.add(p.date);
-
-      final fundPct = ((p.nav - fundBase) / fundBase) * 100;
-      fundPcts.add(fundPct);
-
-      final curAvg = avgMap[dateStr];
-      if (curAvg != null && avgBase != 0) {
-        avgPcts.add(((curAvg - avgBase) / avgBase) * 100);
-      } else {
-        avgPcts.add(avgPcts.isNotEmpty ? avgPcts.last : 0.0);
-      }
-
-      final curHs = hsMap[dateStr];
-      if (curHs != null && hsBase != 0) {
-        hsPcts.add(((curHs - hsBase) / hsBase) * 100);
-      } else {
-        hsPcts.add(hsPcts.isNotEmpty ? hsPcts.last : 0.0);
-      }
-    }
-
-    return _NormalizedResult(
-      dates: dates,
-      fundPcts: fundPcts,
-      avgPcts: avgPcts,
-      hsPcts: hsPcts,
-    );
   }
 
   List<NetWorthPoint> _calculateDailyChanges(List<NetWorthPoint> points) {
@@ -293,55 +216,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
     });
   }
 
-  (int start, int end) _getRangeIndices() {
-    if (_alignedDates.isEmpty) return (0, 0);
-    final now = DateTime.now();
-    DateTime startDate;
-    switch (_selectedRange) {
-      case '1m':
-        startDate = now.subtract(const Duration(days: 30));
-        break;
-      case '3m':
-        startDate = now.subtract(const Duration(days: 90));
-        break;
-      case '6m':
-        startDate = now.subtract(const Duration(days: 180));
-        break;
-      case '1y':
-        startDate = now.subtract(const Duration(days: 365));
-        break;
-      case '3y':
-        startDate = now.subtract(const Duration(days: 1095));
-        break;
-      default:
-        startDate = DateTime.fromMillisecondsSinceEpoch(0);
-    }
-    int startIdx = _alignedDates.indexWhere((d) => d.isAfter(startDate));
-    if (startIdx == -1) startIdx = 0;
-    return (startIdx, _alignedDates.length - 1);
-  }
-
-  double _calculateRangeReturn() {
-    final (start, end) = _getRangeIndices();
-    if (start >= end || _fundPcts.isEmpty) return 0.0;
-    return _fundPcts[end] - _fundPcts[start];
-  }
-
-  double _getNiceInterval(double minY, double maxY) {
-    final range = maxY - minY;
-    if (range <= 0) return 1.0;
-    final roughInterval = range / 5;
-    const niceNumbers = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0];
-    for (final nice in niceNumbers) {
-      if (roughInterval <= nice) return nice;
-    }
-    return (roughInterval / 10).ceilToDouble() * 10;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final rangeReturn = _calculateRangeReturn();
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
@@ -362,7 +239,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
             children: [
               _buildValuationCard(isDark),
               const SizedBox(height: 24),
-              _buildPerformanceCard(isDark, rangeReturn),
+              // 使用独立组件
+              FundPerformanceChart(
+                fundPoints: _fundPoints,
+                avgPoints: _avgPoints,
+                hsPoints: _hsPoints,
+              ),
               const SizedBox(height: 24),
               _buildHistoryTable(isDark),
               const SizedBox(height: 24),
@@ -505,284 +387,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
               : const Icon(CupertinoIcons.refresh, size: 18),
         ),
       ),
-    );
-  }
-
-  Widget _buildPerformanceCard(bool isDark, double rangeReturn) {
-    final (startIdx, endIdx) = _getRangeIndices();
-    if (startIdx >= endIdx || _fundPcts.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
-        ),
-        child: const Center(child: Text('暂无数据')),
-      );
-    }
-
-    final fundSlice = _fundPcts.sublist(startIdx, endIdx + 1);
-    final avgSlice = _avgPcts.sublist(startIdx, endIdx + 1);
-    final hsSlice = _hsPcts.sublist(startIdx, endIdx + 1);
-
-    List<FlSpot> fundSpots = [];
-    List<FlSpot> avgSpots = [];
-    List<FlSpot> hsSpots = [];
-    for (int i = 0; i < fundSlice.length; i++) {
-      if (fundSlice[i].isFinite) fundSpots.add(FlSpot(i.toDouble(), fundSlice[i]));
-      if (i < avgSlice.length && avgSlice[i].isFinite) avgSpots.add(FlSpot(i.toDouble(), avgSlice[i]));
-      if (i < hsSlice.length && hsSlice[i].isFinite) hsSpots.add(FlSpot(i.toDouble(), hsSlice[i]));
-    }
-
-    if (fundSpots.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
-        ),
-        child: const Center(child: Text('无有效数据')),
-      );
-    }
-
-    double minY = fundSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
-    double maxY = fundSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    if (avgSpots.isNotEmpty) {
-      minY = minY < avgSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b) ? minY : avgSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
-      maxY = maxY > avgSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b) ? maxY : avgSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    }
-    if (hsSpots.isNotEmpty) {
-      minY = minY < hsSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b) ? minY : hsSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
-      maxY = maxY > hsSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b) ? maxY : hsSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    }
-    final padding = (maxY - minY) * 0.05;
-    minY = minY - padding;
-    maxY = maxY + padding;
-    if (minY > 0) minY = 0;
-    if (maxY < 0) maxY = 0;
-
-    final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
-    final showAvg = isShortRange && _showAverage && avgSpots.isNotEmpty;
-    final showHs = isShortRange && _showHs300 && hsSpots.isNotEmpty;
-    final rangeName = _rangeLabels[_selectedRange] ?? '';
-    final returnColor = rangeReturn > 0
-        ? CupertinoColors.systemRed
-        : (rangeReturn < 0 ? CupertinoColors.systemGreen : CupertinoColors.systemGrey);
-
-    double interval = _getNiceInterval(minY, maxY);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('业绩走势', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: returnColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                child: Text(
-                  '$rangeName涨跌幅 ${rangeReturn >= 0 ? '+' : ''}${rangeReturn.toStringAsFixed(2)}%',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: returnColor),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: ['1m', '3m', '6m'].map((key) {
-              final isSelected = _selectedRange == key;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _buildGlassButton(
-                    label: _rangeLabels[key]!,
-                    isSelected: isSelected,
-                    onTap: () {
-                      setState(() {
-                        _selectedRange = key;
-                        _showAverage = true;
-                        _showHs300 = true;
-                      });
-                    },
-                    isDark: isDark,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: ['1y', '3y', 'all'].map((key) {
-              final isSelected = _selectedRange == key;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _buildGlassButton(
-                    label: _rangeLabels[key]!,
-                    isSelected: isSelected,
-                    onTap: () {
-                      setState(() {
-                        _selectedRange = key;
-                        _showAverage = false;
-                        _showHs300 = false;
-                      });
-                    },
-                    isDark: isDark,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 240,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: interval,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: isDark ? CupertinoColors.white.withOpacity(0.08) : CupertinoColors.systemGrey.withOpacity(0.15),
-                    strokeWidth: 0.5,
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      interval: interval,
-                      getTitlesWidget: (value, meta) {
-                        String label = value.toStringAsFixed(value % 1 == 0 ? 0 : 1);
-                        return Text('$label%', style: const TextStyle(fontSize: 10));
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx >= 0 && idx < fundSpots.length) {
-                          final date = _alignedDates[startIdx + idx];
-                          return Text(_formatDateShort(date), style: const TextStyle(fontSize: 10));
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                ),
-                borderData: FlBorderData(show: true, border: Border.all(color: isDark ? CupertinoColors.white.withOpacity(0.2) : CupertinoColors.systemGrey.withOpacity(0.5))),
-                minX: 0,
-                maxX: (fundSpots.length - 1).toDouble(),
-                minY: minY,
-                maxY: maxY,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: fundSpots,
-                    isCurved: true,
-                    color: CupertinoColors.systemRed,
-                    barWidth: 2,
-                    dotData: FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: CupertinoColors.systemRed.withOpacity(0.05),
-                    ),
-                  ),
-                  if (showAvg)
-                    LineChartBarData(
-                      spots: avgSpots,
-                      isCurved: true,
-                      color: CupertinoColors.systemBlue,
-                      barWidth: 1.5,
-                      dotData: FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
-                    ),
-                  if (showHs)
-                    LineChartBarData(
-                      spots: hsSpots,
-                      isCurved: true,
-                      color: CupertinoColors.systemGrey,
-                      barWidth: 1.5,
-                      dotData: FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (isShortRange)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildLegendItem('本基金', CupertinoColors.systemRed),
-                _buildLegendItem('同类平均', CupertinoColors.systemBlue),
-                _buildLegendItem('沪深300', CupertinoColors.systemGrey),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGlassButton({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? CupertinoColors.activeBlue.withOpacity(0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? CupertinoColors.activeBlue
-                : (isDark ? CupertinoColors.white.withOpacity(0.3) : CupertinoColors.systemGrey.withOpacity(0.5)),
-          ),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.normal,
-            color: isSelected
-                ? CupertinoColors.activeBlue
-                : (isDark ? CupertinoColors.white : CupertinoColors.black),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      children: [
-        Container(width: 12, height: 12, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11)),
-      ],
     );
   }
 
@@ -972,18 +576,4 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   String _formatDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
-  String _formatDateShort(DateTime d) => '${d.month}/${d.day}';
-}
-
-class _NormalizedResult {
-  final List<DateTime> dates;
-  final List<double> fundPcts;
-  final List<double> avgPcts;
-  final List<double> hsPcts;
-  _NormalizedResult({
-    required this.dates,
-    required this.fundPcts,
-    required this.avgPcts,
-    required this.hsPcts,
-  });
 }

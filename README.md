@@ -30,6 +30,7 @@ lib/
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart	           # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
     ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，支持深色模式
+    ├── fund_card.dart                     # 基金业绩走势折线图组件，在基金详情页中调用
     ├── glass_button.dart                  # 全局，磨玻璃风格按钮组件
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组标题，支持展开/折叠动画，深色/浅色模式适配
     ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑（并发控制、重试机制、加载遮罩），显示刷新动画
