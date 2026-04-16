@@ -4,13 +4,10 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/net_worth_point.dart';
 
 /// 业绩走势图表组件（基金净值、同类平均、沪深300）
-/// 同类平均和沪深300的原始数据为累计收益率（基期通常为1000），
-/// 本组件会将其转换为以基准日净值为1的“伪净值”，再与基金净值一起归一化，
-/// 保证三条曲线起点一致且量纲统一。
 class FundPerformanceChart extends StatefulWidget {
-  final List<NetWorthPoint> fundPoints;      // 基金净值（真实净值，已排序）
-  final List<NetWorthPoint> avgPoints;       // 同类平均（累计收益率原始值，已排序）
-  final List<NetWorthPoint> hsPoints;        // 沪深300（累计收益率原始值，已排序）
+  final List<NetWorthPoint> fundPoints;
+  final List<NetWorthPoint> avgPoints;
+  final List<NetWorthPoint> hsPoints;
 
   const FundPerformanceChart({
     super.key,
@@ -36,11 +33,15 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   bool _showAverage = true;
   bool _showHs300 = true;
 
-  // 当前区间切片 + 归一化后的数据（归一化值：起点 = 1.0）
   List<DateTime> _sliceDates = [];
-  List<double> _sliceFundValues = [];   // 基金归一化值
-  List<double> _sliceAvgValues = [];    // 同类平均归一化值（已转换为伪净值）
-  List<double> _sliceHsValues = [];     // 沪深300归一化值（已转换为伪净值）
+  List<double> _sliceFundValues = [];
+  List<double> _sliceAvgValues = [];
+  List<double> _sliceHsValues = [];
+
+  // 悬停相关状态
+  int _hoverIndex = -1;
+  double _tooltipX = 0;
+  double _tooltipY = 0;
 
   @override
   void initState() {
@@ -58,8 +59,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
-  /// 将累计收益率原始值转换为“伪净值”：
-  /// 伪净值 = 1 + (原始值 - 基准日原始值) / 100
   List<NetWorthPoint> _convertToPseudoNav(List<NetWorthPoint> rawPoints, double baseRaw) {
     return rawPoints.map((p) {
       final pseudoNav = 1.0 + (p.nav - baseRaw) / 100.0;
@@ -67,10 +66,8 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }).toList();
   }
 
-  /// 核心：根据选定区间，对三条曲线分别做“起点归一化”
   void _updateSliceAndNormalize() {
     if (widget.fundPoints.isEmpty) {
-      print('[归一化日志] 基金净值数据为空，跳过归一化');
       _sliceDates = [];
       _sliceFundValues = [];
       _sliceAvgValues = [];
@@ -78,7 +75,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       return;
     }
 
-    // 1. 根据当前区间确定起始日期（自然日）
     final now = DateTime.now();
     DateTime startDate;
     switch (_selectedRange) {
@@ -101,9 +97,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         startDate = DateTime(1900);
         break;
     }
-    print('[归一化日志] 当前区间: $_selectedRange, 起始日期(自然日): $startDate');
 
-    // 2. 找到基金净值数据中第一个 >= startDate 的交易日（基准日）
     int fundStartIdx = 0;
     for (int i = 0; i < widget.fundPoints.length; i++) {
       if (widget.fundPoints[i].date.isAfter(startDate) ||
@@ -114,9 +108,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
     final baseDate = widget.fundPoints[fundStartIdx].date;
     final fundSlice = widget.fundPoints.sublist(fundStartIdx);
-    print('[归一化日志] 基金基准日期: $baseDate, 基准净值: ${fundSlice.first.nav}');
 
-    // 辅助：在列表中查找 <= targetDate 的最近净值
     double getNavOnOrBefore(List<NetWorthPoint> points, DateTime target) {
       for (int i = points.length - 1; i >= 0; i--) {
         if (points[i].date.isBefore(target) ||
@@ -127,17 +119,13 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       return points.isNotEmpty ? points.first.nav : 1.0;
     }
 
-    // 3. 获取同类平均和沪深300在基准日的累计收益率原始值
     final double avgBaseRaw = widget.avgPoints.isNotEmpty
         ? getNavOnOrBefore(widget.avgPoints, baseDate)
         : 1000.0;
     final double hsBaseRaw = widget.hsPoints.isNotEmpty
         ? getNavOnOrBefore(widget.hsPoints, baseDate)
         : 1000.0;
-    print('[归一化日志] 同类平均基准日原始累计收益率: $avgBaseRaw');
-    print('[归一化日志] 沪深300基准日原始累计收益率: $hsBaseRaw');
 
-    // 4. 将同类平均和沪深300的原始累计收益率转换为“伪净值”
     final List<NetWorthPoint> convertedAvgPoints = widget.avgPoints.isNotEmpty
         ? _convertToPseudoNav(widget.avgPoints, avgBaseRaw)
         : [];
@@ -145,7 +133,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         ? _convertToPseudoNav(widget.hsPoints, hsBaseRaw)
         : [];
 
-    // 5. 构建归一化序列（以基金的日期为轴，对每条曲线各自归一化）
     _sliceDates = [];
     _sliceFundValues = [];
     _sliceAvgValues = [];
@@ -155,20 +142,17 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       final date = point.date;
       _sliceDates.add(date);
 
-      // 基金归一化：当前净值 / 基准净值
       final fundValue = point.nav / fundSlice.first.nav;
       _sliceFundValues.add(fundValue);
 
-      // 同类平均：取该日期或之前最近的伪净值，归一化（基准伪净值 = 1.0）
       if (convertedAvgPoints.isNotEmpty) {
         final avgPseudoNav = getNavOnOrBefore(convertedAvgPoints, date);
-        final avgValue = avgPseudoNav / 1.0;  // 基准值就是1.0
+        final avgValue = avgPseudoNav / 1.0;
         _sliceAvgValues.add(avgValue);
       } else {
         _sliceAvgValues.add(1.0);
       }
 
-      // 沪深300：同理
       if (convertedHsPoints.isNotEmpty) {
         final hsPseudoNav = getNavOnOrBefore(convertedHsPoints, date);
         final hsValue = hsPseudoNav / 1.0;
@@ -177,26 +161,8 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         _sliceHsValues.add(1.0);
       }
     }
-
-    // 输出归一化后的数据范围（用于调试）
-    if (_sliceFundValues.isNotEmpty) {
-      final fundMin = _sliceFundValues.reduce((a, b) => a < b ? a : b);
-      final fundMax = _sliceFundValues.reduce((a, b) => a > b ? a : b);
-      print('[归一化日志] 基金归一化值范围: [$fundMin, $fundMax]');
-    }
-    if (_sliceAvgValues.isNotEmpty) {
-      final avgMin = _sliceAvgValues.reduce((a, b) => a < b ? a : b);
-      final avgMax = _sliceAvgValues.reduce((a, b) => a > b ? a : b);
-      print('[归一化日志] 同类平均归一化值范围: [$avgMin, $avgMax]');
-    }
-    if (_sliceHsValues.isNotEmpty) {
-      final hsMin = _sliceHsValues.reduce((a, b) => a < b ? a : b);
-      final hsMax = _sliceHsValues.reduce((a, b) => a > b ? a : b);
-      print('[归一化日志] 沪深300归一化值范围: [$hsMin, $hsMax]');
-    }
   }
 
-  /// 计算选定区间内基金的收益率（%）
   double _calculateRangeReturn() {
     if (_sliceFundValues.isEmpty) return 0.0;
     final startValue = _sliceFundValues.first;
@@ -204,7 +170,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     return (endValue - startValue) * 100;
   }
 
-  /// 根据数据的动态范围计算合适的 Y 轴刻度间隔
   double _getNiceInterval(double minY, double maxY) {
     final range = maxY - minY;
     if (range <= 0) return 0.05;
@@ -220,7 +185,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     setState(() {
       _selectedRange = newRange;
       _updateSliceAndNormalize();
-      // 长区间（1y/3y/all）默认隐藏同类平均和沪深300（避免数据稀疏）
+      _hoverIndex = -1;
       if (['1y', '3y', 'all'].contains(newRange)) {
         _showAverage = false;
         _showHs300 = false;
@@ -229,6 +194,69 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         _showHs300 = true;
       }
     });
+  }
+
+  void _toggleAverage() {
+    setState(() {
+      _showAverage = !_showAverage;
+    });
+  }
+
+  void _toggleHs300() {
+    setState(() {
+      _showHs300 = !_showHs300;
+    });
+  }
+
+  String _getHoverDate() {
+    if (_hoverIndex >= 0 && _hoverIndex < _sliceDates.length) {
+      return _formatDate(_sliceDates[_hoverIndex]);
+    }
+    return '';
+  }
+
+  double _getHoverFundReturn() {
+    if (_hoverIndex >= 0 && _hoverIndex < _sliceFundValues.length) {
+      return (_sliceFundValues[_hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  double _getHoverAvgReturn() {
+    if (_hoverIndex >= 0 && _hoverIndex < _sliceAvgValues.length) {
+      return (_sliceAvgValues[_hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  double _getHoverHsReturn() {
+    if (_hoverIndex >= 0 && _hoverIndex < _sliceHsValues.length) {
+      return (_sliceHsValues[_hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  String _formatDate(DateTime date) {
+    if (_selectedRange == '1m') {
+      return '${date.month}/${date.day}';
+    }
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateShort(DateTime date) {
+    if (_selectedRange == '1m') {
+      return '${date.month}/${date.day}';
+    } else if (_selectedRange == '3m' || _selectedRange == '6m') {
+      return '${date.month}/${date.day}';
+    } else {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    }
+  }
+
+  int _getBottomTitleInterval() {
+    final length = _sliceDates.length;
+    if (length <= 6) return 1;
+    return (length / 6).ceil();
   }
 
   @override
@@ -251,21 +279,19 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       );
     }
 
-    // 构建 FlSpot（横坐标使用索引）
     final fundSpots = <FlSpot>[];
     final avgSpots = <FlSpot>[];
     final hsSpots = <FlSpot>[];
     for (int i = 0; i < _sliceFundValues.length; i++) {
       fundSpots.add(FlSpot(i.toDouble(), _sliceFundValues[i]));
-      if (_showAverage && i < _sliceAvgValues.length) {
+      if (i < _sliceAvgValues.length) {
         avgSpots.add(FlSpot(i.toDouble(), _sliceAvgValues[i]));
       }
-      if (_showHs300 && i < _sliceHsValues.length) {
+      if (i < _sliceHsValues.length) {
         hsSpots.add(FlSpot(i.toDouble(), _sliceHsValues[i]));
       }
     }
 
-    // 计算 Y 轴范围（基于所有可见曲线）
     double minY = _sliceFundValues.reduce((a, b) => a < b ? a : b);
     double maxY = _sliceFundValues.reduce((a, b) => a > b ? a : b);
     if (_showAverage && _sliceAvgValues.isNotEmpty) {
@@ -281,15 +307,15 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       maxY = maxY > hsMax ? maxY : hsMax;
     }
 
-    // 添加内边距，避免曲线贴边
     final padding = (maxY - minY) * 0.1;
     minY = minY - padding;
     maxY = maxY + padding;
-    if (minY > 0.95) minY = 0.95; // 保证基准线 1.0 可见
+    if (minY > 0.95) minY = 0.95;
     if (maxY < 1.05) maxY = 1.05;
 
     final interval = _getNiceInterval(minY, maxY);
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
+    final bottomInterval = _getBottomTitleInterval();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -307,7 +333,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题 + 区间收益率
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -333,7 +358,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             ],
           ),
           const SizedBox(height: 12),
-          // 区间选择按钮（两行）
           Row(
             children: ['1m', '3m', '6m'].map((key) => Expanded(
               child: Padding(
@@ -362,120 +386,298 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             )).toList(),
           ),
           const SizedBox(height: 16),
-          // 图表区域
           SizedBox(
             height: 240,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: interval,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: isDark
-                        ? CupertinoColors.white.withOpacity(0.08)
-                        : CupertinoColors.systemGrey.withOpacity(0.15),
-                    strokeWidth: 0.5,
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 45,
-                      interval: interval,
-                      getTitlesWidget: (value, meta) {
-                        // 将归一化值转换为百分比： (value - 1) * 100
-                        final percent = (value - 1.0) * 100;
-                        String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
-                        if (percent > 0) label = '+$label%';
-                        if (percent < 0) label = '$label%';
-                        if (percent == 0) label = '0%';
-                        return Text(
-                          label,
-                          style: const TextStyle(fontSize: 10),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx >= 0 && idx < _sliceDates.length) {
-                          return Text(
-                            _formatDateShort(_sliceDates[idx]),
-                            style: const TextStyle(fontSize: 10),
-                          );
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: isDark
-                        ? CupertinoColors.white.withOpacity(0.2)
-                        : CupertinoColors.systemGrey.withOpacity(0.5),
-                  ),
-                ),
-                minX: 0,
-                maxX: (fundSpots.length - 1).toDouble(),
-                minY: minY,
-                maxY: maxY,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: fundSpots,
-                    isCurved: true,
-                    color: CupertinoColors.systemRed,
-                    barWidth: 2,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
+            child: Stack(
+              children: [
+                LineChart(
+                  LineChartData(
+                    gridData: FlGridData(
                       show: true,
-                      color: CupertinoColors.systemRed.withOpacity(0.05),
+                      drawVerticalLine: false,
+                      horizontalInterval: interval,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.08)
+                            : CupertinoColors.systemGrey.withOpacity(0.15),
+                        strokeWidth: 0.5,
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 45,
+                          interval: interval,
+                          getTitlesWidget: (value, meta) {
+                            final percent = (value - 1.0) * 100;
+                            String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
+                            if (percent > 0) label = '+$label%';
+                            if (percent < 0) label = '$label%';
+                            if (percent == 0) label = '0%';
+                            return Text(
+                              label,
+                              style: const TextStyle(fontSize: 10),
+                            );
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          interval: bottomInterval.toDouble(),
+                          getTitlesWidget: (value, meta) {
+                            final idx = value.toInt();
+                            if (idx >= 0 && idx < _sliceDates.length) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  _formatDateShort(_sliceDates[idx]),
+                                  style: const TextStyle(fontSize: 10),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }
+                            return const Text('');
+                          },
+                        ),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border.all(
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.2)
+                            : CupertinoColors.systemGrey.withOpacity(0.5),
+                      ),
+                    ),
+                    minX: 0,
+                    maxX: (fundSpots.length - 1).toDouble(),
+                    minY: minY,
+                    maxY: maxY,
+                    lineTouchData: LineTouchData(
+                      enabled: true,
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipItems: (touchedSpots) {
+                          return [];
+                        },
+                      ),
+                      getTouchedSpotIndicator: (barData, spotIndexes) {
+                        // 只为本基金曲线（红色）显示小圆点
+                        if (barData.color == CupertinoColors.systemRed && spotIndexes.isNotEmpty) {
+                          return spotIndexes.map((index) {
+                            return TouchedSpotIndicatorData(
+                              FlLine(color: Colors.transparent, strokeWidth: 0),
+                              FlDotData(
+                                show: true,
+                                getDotPainter: (spot, percent, barData, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 2.5,
+                                    color: barData.color!,
+                                    strokeWidth: 1,
+                                    strokeColor: isDark ? Colors.black : Colors.white,
+                                  );
+                                },
+                              ),
+                            );
+                          }).toList();
+                        }
+                        return [];
+                      },
+                      touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                        if (event is FlPanEndEvent) {
+                          setState(() {
+                            _hoverIndex = -1;
+                          });
+                        } else if (response != null &&
+                            response.lineBarSpots != null &&
+                            response.lineBarSpots!.isNotEmpty) {
+                          setState(() {
+                            _hoverIndex = response.lineBarSpots!.first.x.toInt();
+                            if (event is FlPanUpdateEvent) {
+                              _tooltipX = event.localPosition.dx + 15;
+                              _tooltipY = event.localPosition.dy - 70;
+                            }
+                          });
+                        }
+                      },
+                    ),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: fundSpots,
+                        isCurved: true,
+                        color: CupertinoColors.systemRed,
+                        barWidth: 2,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: CupertinoColors.systemRed.withOpacity(0.05),
+                        ),
+                      ),
+                      if (_showAverage && avgSpots.isNotEmpty)
+                        LineChartBarData(
+                          spots: avgSpots,
+                          isCurved: true,
+                          color: CupertinoColors.systemBlue,
+                          barWidth: 1.5,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(show: false),
+                        ),
+                      if (_showHs300 && hsSpots.isNotEmpty)
+                        LineChartBarData(
+                          spots: hsSpots,
+                          isCurved: true,
+                          color: CupertinoColors.systemGrey,
+                          barWidth: 1.5,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(show: false),
+                        ),
+                    ],
+                  ),
+                ),
+                // 自定义悬浮框
+                if (_hoverIndex >= 0 && _hoverIndex < _sliceFundValues.length)
+                  Positioned(
+                    left: _tooltipX.clamp(10, MediaQuery.of(context).size.width - 170),
+                    top: _tooltipY.clamp(10, 170),
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      color: isDark ? Colors.grey[850] : Colors.white,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _getHoverDate(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.grey[400] : Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  color: CupertinoColors.systemRed,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '本基金',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '${_getHoverFundReturn() >= 0 ? '+' : ''}${_getHoverFundReturn().toStringAsFixed(2)}%',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _getHoverFundReturn() >= 0
+                                        ? CupertinoColors.systemRed
+                                        : CupertinoColors.systemGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_showAverage && _hoverIndex < _sliceAvgValues.length) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    color: CupertinoColors.systemBlue,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '同类平均',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '${_getHoverAvgReturn() >= 0 ? '+' : ''}${_getHoverAvgReturn().toStringAsFixed(2)}%',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getHoverAvgReturn() >= 0
+                                          ? CupertinoColors.systemRed
+                                          : CupertinoColors.systemGreen,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (_showHs300 && _hoverIndex < _sliceHsValues.length) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    color: CupertinoColors.systemGrey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '沪深300',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '${_getHoverHsReturn() >= 0 ? '+' : ''}${_getHoverHsReturn().toStringAsFixed(2)}%',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getHoverHsReturn() >= 0
+                                          ? CupertinoColors.systemRed
+                                          : CupertinoColors.systemGreen,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  if (_showAverage && avgSpots.isNotEmpty)
-                    LineChartBarData(
-                      spots: avgSpots,
-                      isCurved: true,
-                      color: CupertinoColors.systemBlue,
-                      barWidth: 1.5,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
-                    ),
-                  if (_showHs300 && hsSpots.isNotEmpty)
-                    LineChartBarData(
-                      spots: hsSpots,
-                      isCurved: true,
-                      color: CupertinoColors.systemGrey,
-                      barWidth: 1.5,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
-          // 图例（仅短区间显示，长区间用户可选择显示但默认隐藏）
           if (isShortRange)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildLegendItem('本基金', CupertinoColors.systemRed),
-                _buildLegendItem('同类平均', CupertinoColors.systemBlue),
-                _buildLegendItem('沪深300', CupertinoColors.systemGrey),
+                _buildLegendItem('本基金', CupertinoColors.systemRed, isDark, null),
+                _buildLegendItem('同类平均', CupertinoColors.systemBlue, isDark, _toggleAverage),
+                _buildLegendItem('沪深300', CupertinoColors.systemGrey, isDark, _toggleHs300),
               ],
             ),
         ],
@@ -521,15 +723,26 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      children: [
-        Container(width: 12, height: 12, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11)),
-      ],
+  Widget _buildLegendItem(String label, Color color, bool isDark, VoidCallback? onToggle) {
+    return GestureDetector(
+      onTap: onToggle,
+      child: Row(
+        children: [
+          Container(width: 12, height: 12, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+          if (onToggle != null) ...[
+            const SizedBox(width: 4),
+            Icon(
+              (onToggle == _toggleAverage ? _showAverage : _showHs300)
+                  ? CupertinoIcons.eye
+                  : CupertinoIcons.eye_slash,
+              size: 14,
+              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+            ),
+          ],
+        ],
+      ),
     );
   }
-
-  String _formatDateShort(DateTime d) => '${d.month}/${d.day}';
 }
