@@ -46,6 +46,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   double _currentMinY = 0;
   double _currentMaxY = 0;
   int _maxIndex = 0;
+  DateTime _lastUpdateTime = DateTime.now();
 
   final GlobalKey _chartKey = GlobalKey();
 
@@ -324,7 +325,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
     final interval = _getNiceInterval(minY, maxY);
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
-    final bottomInterval = _getBottomTitleInterval();
+
+    // 动态计算 X 轴最大标签数量（根据屏幕宽度自适应）
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxXAxisTicks = screenWidth < 600 ? 4 : 6;
+    final bottomInterval = (_maxIndex / maxXAxisTicks).ceilToDouble();
 
     final fillColor = rangeReturn >= 0
         ? CupertinoColors.systemRed.withOpacity(0.15)
@@ -335,7 +340,8 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final avgValue = _getHoverAvgReturn();
     final hsValue = _getHoverHsReturn();
 
-    final neutralColor = CupertinoColors.systemGrey;
+    // 莫兰迪低饱和度中性色（适配深浅模式）
+    final morandiColor = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF8A8A8A);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -447,7 +453,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                 if (percent == 0) label = '0%';
                                 return Text(
                                   label,
-                                  style: TextStyle(fontSize: 10, color: neutralColor),
+                                  style: TextStyle(fontSize: 10, color: morandiColor),
                                 );
                               },
                             ),
@@ -456,7 +462,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                             sideTitles: SideTitles(
                               showTitles: true,
                               reservedSize: 30,
-                              interval: bottomInterval.toDouble(),
+                              interval: bottomInterval,
                               getTitlesWidget: (value, meta) {
                                 final idx = value.toInt();
                                 if (idx >= 0 && idx < _sliceDates.length) {
@@ -466,7 +472,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
                                         _formatDateShort(_sliceDates[idx]),
-                                        style: TextStyle(fontSize: 10, color: neutralColor),
+                                        style: TextStyle(fontSize: 10, color: morandiColor),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -538,10 +544,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               orElse: () => response.lineBarSpots!.first,
                             );
                             final newIndex = spot.x.toInt();
-                            if (newIndex != _hoverIndex) {
+                            final now = DateTime.now();
+                            if (newIndex != _hoverIndex && now.difference(_lastUpdateTime) > const Duration(milliseconds: 33)) {
+                              _lastUpdateTime = now;
                               setState(() {
                                 _hoverIndex = newIndex;
-                                // 手动计算像素坐标，考虑轴留白
                                 const leftMargin = 45.0;
                                 const bottomMargin = 30.0;
                                 final plotWidth = _chartWidth - leftMargin;
@@ -556,7 +563,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                 if (renderBox != null) {
                                   _chartWidth = renderBox.size.width;
                                   _chartHeight = renderBox.size.height;
-                                  // 重新计算（确保最新尺寸）
                                   final newPlotWidth = _chartWidth - leftMargin;
                                   final newPlotHeight = _chartHeight - bottomMargin;
                                   if (newPlotWidth > 0 && newPlotHeight > 0 && _maxIndex > 0) {
@@ -621,10 +627,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       painter: _CrosshairPainter(
                         crossX: _crosshairX,
                         crossY: _crosshairY,
-                        color: neutralColor,
+                        color: morandiColor,
                       ),
                     ),
                   ),
+                // X轴悬停日期标签（风格与Y轴涨跌幅标签统一）
                 if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
                   Positioned(
                     left: _crosshairX - 40,
@@ -633,17 +640,18 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: isDark ? CupertinoColors.darkBackgroundGray : CupertinoColors.white,
+                          color: morandiColor, // 纯色背景，与涨跌幅标签一致
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
                         ),
                         child: Text(
                           _getHoverDate(),
-                          style: TextStyle(fontSize: 10, color: neutralColor),
+                          style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
                   ),
+                // Y轴涨跌幅标签
                 if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
                   Positioned(
                     left: 0,
@@ -652,7 +660,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: fundLineColor,
+                          color: morandiColor,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
