@@ -241,9 +241,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
             children: [
               _buildValuationCard(isDark),
               const SizedBox(height: 24),
-              // 使用 RepaintBoundary 隔离图表重绘，防止闪烁
+              // 强化重绘隔离，避免 Web 悬停闪烁
               RepaintBoundary(
-                key: ValueKey('chart_${widget.holding.fundCode}'),
+                key: ValueKey('chart_container_${widget.holding.fundCode}'),
                 child: FundPerformanceChart(
                   fundPoints: _fundPoints,
                   avgPoints: _avgPoints,
@@ -254,9 +254,8 @@ class _FundDetailPageState extends State<FundDetailPage> {
               _buildCollapsibleTopHoldings(isDark),
               const SizedBox(height: 24),
               _buildCollapsibleHistory(isDark),
-              // 动态底部留白：只在任一模块展开时添加，否则为 0
-              if (_isTopHoldingsExpanded || _isHistoryExpanded)
-                const SizedBox(height: 200),
+              // 动态底部留白：展开时留更多空间，收缩时保留最小边距
+              SizedBox(height: (_isTopHoldingsExpanded || _isHistoryExpanded) ? 80 : 20),
             ],
           ),
         ),
@@ -451,14 +450,14 @@ class _FundDetailPageState extends State<FundDetailPage> {
               });
 
               if (_isTopHoldingsExpanded) {
-                // 等待动画开始，获取最新布局
-                await Future.delayed(const Duration(milliseconds: 150));
+                await Future.delayed(const Duration(milliseconds: 100));
+
                 final context = _topHoldingsKey.currentContext;
                 if (context != null) {
                   Scrollable.ensureVisible(
                     context,
                     duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOutCubic,
+                    curve: Curves.fastOutSlowIn,
                     alignment: 0.0,
                   );
                 }
@@ -636,13 +635,14 @@ class _FundDetailPageState extends State<FundDetailPage> {
               });
 
               if (_isHistoryExpanded) {
-                await Future.delayed(const Duration(milliseconds: 150));
+                await Future.delayed(const Duration(milliseconds: 100));
+
                 final context = _historyKey.currentContext;
                 if (context != null) {
                   Scrollable.ensureVisible(
                     context,
                     duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOutCubic,
+                    curve: Curves.fastOutSlowIn,
                     alignment: 0.0,
                   );
                 }
@@ -690,7 +690,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   Widget _buildHistoryTable(bool isDark) {
     if (_historyList.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 220,
+      height: 220,  // 保持固定高度，用户可滚动加载更多
       child: Column(
         children: [
           Container(
