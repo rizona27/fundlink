@@ -7,6 +7,7 @@ import '../models/log_entry.dart';
 import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../widgets/empty_state.dart';
 import 'edit_holding_view.dart';
 
 class ManageHoldingsView extends StatefulWidget {
@@ -314,15 +315,12 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                 ),
                 Expanded(
                   child: !hasData
-                      ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(CupertinoIcons.person, size: 50, color: CupertinoColors.systemGrey),
-                        SizedBox(height: 12),
-                        Text('暂无持仓数据'),
-                      ],
-                    ),
+                      ? EmptyState(
+                    icon: CupertinoIcons.person,
+                    title: '暂无持仓数据',
+                    message: '',
+                    titleFontWeight: FontWeight.normal,
+                    titleFontSize: 18,
                   )
                       : ListView.builder(
                     key: ValueKey(_dataVersion),
@@ -390,7 +388,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                 children: holdings.asMap().entries.map((entry) {
                                   final holding = entry.value;
                                   final cardIndex = entry.key;
-                                  final isLastCard = cardIndex == holdings.length - 1;
                                   return Column(
                                     children: [
                                       _FadeInCard(
@@ -399,7 +396,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                         duration: const Duration(milliseconds: 400),
                                         child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
                                       ),
-                                      if (!isLastCard) const SizedBox(height: 4),
+                                      if (cardIndex < holdings.length - 1) const SizedBox(height: 4),
                                     ],
                                   );
                                 }).toList(),
