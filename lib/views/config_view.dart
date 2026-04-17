@@ -474,6 +474,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
+  // 主题模式选择器 - 修复溢出问题
   Widget _buildThemeItem(bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -517,9 +518,13 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          ThemeSwitch(
-            initialMode: _dataManager.themeMode,
-            onChanged: (mode) => _dataManager.setThemeMode(mode),
+          // 使用 SizedBox 限制宽度，让 ThemeSwitch 按比例缩放
+          SizedBox(
+            width: 160,
+            child: ThemeSwitch(
+              initialMode: _dataManager.themeMode,
+              onChanged: (mode) => _dataManager.setThemeMode(mode),
+            ),
           ),
         ],
       ),
@@ -559,6 +564,30 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
       builder: (context) => CupertinoAlertDialog(
         title: const Text('清空所有持仓'),
         content: const Text('此操作将删除所有持仓数据，且不可恢复。确定要继续吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _showFinalConfirmDialog();
+            },
+            isDestructiveAction: true,
+            child: const Text('确认清空'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFinalConfirmDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('最后确认'),
+        content: const Text('此操作无法撤销，请再次确认是否清空所有持仓？'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(context),
@@ -606,7 +635,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               }
             },
             isDestructiveAction: true,
-            child: const Text('清空'),
+            child: const Text('确认清空'),
           ),
         ],
       ),

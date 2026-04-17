@@ -28,25 +28,25 @@ class Search extends StatelessWidget {
     const blurSigma = 12.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: Container(
             decoration: BoxDecoration(
               color: frostedBgColor,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDarkMode
                     ? CupertinoColors.white.withValues(alpha: 0.15)
@@ -59,16 +59,16 @@ class Search extends StatelessWidget {
               focusNode: focusNode,
               placeholder: '搜索客户名、客户号、基金代码、基金名称',
               placeholderStyle: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 color: isDarkMode
                     ? CupertinoColors.white.withValues(alpha: 0.6)
                     : CupertinoColors.systemGrey.withValues(alpha: 0.9),
               ),
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
               ),
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               onChanged: onChanged,
               onSuffixTap: () {
                 controller.clear();

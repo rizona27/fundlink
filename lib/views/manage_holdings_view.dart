@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../services/data_manager.dart';
@@ -5,6 +6,7 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
+import '../widgets/adaptive_top_bar.dart';
 import 'edit_holding_view.dart';
 
 class ManageHoldingsView extends StatefulWidget {
@@ -18,9 +20,9 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   late DataManager _dataManager;
 
   String _searchText = '';
-  bool _isSearchVisible = false;
   final Set<String> _expandedClients = {};
   int _dataVersion = 0;
+  double _scrollOffset = 0;
 
   final TextEditingController _renameController = TextEditingController();
 
@@ -88,13 +90,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
       } else {
         _expandedClients.addAll(_sortedKeys);
       }
-    });
-  }
-
-  void _toggleSearch() {
-    setState(() {
-      _isSearchVisible = !_isSearchVisible;
-      if (!_isSearchVisible) _searchText = '';
     });
   }
 
@@ -254,6 +249,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     final cardBackgroundColor = isDarkMode
         ? CupertinoColors.systemGrey6.withOpacity(0.5)
         : CupertinoColors.white;
@@ -262,166 +258,164 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
         ? CupertinoColors.white.withOpacity(0.5)
         : CupertinoColors.systemGrey;
 
+    final hasData = _dataManager.holdings.isNotEmpty;
+
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
-        middle: const SizedBox(),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Icon(CupertinoIcons.back, size: 24),
-            ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: _toggleAllCards,
-              child: Icon(
-                _areAnyCardsExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-                size: 22,
-              ),
-            ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: _toggleSearch,
-              child: Icon(
-                _isSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
-                size: 22,
-              ),
-            ),
-          ],
-        ),
-        trailing: const SizedBox(width: 44),
+        leading: const SizedBox.shrink(),
+        middle: const SizedBox.shrink(), // 去掉标题
+        backgroundColor: Colors.transparent,
       ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 250),
-              crossFadeState: _isSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              firstChild: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 1),
+      child: Container(
+        color: backgroundColor,
+        child: SafeArea(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification) {
+                setState(() {
+                  _scrollOffset = notification.metrics.pixels;
+                });
+              }
+              return false;
+            },
+            child: Column(
+              children: [
+                AdaptiveTopBar(
+                  scrollOffset: _scrollOffset,
+                  showBack: true,
+                  onBack: () => Navigator.of(context).pop(),
+                  showRefresh: false,
+                  showExpandCollapse: hasData,
+                  showSearch: hasData,
+                  showReset: false,
+                  showFilter: false,
+                  showSort: false,
+                  isAllExpanded: _areAnyCardsExpanded,
+                  searchText: _searchText,
+                  dataManager: _dataManager,
+                  fundService: null,
+                  onToggleExpandAll: hasData ? _toggleAllCards : null,
+                  onSearchChanged: hasData ? (value) {
+                    setState(() {
+                      _searchText = value;
+                    });
+                  } : null,
+                  onSearchClear: hasData ? () {
+                    setState(() {
+                      _searchText = '';
+                    });
+                  } : null,
+                  backgroundColor: Colors.transparent,
+                  iconColor: CupertinoTheme.of(context).primaryColor,
+                  iconSize: 24,
+                  buttonSpacing: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                Expanded(
+                  child: !hasData
+                      ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.person, size: 50, color: CupertinoColors.systemGrey),
+                        SizedBox(height: 12),
+                        Text('暂无持仓数据'),
+                      ],
                     ),
-                  ],
-                ),
-                child: CupertinoSearchTextField(
-                  placeholder: '搜索客户名、基金代码',
-                  onChanged: (value) => setState(() => _searchText = value),
-                ),
-              ),
-              secondChild: const SizedBox(height: 0),
-            ),
-            Expanded(
-              child: _dataManager.holdings.isEmpty
-                  ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(CupertinoIcons.person, size: 50, color: CupertinoColors.systemGrey),
-                    SizedBox(height: 12),
-                    Text('暂无持仓数据'),
-                  ],
-                ),
-              )
-                  : ListView.builder(
-                key: ValueKey(_dataVersion),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                itemCount: _sortedKeys.length,
-                itemBuilder: (context, index) {
-                  final key = _sortedKeys[index];
-                  final holdings = _filteredGroupedHoldings[key];
+                  )
+                      : ListView.builder(
+                    key: ValueKey(_dataVersion),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                    itemCount: _sortedKeys.length,
+                    itemBuilder: (context, index) {
+                      final key = _sortedKeys[index];
+                      final holdings = _filteredGroupedHoldings[key];
 
-                  if (holdings == null || holdings.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
+                      if (holdings == null || holdings.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
 
-                  final isExpanded = _expandedClients.contains(key);
-                  final gradientColor = _getClientColor(holdings.first.clientName);
-                  final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
-                  final bool isLastClient = index == _sortedKeys.length - 1;
+                      final isExpanded = _expandedClients.contains(key);
+                      final gradientColor = _getClientColor(holdings.first.clientName);
+                      final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
+                      final bool isLastClient = index == _sortedKeys.length - 1;
 
-                  return Column(
-                    children: [
-                      GradientCard(
-                        title: _getDisplayName(key),
-                        subtitle: '持仓数:',
-                        countValue: holdings.length,
-                        gradient: gradient,
-                        isExpanded: isExpanded,
-                        isDarkMode: isDarkMode,
-                        onTap: () {
-                          setState(() {
-                            if (isExpanded) {
-                              _expandedClients.remove(key);
-                            } else {
-                              _expandedClients.add(key);
-                            }
-                          });
-                        },
-                        trailing: isExpanded
-                            ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              minSize: 0,
-                              onPressed: () => _showRenameDialog(key),
-                              child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
-                            ),
-                            const SizedBox(width: 12),
-                            CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              minSize: 0,
-                              onPressed: () => _showDeleteClientDialog(key),
-                              child: Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
-                            ),
-                          ],
-                        )
-                            : null,
-                      ),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOutCubic,
-                        child: isExpanded
-                            ? Container(
-                          margin: const EdgeInsets.only(left: 16, top: 8),
-                          child: Column(
-                            children: holdings.asMap().entries.map((entry) {
-                              final holding = entry.value;
-                              final cardIndex = entry.key;
-                              final isLastCard = cardIndex == holdings.length - 1;
-                              return Column(
-                                children: [
-                                  _FadeInCard(
-                                    key: ValueKey('fade_${holding.id}_$cardIndex'),
-                                    delay: Duration(milliseconds: 100 + (cardIndex * 50)),
-                                    duration: const Duration(milliseconds: 400),
-                                    child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
-                                  ),
-                                  if (!isLastCard) const SizedBox(height: 4),
-                                ],
-                              );
-                            }).toList(),
+                      return Column(
+                        children: [
+                          GradientCard(
+                            title: _getDisplayName(key),
+                            subtitle: '持仓数:',
+                            countValue: holdings.length,
+                            gradient: gradient,
+                            isExpanded: isExpanded,
+                            isDarkMode: isDarkMode,
+                            onTap: () {
+                              setState(() {
+                                if (isExpanded) {
+                                  _expandedClients.remove(key);
+                                } else {
+                                  _expandedClients.add(key);
+                                }
+                              });
+                            },
+                            trailing: isExpanded
+                                ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  minSize: 0,
+                                  onPressed: () => _showRenameDialog(key),
+                                  child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
+                                ),
+                                const SizedBox(width: 12),
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  minSize: 0,
+                                  onPressed: () => _showDeleteClientDialog(key),
+                                  child: Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
+                                ),
+                              ],
+                            )
+                                : null,
                           ),
-                        )
-                            : const SizedBox.shrink(),
-                      ),
-                      SizedBox(height: isLastClient ? 0 : 8),
-                    ],
-                  );
-                },
-              ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 400),
+                            curve: Curves.easeOutCubic,
+                            child: isExpanded
+                                ? Container(
+                              margin: const EdgeInsets.only(left: 16, top: 8),
+                              child: Column(
+                                children: holdings.asMap().entries.map((entry) {
+                                  final holding = entry.value;
+                                  final cardIndex = entry.key;
+                                  final isLastCard = cardIndex == holdings.length - 1;
+                                  return Column(
+                                    children: [
+                                      _FadeInCard(
+                                        key: ValueKey('fade_${holding.id}_$cardIndex'),
+                                        delay: Duration(milliseconds: 100 + (cardIndex * 50)),
+                                        duration: const Duration(milliseconds: 400),
+                                        child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
+                                      ),
+                                      if (!isLastCard) const SizedBox(height: 4),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            )
+                                : const SizedBox.shrink(),
+                          ),
+                          SizedBox(height: isLastClient ? 0 : 8),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -98,6 +98,7 @@ extension SortOrderExtension on SortOrder {
 class AdaptiveTopBar extends StatefulWidget {
   final double scrollOffset;
 
+  final bool showBack;
   final bool showRefresh;
   final bool showExpandCollapse;
   final bool showSearch;
@@ -116,6 +117,7 @@ class AdaptiveTopBar extends StatefulWidget {
 
   final DataManager? dataManager;
   final FundService? fundService;
+  final VoidCallback? onBack;
   final VoidCallback? onRefresh;
   final VoidCallback? onLongPressRefresh;
 
@@ -144,6 +146,7 @@ class AdaptiveTopBar extends StatefulWidget {
   const AdaptiveTopBar({
     super.key,
     required this.scrollOffset,
+    this.showBack = false,
     this.showRefresh = true,
     this.showExpandCollapse = true,
     this.showSearch = true,
@@ -159,6 +162,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.onSortOrderChanged,
     this.dataManager,
     this.fundService,
+    this.onBack,
     this.onRefresh,
     this.onLongPressRefresh,
     this.onToggleExpandAll,
@@ -335,7 +339,22 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   List<Widget> _buildLeftChildren() {
     final children = <Widget>[];
+    if (widget.showBack) {
+      children.add(_wrapWithGlass(
+        CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          onPressed: widget.onBack,
+          child: Icon(
+            CupertinoIcons.back,
+            size: widget.iconSize,
+            color: widget.iconColor,
+          ),
+        ),
+        disabled: false,
+      ));
+    }
     if (widget.showRefresh) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
       children.add(_wrapWithGlass(_buildRefreshButton(), disabled: !_hasData));
     }
     if (widget.showSort) {
@@ -356,7 +375,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           child: Icon(
             _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
             size: widget.iconSize,
-            color: widget.iconColor,
+            color: _hasData ? widget.iconColor : CupertinoColors.systemGrey3,
           ),
         ),
       );
@@ -370,7 +389,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           child: Icon(
             widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
             size: widget.iconSize,
-            color: widget.iconColor,
+            color: _hasData ? widget.iconColor : CupertinoColors.systemGrey3,
           ),
         ),
       );
