@@ -154,7 +154,6 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     if (_isAnimating) return;
     _isAnimating = true;
 
-    // 获取当前显示的日志和新日志（使用当前_displayCount）
     final oldLogs = _targetLogs;
     final newLogs = _getNewFilteredLogs(newTypes);
 
@@ -163,24 +162,20 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     final toRemove = oldIds.difference(newIds).toList();
     final toAdd = newIds.difference(oldIds).toList();
 
-    // 阶段1: 淡出并收缩要移除的项
     if (toRemove.isNotEmpty) {
       await _animateRemoval(toRemove);
     }
 
     if (!mounted) return;
 
-    // 阶段2: 更新数据
     setState(() {
       _selectedLogTypes = newTypes;
       _resetPagination();
       _targetLogs = _getFilteredLogs();
     });
 
-    // 清理已移除的控制器
     _cleanupControllers(newIds);
 
-    // 阶段3: 为新项创建并执行展开动画
     if (toAdd.isNotEmpty) {
       await _animateAddition(toAdd);
     }
@@ -213,7 +208,6 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
   }
 
   Future<void> _animateAddition(List<String> ids) async {
-    // 为新项创建控制器（初始状态：高度0，透明度0）
     for (var id in ids) {
       if (!_sizeControllers.containsKey(id)) {
         _sizeControllers[id] = AnimationController(
@@ -233,12 +227,10 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       }
     }
 
-    // 等待一帧让布局更新
     await Future.delayed(Duration.zero);
 
     if (!mounted) return;
 
-    // 同时执行高度展开和淡入动画
     final futures = <Future>[];
     for (var id in ids) {
       final sizeCtrl = _sizeControllers[id];
@@ -290,7 +282,11 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
     final totalCount = _allFilteredLogs.length;
     if (_displayCount >= totalCount) {
-      _hasMore = false;
+      if (_hasMore) {
+        setState(() {
+          _hasMore = false;
+        });
+      }
       return;
     }
 
@@ -298,14 +294,16 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       _isLoadingMore = true;
     });
 
-    // 计算新的数量
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) return;
+
     final newCount = (_displayCount + _pageSize).clamp(0, totalCount);
     final newLogs = _getFilteredLogsWithCount(newCount);
     final currentIds = _targetLogs.map((l) => l.id).toSet();
     final newIds = newLogs.map((l) => l.id).toSet();
     final toAdd = newIds.difference(currentIds).toList();
 
-    // 为新日志创建控制器（初始状态：高度0，透明度0）
     for (var id in toAdd) {
       if (!_sizeControllers.containsKey(id)) {
         _sizeControllers[id] = AnimationController(
@@ -328,12 +326,10 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       _hasMore = _displayCount < totalCount;
     });
 
-    // 等待一帧后执行动画
     await Future.delayed(Duration.zero);
 
     if (!mounted) return;
 
-    // 为新日志执行展开和淡入动画
     if (toAdd.isNotEmpty) {
       final futures = <Future>[];
       for (var id in toAdd) {
@@ -362,7 +358,8 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 150) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 100) {
       _loadMore();
     }
   }
@@ -415,64 +412,49 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
     final logs = _targetLogs;
     final totalCount = _allFilteredLogs.length;
-    // 计算10条日志的固定高度：每条日志约42px (内边距8*2 + 内容约26)
-    const double itemHeight = 42.0;
-    final double fixedHeight = _pageSize * itemHeight;
 
     return CupertinoPageScaffold(
       backgroundColor: Colors.transparent,
       child: Container(
         color: backgroundColor,
         child: SafeArea(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is ScrollUpdateNotification) {
-                setState(() {
-                  _scrollOffset = notification.metrics.pixels;
-                });
-              }
-              return false;
-            },
-            child: Column(
-              children: [
-                AdaptiveTopBar(
-                  scrollOffset: _scrollOffset,
-                  showBack: true,
-                  onBack: () => Navigator.of(context).pop(),
-                  showRefresh: false,
-                  showExpandCollapse: false,
-                  showSearch: false,
-                  showReset: false,
-                  showFilter: false,
-                  showSort: false,
-                  isAllExpanded: false,
-                  searchText: '',
-                  dataManager: _dataManager,
-                  fundService: null,
-                  onToggleExpandAll: null,
-                  onSearchChanged: null,
-                  onSearchClear: null,
-                  backgroundColor: Colors.transparent,
-                  iconColor: CupertinoTheme.of(context).primaryColor,
-                  iconSize: 24,
-                  buttonSpacing: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                Expanded(
-                  child: FadeTransition(
-                    opacity: _pageFadeController,
-                    child: Column(
-                      children: [
-                        _buildFilterSection(isDarkMode),
-                        Expanded(
-                          child: _buildContent(isDarkMode, logs, totalCount, fixedHeight),
-                        ),
-                      ],
-                    ),
+          child: Column(
+            children: [
+              AdaptiveTopBar(
+                scrollOffset: _scrollOffset,
+                showBack: true,
+                onBack: () => Navigator.of(context).pop(),
+                showRefresh: false,
+                showExpandCollapse: false,
+                showSearch: false,
+                showReset: false,
+                showFilter: false,
+                showSort: false,
+                isAllExpanded: false,
+                searchText: '',
+                dataManager: _dataManager,
+                fundService: null,
+                onToggleExpandAll: null,
+                onSearchChanged: null,
+                onSearchClear: null,
+                backgroundColor: Colors.transparent,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+                iconSize: 24,
+                buttonSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildFilterSection(isDarkMode),
+                      _buildContent(isDarkMode, logs, totalCount),
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -672,7 +654,7 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildContent(bool isDarkMode, List<LogEntry> logs, int totalCount, double fixedHeight) {
+  Widget _buildContent(bool isDarkMode, List<LogEntry> logs, int totalCount) {
     if (_dataManager.logs.isEmpty) {
       return const Center(
         child: Column(
@@ -729,6 +711,7 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.all(10),
@@ -764,59 +747,53 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
               ],
             ),
           ),
-          Divider(height: 0, indent: 10, endIndent: 10),
-          // 固定高度的日志列表容器
-          SizedBox(
-            height: fixedHeight,
-            child: CupertinoScrollbar(
-              controller: _scrollController,
-              child: ListView.builder(
-                key: ValueKey('log_list_${_selectedLogTypes.hashCode}'),
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(),
-                addRepaintBoundaries: true,
-                addAutomaticKeepAlives: true,
-                itemCount: logs.length + (_isLoadingMore ? 1 : 0) + (!_hasMore && totalCount > _pageSize ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (_isLoadingMore && index == logs.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Center(child: CupertinoActivityIndicator()),
-                    );
-                  }
-                  if (!_hasMore && totalCount > _pageSize && index == logs.length) {
-                    return Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Center(
-                        child: Text(
-                          '已加载全部 $totalCount 条日志',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDarkMode
-                                ? CupertinoColors.white.withOpacity(0.4)
-                                : CupertinoColors.systemGrey,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                  final log = logs[index];
-                  final fadeController = _getFadeController(log.id);
-                  final sizeController = _getSizeController(log.id);
-
-                  return RepaintBoundary(
-                    child: SizeTransition(
-                      sizeFactor: sizeController,
-                      axis: Axis.vertical,
-                      child: FadeTransition(
-                        opacity: fadeController,
-                        child: _buildLogItem(log, index, logs.length, isDarkMode),
+          const Divider(height: 0, indent: 10, endIndent: 10),
+          ListView.builder(
+            key: ValueKey('log_list_${_selectedLogTypes.hashCode}'),
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            addRepaintBoundaries: true,
+            addAutomaticKeepAlives: true,
+            shrinkWrap: true,
+            itemCount: logs.length + (_isLoadingMore ? 1 : 0) + (!_hasMore && totalCount > _pageSize ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (_isLoadingMore && index == logs.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Center(child: CupertinoActivityIndicator()),
+                );
+              }
+              if (!_hasMore && totalCount > _pageSize && index == logs.length) {
+                return Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Center(
+                    child: Text(
+                      '已加载全部 $totalCount 条日志',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.4)
+                            : CupertinoColors.systemGrey,
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
+                );
+              }
+              final log = logs[index];
+              final fadeController = _getFadeController(log.id);
+              final sizeController = _getSizeController(log.id);
+
+              return RepaintBoundary(
+                child: SizeTransition(
+                  sizeFactor: sizeController,
+                  axis: Axis.vertical,
+                  child: FadeTransition(
+                    opacity: fadeController,
+                    child: _buildLogItem(log, index, logs.length, isDarkMode),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -830,6 +807,7 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     final typeColor = log.type.color;
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
