@@ -14,13 +14,13 @@ class LogView extends StatefulWidget {
 class _LogViewState extends State<LogView> with TickerProviderStateMixin {
   late DataManager _dataManager;
   Set<LogType> _selectedLogTypes = {};
-  late AnimationController _fadeController;
+  late AnimationController _pageFadeController;
 
   double _scrollOffset = 0;
 
-  // 分页加载相关
-  static const int _pageSize = 20;
-  int _displayCount = 20;
+  // 分页加载相关 - 默认显示10条
+  static const int _pageSize = 10;
+  int _displayCount = 10;
   bool _isLoadingMore = false;
   bool _hasMore = true;
 
@@ -28,44 +28,55 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
 
   // 存储每个日志项的动画控制器
-  final Map<String, AnimationController> _itemControllers = {};
+  final Map<String, AnimationController> _fadeControllers = {};
+  final Map<String, AnimationController> _sizeControllers = {};
 
   // 动画队列管理
   bool _isAnimating = false;
-  List<LogEntry> _currentDisplayedLogs = [];
+  List<LogEntry> _targetLogs = [];
+
+  // 动画持续时间
+  static const Duration _fadeDuration = Duration(milliseconds: 200);
+  static const Duration _sizeDuration = Duration(milliseconds: 250);
 
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+    _pageFadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     )..forward();
 
     _selectedLogTypes = LogType.values.toSet();
     _scrollController.addListener(_onScroll);
-    // 延迟初始化，等待 didChangeDependencies
-    _currentDisplayedLogs = [];
+    _targetLogs = [];
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    // 初始化当前显示的日志
-    _currentDisplayedLogs = _getFilteredLogs();
+    _targetLogs = _getFilteredLogs();
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
+    _pageFadeController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    for (var controller in _itemControllers.values) {
+    _disposeAllControllers();
+    super.dispose();
+  }
+
+  void _disposeAllControllers() {
+    for (var controller in _fadeControllers.values) {
       controller.dispose();
     }
-    _itemControllers.clear();
-    super.dispose();
+    for (var controller in _sizeControllers.values) {
+      controller.dispose();
+    }
+    _fadeControllers.clear();
+    _sizeControllers.clear();
   }
 
   List<LogEntry> _getFilteredLogs() {
@@ -88,14 +99,15 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
   bool get _isAllSelected => _selectedLogTypes.length == LogType.values.length;
 
-  void _toggleAllSelection() async {
-    final newSelectedTypes = _isAllSelected
-        ? <LogType>{}
-        : LogType.values.toSet();
-    await _animateLogTypeChange(newSelectedTypes);
+  void _toggleAllSelection() {
+    if (_isAnimating) return;
+    final newTypes = _isAllSelected ? <LogType>{} : LogType.values.toSet();
+    _startTypeChangeAnimation(newTypes);
   }
 
   void _clearAllLogs() async {
+    if (_isAnimating) return;
+
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -120,83 +132,142 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _resetPagination();
-          _currentDisplayedLogs = _getFilteredLogs();
+          _targetLogs = _getFilteredLogs();
         });
+        _disposeAllControllers();
       }
     }
   }
 
-  void _toggleLogType(LogType type) async {
-    final newSelectedTypes = Set<LogType>.from(_selectedLogTypes);
-    if (newSelectedTypes.contains(type)) {
-      newSelectedTypes.remove(type);
+  void _toggleLogType(LogType type) {
+    if (_isAnimating) return;
+    final newTypes = Set<LogType>.from(_selectedLogTypes);
+    if (newTypes.contains(type)) {
+      newTypes.remove(type);
     } else {
-      newSelectedTypes.add(type);
+      newTypes.add(type);
     }
-    await _animateLogTypeChange(newSelectedTypes);
+    _startTypeChangeAnimation(newTypes);
   }
 
-  Future<void> _animateLogTypeChange(Set<LogType> newSelectedTypes) async {
+  void _startTypeChangeAnimation(Set<LogType> newTypes) async {
     if (_isAnimating) return;
     _isAnimating = true;
 
-    // 获取当前显示的日志和新日志
-    final oldLogs = _currentDisplayedLogs;
-    final newLogs = _getNewFilteredLogs(newSelectedTypes);
+    // 获取当前显示的日志和新日志（使用当前_displayCount）
+    final oldLogs = _targetLogs;
+    final newLogs = _getNewFilteredLogs(newTypes);
 
-    // 找出需要淡出的日志（在旧列表中但不在新列表中）
-    final oldLogIds = oldLogs.map((l) => l.id).toSet();
-    final newLogIds = newLogs.map((l) => l.id).toSet();
-    final toRemove = oldLogIds.difference(newLogIds);
-    final toAdd = newLogIds.difference(oldLogIds);
+    final oldIds = oldLogs.map((l) => l.id).toSet();
+    final newIds = newLogs.map((l) => l.id).toSet();
+    final toRemove = oldIds.difference(newIds).toList();
+    final toAdd = newIds.difference(oldIds).toList();
 
-    // 为需要淡出的日志执行淡出动画
-    final fadeOutFutures = <Future>[];
-    for (var id in toRemove) {
-      if (_itemControllers.containsKey(id)) {
-        fadeOutFutures.add(_itemControllers[id]!.reverse().orCancel);
-      }
+    // 阶段1: 淡出并收缩要移除的项
+    if (toRemove.isNotEmpty) {
+      await _animateRemoval(toRemove);
     }
 
-    // 等待淡出动画完成
-    if (fadeOutFutures.isNotEmpty) {
-      await Future.wait(fadeOutFutures);
-    }
+    if (!mounted) return;
 
-    // 更新状态
+    // 阶段2: 更新数据
     setState(() {
-      _selectedLogTypes = newSelectedTypes;
+      _selectedLogTypes = newTypes;
       _resetPagination();
-      _currentDisplayedLogs = _getFilteredLogs();
+      _targetLogs = _getFilteredLogs();
     });
 
-    // 清理已移除日志的动画控制器
-    final currentLogIds = _currentDisplayedLogs.map((l) => l.id).toSet();
-    for (var id in _itemControllers.keys.toList()) {
-      if (!currentLogIds.contains(id)) {
-        _itemControllers[id]?.dispose();
-        _itemControllers.remove(id);
-      }
-    }
+    // 清理已移除的控制器
+    _cleanupControllers(newIds);
 
-    // 为新增的日志创建动画控制器并淡入
-    final fadeInFutures = <Future>[];
-    for (var id in toAdd) {
-      if (!_itemControllers.containsKey(id)) {
-        _itemControllers[id] = AnimationController(
-          duration: const Duration(milliseconds: 200),
-          vsync: this,
-        );
-        fadeInFutures.add(_itemControllers[id]!.forward().orCancel);
-      }
-    }
-
-    // 等待淡入动画完成
-    if (fadeInFutures.isNotEmpty) {
-      await Future.wait(fadeInFutures);
+    // 阶段3: 为新项创建并执行展开动画
+    if (toAdd.isNotEmpty) {
+      await _animateAddition(toAdd);
     }
 
     _isAnimating = false;
+  }
+
+  Future<void> _animateRemoval(List<String> ids) async {
+    final futures = <Future>[];
+    for (var id in ids) {
+      final fadeCtrl = _fadeControllers[id];
+      if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
+        futures.add(fadeCtrl.reverse().orCancel);
+      }
+      var sizeCtrl = _sizeControllers[id];
+      if (sizeCtrl == null) {
+        sizeCtrl = AnimationController(
+          duration: _sizeDuration,
+          vsync: this,
+        )..value = 1.0;
+        _sizeControllers[id] = sizeCtrl;
+      }
+      if (sizeCtrl.isAnimating == false) {
+        futures.add(sizeCtrl.reverse().orCancel);
+      }
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+  }
+
+  Future<void> _animateAddition(List<String> ids) async {
+    // 为新项创建控制器（初始状态：高度0，透明度0）
+    for (var id in ids) {
+      if (!_sizeControllers.containsKey(id)) {
+        _sizeControllers[id] = AnimationController(
+          duration: _sizeDuration,
+          vsync: this,
+        )..value = 0.0;
+      } else {
+        _sizeControllers[id]!.value = 0.0;
+      }
+      if (!_fadeControllers.containsKey(id)) {
+        _fadeControllers[id] = AnimationController(
+          duration: _fadeDuration,
+          vsync: this,
+        )..value = 0.0;
+      } else {
+        _fadeControllers[id]!.value = 0.0;
+      }
+    }
+
+    // 等待一帧让布局更新
+    await Future.delayed(Duration.zero);
+
+    if (!mounted) return;
+
+    // 同时执行高度展开和淡入动画
+    final futures = <Future>[];
+    for (var id in ids) {
+      final sizeCtrl = _sizeControllers[id];
+      if (sizeCtrl != null && sizeCtrl.isAnimating == false) {
+        futures.add(sizeCtrl.forward().orCancel);
+      }
+      final fadeCtrl = _fadeControllers[id];
+      if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
+        futures.add(fadeCtrl.forward().orCancel);
+      }
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+  }
+
+  void _cleanupControllers(Set<String> currentIds) {
+    final toRemove = <String>[];
+    for (var id in _fadeControllers.keys) {
+      if (!currentIds.contains(id)) {
+        toRemove.add(id);
+      }
+    }
+    for (var id in toRemove) {
+      _fadeControllers[id]?.dispose();
+      _fadeControllers.remove(id);
+      _sizeControllers[id]?.dispose();
+      _sizeControllers.remove(id);
+    }
   }
 
   List<LogEntry> _getNewFilteredLogs(Set<LogType> newTypes) {
@@ -214,8 +285,8 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     _isLoadingMore = false;
   }
 
-  void _loadMore() {
-    if (_isLoadingMore || !_hasMore) return;
+  void _loadMore() async {
+    if (_isLoadingMore || !_hasMore || _isAnimating) return;
 
     final totalCount = _allFilteredLogs.length;
     if (_displayCount >= totalCount) {
@@ -227,33 +298,93 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       _isLoadingMore = true;
     });
 
-    Future.microtask(() {
-      if (mounted) {
-        setState(() {
-          _displayCount = (_displayCount + _pageSize).clamp(0, totalCount);
-          _currentDisplayedLogs = _getFilteredLogs();
-          _isLoadingMore = false;
-          _hasMore = _displayCount < totalCount;
-        });
+    // 计算新的数量
+    final newCount = (_displayCount + _pageSize).clamp(0, totalCount);
+    final newLogs = _getFilteredLogsWithCount(newCount);
+    final currentIds = _targetLogs.map((l) => l.id).toSet();
+    final newIds = newLogs.map((l) => l.id).toSet();
+    final toAdd = newIds.difference(currentIds).toList();
+
+    // 为新日志创建控制器（初始状态：高度0，透明度0）
+    for (var id in toAdd) {
+      if (!_sizeControllers.containsKey(id)) {
+        _sizeControllers[id] = AnimationController(
+          duration: _sizeDuration,
+          vsync: this,
+        )..value = 0.0;
       }
+      if (!_fadeControllers.containsKey(id)) {
+        _fadeControllers[id] = AnimationController(
+          duration: _fadeDuration,
+          vsync: this,
+        )..value = 0.0;
+      }
+    }
+
+    setState(() {
+      _displayCount = newCount;
+      _targetLogs = newLogs;
+      _isLoadingMore = false;
+      _hasMore = _displayCount < totalCount;
     });
+
+    // 等待一帧后执行动画
+    await Future.delayed(Duration.zero);
+
+    if (!mounted) return;
+
+    // 为新日志执行展开和淡入动画
+    if (toAdd.isNotEmpty) {
+      final futures = <Future>[];
+      for (var id in toAdd) {
+        final sizeCtrl = _sizeControllers[id];
+        if (sizeCtrl != null && sizeCtrl.isAnimating == false) {
+          futures.add(sizeCtrl.forward().orCancel);
+        }
+        final fadeCtrl = _fadeControllers[id];
+        if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
+          futures.add(fadeCtrl.forward().orCancel);
+        }
+      }
+      if (futures.isNotEmpty) {
+        await Future.wait(futures);
+      }
+    }
+  }
+
+  List<LogEntry> _getFilteredLogsWithCount(int count) {
+    if (_selectedLogTypes.isEmpty) return [];
+    final logs = _dataManager.logs
+        .where((log) => _selectedLogTypes.contains(log.type))
+        .toList();
+    logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return logs.take(count).toList();
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 150) {
       _loadMore();
     }
   }
 
-  /// 获取或创建日志项的动画控制器
-  AnimationController _getItemController(String logId) {
-    if (!_itemControllers.containsKey(logId)) {
-      _itemControllers[logId] = AnimationController(
-        duration: const Duration(milliseconds: 200),
+  AnimationController _getFadeController(String id) {
+    if (!_fadeControllers.containsKey(id)) {
+      _fadeControllers[id] = AnimationController(
+        duration: _fadeDuration,
         vsync: this,
       )..value = 1.0;
     }
-    return _itemControllers[logId]!;
+    return _fadeControllers[id]!;
+  }
+
+  AnimationController _getSizeController(String id) {
+    if (!_sizeControllers.containsKey(id)) {
+      _sizeControllers[id] = AnimationController(
+        duration: _sizeDuration,
+        vsync: this,
+      )..value = 1.0;
+    }
+    return _sizeControllers[id]!;
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -282,8 +413,11 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
-    final logs = _currentDisplayedLogs;
+    final logs = _targetLogs;
     final totalCount = _allFilteredLogs.length;
+    // 计算10条日志的固定高度：每条日志约42px (内边距8*2 + 内容约26)
+    const double itemHeight = 42.0;
+    final double fixedHeight = _pageSize * itemHeight;
 
     return CupertinoPageScaffold(
       backgroundColor: Colors.transparent,
@@ -326,12 +460,12 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
                 ),
                 Expanded(
                   child: FadeTransition(
-                    opacity: _fadeController,
+                    opacity: _pageFadeController,
                     child: Column(
                       children: [
                         _buildFilterSection(isDarkMode),
                         Expanded(
-                          child: _buildContent(isDarkMode, logs, totalCount),
+                          child: _buildContent(isDarkMode, logs, totalCount, fixedHeight),
                         ),
                       ],
                     ),
@@ -538,77 +672,41 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildContent(bool isDarkMode, List<LogEntry> logs, int totalCount) {
+  Widget _buildContent(bool isDarkMode, List<LogEntry> logs, int totalCount, double fixedHeight) {
     if (_dataManager.logs.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CupertinoIcons.doc_text, size: 64,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.3)
-                  : CupertinoColors.systemGrey.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '暂无日志',
-              style: TextStyle(
-                fontSize: 16,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.5)
-                    : CupertinoColors.systemGrey,
-              ),
-            ),
+            Icon(CupertinoIcons.doc_text, size: 64),
+            SizedBox(height: 16),
+            Text('暂无日志'),
           ],
         ),
       );
     }
 
     if (_selectedLogTypes.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CupertinoIcons.slider_horizontal_3, size: 64,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.3)
-                  : CupertinoColors.systemGrey.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '请至少选择一种日志类型',
-              style: TextStyle(
-                fontSize: 16,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.5)
-                    : CupertinoColors.systemGrey,
-              ),
-            ),
+            Icon(CupertinoIcons.slider_horizontal_3, size: 64),
+            SizedBox(height: 16),
+            Text('请至少选择一种日志类型'),
           ],
         ),
       );
     }
 
     if (logs.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CupertinoIcons.doc_text, size: 64,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.3)
-                  : CupertinoColors.systemGrey.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '没有符合条件的日志',
-              style: TextStyle(
-                fontSize: 16,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.5)
-                    : CupertinoColors.systemGrey,
-              ),
-            ),
+            Icon(CupertinoIcons.doc_text, size: 64),
+            SizedBox(height: 16),
+            Text('没有符合条件的日志'),
           ],
         ),
       );
@@ -667,12 +765,17 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
             ),
           ),
           Divider(height: 0, indent: 10, endIndent: 10),
-          Expanded(
+          // 固定高度的日志列表容器
+          SizedBox(
+            height: fixedHeight,
             child: CupertinoScrollbar(
               controller: _scrollController,
               child: ListView.builder(
+                key: ValueKey('log_list_${_selectedLogTypes.hashCode}'),
                 controller: _scrollController,
                 physics: const BouncingScrollPhysics(),
+                addRepaintBoundaries: true,
+                addAutomaticKeepAlives: true,
                 itemCount: logs.length + (_isLoadingMore ? 1 : 0) + (!_hasMore && totalCount > _pageSize ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (_isLoadingMore && index == logs.length) {
@@ -698,10 +801,18 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
                     );
                   }
                   final log = logs[index];
-                  final animationController = _getItemController(log.id);
-                  return FadeTransition(
-                    opacity: animationController,
-                    child: _buildLogItem(log, index, logs.length, isDarkMode),
+                  final fadeController = _getFadeController(log.id);
+                  final sizeController = _getSizeController(log.id);
+
+                  return RepaintBoundary(
+                    child: SizeTransition(
+                      sizeFactor: sizeController,
+                      axis: Axis.vertical,
+                      child: FadeTransition(
+                        opacity: fadeController,
+                        child: _buildLogItem(log, index, logs.length, isDarkMode),
+                      ),
+                    ),
                   );
                 },
               ),
