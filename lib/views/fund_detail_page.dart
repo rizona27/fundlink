@@ -241,15 +241,22 @@ class _FundDetailPageState extends State<FundDetailPage> {
             children: [
               _buildValuationCard(isDark),
               const SizedBox(height: 24),
-              FundPerformanceChart(
-                fundPoints: _fundPoints,
-                avgPoints: _avgPoints,
-                hsPoints: _hsPoints,
+              // 使用 RepaintBoundary 隔离图表重绘，防止闪烁
+              RepaintBoundary(
+                key: ValueKey('chart_${widget.holding.fundCode}'),
+                child: FundPerformanceChart(
+                  fundPoints: _fundPoints,
+                  avgPoints: _avgPoints,
+                  hsPoints: _hsPoints,
+                ),
               ),
               const SizedBox(height: 24),
               _buildCollapsibleTopHoldings(isDark),
               const SizedBox(height: 24),
               _buildCollapsibleHistory(isDark),
+              // 动态底部留白：只在任一模块展开时添加，否则为 0
+              if (_isTopHoldingsExpanded || _isHistoryExpanded)
+                const SizedBox(height: 200),
             ],
           ),
         ),
@@ -438,63 +445,23 @@ class _FundDetailPageState extends State<FundDetailPage> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
+            onTap: () async {
               setState(() {
                 _isTopHoldingsExpanded = !_isTopHoldingsExpanded;
               });
+
               if (_isTopHoldingsExpanded) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  // 获取历史净值模块的顶部位置
-                  final historyContext = _historyKey.currentContext;
-                  if (historyContext != null) {
-                    final historyRenderBox = historyContext.findRenderObject() as RenderBox?;
-                    if (historyRenderBox != null) {
-                      final historyTop = historyRenderBox.localToGlobal(Offset.zero).dy;
-                      final screenHeight = MediaQuery.of(context).size.height;
-                      // 计算需要滚动的距离，使历史净值模块的顶部刚好出现在屏幕底部
-                      final targetOffset = historyTop - screenHeight + 20; // 留 20px 边距
-                      if (targetOffset > 0) {
-                        // 先滚动到前10重仓模块顶部
-                        Scrollable.ensureVisible(
-                          _topHoldingsKey.currentContext!,
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeInOut,
-                          alignment: 0.0,
-                        );
-                        // 然后微调滚动，使历史净值上移到屏幕底部边缘
-                        Future.delayed(const Duration(milliseconds: 420), () {
-                          final controller = PrimaryScrollController.of(context);
-                          controller?.animateTo(
-                            controller.offset + targetOffset,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        });
-                      } else {
-                        Scrollable.ensureVisible(
-                          _topHoldingsKey.currentContext!,
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeInOut,
-                          alignment: 0.0,
-                        );
-                      }
-                    } else {
-                      Scrollable.ensureVisible(
-                        _topHoldingsKey.currentContext!,
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                        alignment: 0.0,
-                      );
-                    }
-                  } else {
-                    Scrollable.ensureVisible(
-                      _topHoldingsKey.currentContext!,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      alignment: 0.0,
-                    );
-                  }
-                });
+                // 等待动画开始，获取最新布局
+                await Future.delayed(const Duration(milliseconds: 150));
+                final context = _topHoldingsKey.currentContext;
+                if (context != null) {
+                  Scrollable.ensureVisible(
+                    context,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutCubic,
+                    alignment: 0.0,
+                  );
+                }
               }
             },
             child: Row(
@@ -663,19 +630,22 @@ class _FundDetailPageState extends State<FundDetailPage> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
+            onTap: () async {
               setState(() {
                 _isHistoryExpanded = !_isHistoryExpanded;
               });
+
               if (_isHistoryExpanded) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+                await Future.delayed(const Duration(milliseconds: 150));
+                final context = _historyKey.currentContext;
+                if (context != null) {
                   Scrollable.ensureVisible(
-                    _historyKey.currentContext!,
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOut,
-                    alignment: 0.2, // 顶部留出 20% 空间
+                    context,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutCubic,
+                    alignment: 0.0,
                   );
-                });
+                }
               }
             },
             child: Row(
@@ -761,8 +731,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
           ),
           Expanded(
             child: Scrollbar(
+              controller: _historyScrollController,
               child: ListView.builder(
                 controller: _historyScrollController,
+                primary: false,
                 itemCount: _historyList.length + (_loadingMoreHistory ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == _historyList.length) {
