@@ -16,7 +16,7 @@ class FundDetailPage extends StatefulWidget {
   State<FundDetailPage> createState() => _FundDetailPageState();
 }
 
-class _FundDetailPageState extends State<FundDetailPage> {
+class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStateMixin {
   late FundService _fundService;
 
   List<NetWorthPoint> _fundPoints = [];
@@ -38,6 +38,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   bool _hasMoreHistory = true;
   bool _loadingMoreHistory = false;
   final ScrollController _historyScrollController = ScrollController();
+  final ScrollController _mainScrollController = ScrollController();
 
   bool _isRefreshingValuation = false;
   int _refreshCountdown = 0;
@@ -48,10 +49,17 @@ class _FundDetailPageState extends State<FundDetailPage> {
   final GlobalKey _topHoldingsKey = GlobalKey();
   final GlobalKey _historyKey = GlobalKey();
 
+  // 动画控制器，用于更精确的滚动时机
+  late AnimationController _animationController;
+
   @override
   void initState() {
     super.initState();
     _fundService = FundService();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
     _loadDetailData();
     _historyScrollController.addListener(_onHistoryScroll);
   }
@@ -60,6 +68,8 @@ class _FundDetailPageState extends State<FundDetailPage> {
   void dispose() {
     _historyScrollController.removeListener(_onHistoryScroll);
     _historyScrollController.dispose();
+    _mainScrollController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -218,17 +228,24 @@ class _FundDetailPageState extends State<FundDetailPage> {
     });
   }
 
-  // 平滑滚动，解决 Web 端定位偏差
-  Future<void> _smoothScrollTo(GlobalKey key) async {
-    await Future.delayed(const Duration(milliseconds: 150));
+  // 优化滚动逻辑：监听动画完成后再滚动
+  Future<void> _smoothScrollTo(GlobalKey key, bool isExpanding) async {
+    if (!isExpanding) return;
+
+    // 等待动画完成一半
+    await Future.delayed(const Duration(milliseconds: 200));
+
     final context = key.currentContext;
     if (context != null) {
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOutCubic,
-        alignment: 0.0,
-      );
+      // 使用 addPostFrameCallback 确保布局已更新
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+          alignment: 0.05, // 稍微留一点顶部间距，视觉更舒适
+        );
+      });
     }
   }
 
@@ -248,36 +265,59 @@ class _FundDetailPageState extends State<FundDetailPage> {
             ? const Center(child: CupertinoActivityIndicator())
             : _error != null
             ? Center(child: Text('加载失败: $_error'))
-            : SingleChildScrollView(
-          // 使用静态底部留白，避免动态 SizedBox 导致的收缩异常
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildValuationCard(isDark),
-              const SizedBox(height: 24),
-              // 图表区域：增强合成层 + 鼠标区域拦截，防止 Web 悬停闪烁
-              Container(
-                clipBehavior: Clip.hardEdge,
-                decoration: const BoxDecoration(),
-                child: MouseRegion(
-                  onHover: (_) {},
-                  child: RepaintBoundary(
-                    key: ValueKey('chart_container_${widget.holding.fundCode}'),
-                    child: FundPerformanceChart(
-                      fundPoints: _fundPoints,
-                      avgPoints: _avgPoints,
-                      hsPoints: _hsPoints,
-                    ),
-                  ),
-                ),
+            : LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              controller: _mainScrollController,
+              // 动态底部留白：根据展开状态调整，收缩时留白更少
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: _getDynamicBottomPadding(),
               ),
-              const SizedBox(height: 24),
-              _buildCollapsibleTopHoldings(isDark),
-              const SizedBox(height: 24),
-              _buildCollapsibleHistory(isDark),
-              // 不再需要任何动态 SizedBox
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildValuationCard(isDark),
+                  const SizedBox(height: 24),
+                  _buildChartSection(isDark),
+                  const SizedBox(height: 24),
+                  _buildCollapsibleTopHoldings(isDark),
+                  const SizedBox(height: 24),
+                  _buildCollapsibleHistory(isDark),
+                  // 添加一个额外的弹性空间，让底部留白更自然
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // 动态计算底部留白
+  double _getDynamicBottomPadding() {
+    if (_isHistoryExpanded || _isTopHoldingsExpanded) {
+      return 40; // 展开时留白较少，让用户看到更多内容
+    }
+    return 20; // 收缩时留白更少，避免空白感
+  }
+
+  // 抽离图表部分，减少重建范围
+  Widget _buildChartSection(bool isDark) {
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: const BoxDecoration(),
+      child: MouseRegion(
+        onHover: (_) {},
+        child: RepaintBoundary(
+          key: ValueKey('chart_container_${widget.holding.fundCode}'),
+          child: FundPerformanceChart(
+            fundPoints: _fundPoints,
+            avgPoints: _avgPoints,
+            hsPoints: _hsPoints,
           ),
         ),
       ),
@@ -469,9 +509,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
               setState(() {
                 _isTopHoldingsExpanded = !_isTopHoldingsExpanded;
               });
-              if (_isTopHoldingsExpanded) {
-                _smoothScrollTo(_topHoldingsKey);
-              }
+              _smoothScrollTo(_topHoldingsKey, _isTopHoldingsExpanded);
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -483,29 +521,28 @@ class _FundDetailPageState extends State<FundDetailPage> {
                       fontWeight: FontWeight.w600,
                       color: isDark ? CupertinoColors.white : CupertinoColors.black),
                 ),
-                Icon(
-                  _isTopHoldingsExpanded
-                      ? CupertinoIcons.chevron_down
-                      : CupertinoIcons.chevron_right,
-                  size: 20,
-                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                AnimatedRotation(
+                  turns: _isTopHoldingsExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 20,
+                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                  ),
                 ),
               ],
             ),
           ),
-          AnimatedSize(
+          AnimatedCrossFade(
             duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: _isTopHoldingsExpanded ? 1.0 : 0.0,
-              child: _isTopHoldingsExpanded
-                  ? Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: _buildTopHoldingsGrid(isDark),
-              )
-                  : const SizedBox.shrink(),
+            crossFadeState: _isTopHoldingsExpanded
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _buildTopHoldingsGrid(isDark),
             ),
+            secondChild: const SizedBox.shrink(),
           ),
         ],
       ),
@@ -643,9 +680,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
               setState(() {
                 _isHistoryExpanded = !_isHistoryExpanded;
               });
-              if (_isHistoryExpanded) {
-                _smoothScrollTo(_historyKey);
-              }
+              _smoothScrollTo(_historyKey, _isHistoryExpanded);
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -657,36 +692,35 @@ class _FundDetailPageState extends State<FundDetailPage> {
                       fontWeight: FontWeight.w600,
                       color: isDark ? CupertinoColors.white : CupertinoColors.black),
                 ),
-                Icon(
-                  _isHistoryExpanded
-                      ? CupertinoIcons.chevron_down
-                      : CupertinoIcons.chevron_right,
-                  size: 20,
-                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                AnimatedRotation(
+                  turns: _isHistoryExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 20,
+                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                  ),
                 ),
               ],
             ),
           ),
-          AnimatedSize(
+          AnimatedCrossFade(
             duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: _isHistoryExpanded ? 1.0 : 0.0,
-              child: _isHistoryExpanded
-                  ? Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: _buildHistoryTable(isDark),
-              )
-                  : const SizedBox.shrink(),
+            crossFadeState: _isHistoryExpanded
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _buildHistoryTable(isDark),
             ),
+            secondChild: const SizedBox.shrink(),
           ),
         ],
       ),
     );
   }
 
-  // 恢复原始固定高度 220，内部 ListView 滚动加载更多
+  // 优化历史净值表格渲染
   Widget _buildHistoryTable(bool isDark) {
     if (_historyList.isEmpty) return const SizedBox.shrink();
     return SizedBox(
@@ -732,10 +766,16 @@ class _FundDetailPageState extends State<FundDetailPage> {
           Expanded(
             child: Scrollbar(
               controller: _historyScrollController,
-              child: ListView.builder(
+              child: ListView.separated(
                 controller: _historyScrollController,
                 primary: false,
                 itemCount: _historyList.length + (_loadingMoreHistory ? 1 : 0),
+                separatorBuilder: (context, index) => Divider(
+                  height: 1,
+                  color: isDark
+                      ? CupertinoColors.white.withOpacity(0.1)
+                      : CupertinoColors.black.withOpacity(0.05),
+                ),
                 itemBuilder: (context, index) {
                   if (index == _historyList.length) {
                     return const Padding(
