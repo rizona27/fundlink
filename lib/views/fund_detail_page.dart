@@ -218,6 +218,20 @@ class _FundDetailPageState extends State<FundDetailPage> {
     });
   }
 
+  // 平滑滚动，解决 Web 端定位偏差
+  Future<void> _smoothScrollTo(GlobalKey key) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+        alignment: 0.0,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -235,27 +249,34 @@ class _FundDetailPageState extends State<FundDetailPage> {
             : _error != null
             ? Center(child: Text('加载失败: $_error'))
             : SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          // 使用静态底部留白，避免动态 SizedBox 导致的收缩异常
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildValuationCard(isDark),
               const SizedBox(height: 24),
-              // 强化重绘隔离，避免 Web 悬停闪烁
-              RepaintBoundary(
-                key: ValueKey('chart_container_${widget.holding.fundCode}'),
-                child: FundPerformanceChart(
-                  fundPoints: _fundPoints,
-                  avgPoints: _avgPoints,
-                  hsPoints: _hsPoints,
+              // 图表区域：增强合成层 + 鼠标区域拦截，防止 Web 悬停闪烁
+              Container(
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(),
+                child: MouseRegion(
+                  onHover: (_) {},
+                  child: RepaintBoundary(
+                    key: ValueKey('chart_container_${widget.holding.fundCode}'),
+                    child: FundPerformanceChart(
+                      fundPoints: _fundPoints,
+                      avgPoints: _avgPoints,
+                      hsPoints: _hsPoints,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
               _buildCollapsibleTopHoldings(isDark),
               const SizedBox(height: 24),
               _buildCollapsibleHistory(isDark),
-              // 动态底部留白：展开时留更多空间，收缩时保留最小边距
-              SizedBox(height: (_isTopHoldingsExpanded || _isHistoryExpanded) ? 80 : 20),
+              // 不再需要任何动态 SizedBox
             ],
           ),
         ),
@@ -444,23 +465,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () async {
+            onTap: () {
               setState(() {
                 _isTopHoldingsExpanded = !_isTopHoldingsExpanded;
               });
-
               if (_isTopHoldingsExpanded) {
-                await Future.delayed(const Duration(milliseconds: 100));
-
-                final context = _topHoldingsKey.currentContext;
-                if (context != null) {
-                  Scrollable.ensureVisible(
-                    context,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.fastOutSlowIn,
-                    alignment: 0.0,
-                  );
-                }
+                _smoothScrollTo(_topHoldingsKey);
               }
             },
             child: Row(
@@ -629,23 +639,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () async {
+            onTap: () {
               setState(() {
                 _isHistoryExpanded = !_isHistoryExpanded;
               });
-
               if (_isHistoryExpanded) {
-                await Future.delayed(const Duration(milliseconds: 100));
-
-                final context = _historyKey.currentContext;
-                if (context != null) {
-                  Scrollable.ensureVisible(
-                    context,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.fastOutSlowIn,
-                    alignment: 0.0,
-                  );
-                }
+                _smoothScrollTo(_historyKey);
               }
             },
             child: Row(
@@ -687,10 +686,11 @@ class _FundDetailPageState extends State<FundDetailPage> {
     );
   }
 
+  // 恢复原始固定高度 220，内部 ListView 滚动加载更多
   Widget _buildHistoryTable(bool isDark) {
     if (_historyList.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 220,  // 保持固定高度，用户可滚动加载更多
+      height: 220,
       child: Column(
         children: [
           Container(

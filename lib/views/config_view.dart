@@ -6,6 +6,8 @@ import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
 import 'manage_holdings_view.dart';
 import 'log_view.dart';
+import 'version_view.dart';
+import 'license_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -144,7 +146,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   Widget _buildImportExportSection(bool isDarkMode) {
     return _buildSection(
       title: '数据导入导出',
-      icon: '通用', // 复用通用图标，也可单独定义
+      icon: '通用',
       isDarkMode: isDarkMode,
       children: [
         _buildMenuItem(
@@ -201,15 +203,25 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           title: '版本信息',
           subtitle: 'v1.0.0',
           isDarkMode: isDarkMode,
-          onTap: () => _showAboutDialog(),
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const VersionView()),
+            );
+          },
         ),
         _buildDivider(isDarkMode),
         _buildMenuItem(
           icon: CupertinoIcons.heart_fill,
           title: '开源许可',
-          subtitle: 'MIT License',
+          subtitle: 'AGPL v3',
           isDarkMode: isDarkMode,
-          onTap: () => _showNotImplementedToast(),
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const LicenseView()),
+            );
+          },
         ),
       ],
     );
@@ -607,43 +619,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
       builder: (context) => CupertinoAlertDialog(
         title: Text('$feature开发中'),
         content: const Text('该功能将在后续版本中提供。'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('好的'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAboutDialog() {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('基金持仓管理'),
-        content: const Text(
-          '版本: 1.0.0\n\n'
-              '一款用于管理基金持仓的Flutter应用\n'
-              '支持导入CSV数据、查看收益排行等功能\n\n'
-              '使用Flutter Cupertino组件构建',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showNotImplementedToast() {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('提示'),
-        content: const Text('此功能开发中...'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(context),

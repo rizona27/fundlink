@@ -19,10 +19,12 @@ lib/
 │   ├── config_view.dart                   # 设置页，隐私模式开关、主题切换、日志查询、新增/管理持仓入口
 │   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息，基金代码变更时重新获取基金数据
 │   ├── fund_detail_page.dart              # 基金详情页，包含估值、净值趋势、十大重仓
+│   ├── license_view.dart                  # 开源协议
 │   ├── log_view.dart                      # 日志页面，按照日志类型进行分类，倒序显示（最新在上）
 │   ├── manage_holdings_view.dart          # 管理持仓页，批量修改客户姓名、批量删除客户、单个编辑/删除持仓
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示每个基金的持有人及收益
-│   └── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
+│   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
+│   └── version_view.dart                  # 版本信息
 │
 └── widgets/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含是刷新、搜索、筛选等
