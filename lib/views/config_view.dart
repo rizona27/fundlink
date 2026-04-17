@@ -83,7 +83,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildSwitchItem(
           icon: CupertinoIcons.lock_fill,
           title: '隐私模式',
-          subtitle: '开启后隐藏客户姓名中的部分字符',
+          subtitle: '用户姓名脱敏',
           value: _dataManager.isPrivacyMode,
           isDarkMode: isDarkMode,
           onChanged: (value) async {
@@ -107,7 +107,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.plus_circle_fill,
           title: '新增持仓',
-          subtitle: '添加新的基金持仓记录',
+          subtitle: '添加基金记录',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -120,7 +120,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.pencil,
           title: '编辑持仓',
-          subtitle: '修改或删除现有持仓',
+          subtitle: '修改持仓信息',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -133,7 +133,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.trash,
           title: '清空持仓',
-          subtitle: '删除所有持仓数据（不可恢复）',
+          subtitle: '删除所有数据（不可恢复）',
           isDarkMode: isDarkMode,
           isDestructive: true,
           onTap: () => _showClearAllConfirmDialog(),
@@ -178,7 +178,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.doc_text_search,
           title: '查看日志',
-          subtitle: '查看API请求和操作日志记录',
+          subtitle: '系统和操作记录',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -201,7 +201,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
           title: '版本信息',
-          subtitle: 'v1.0.0',
+          subtitle: VersionView.appVersion,  // 使用 VersionView 中的版本号常量
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -474,7 +474,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // 主题模式选择器 - 修复溢出问题
+  // 主题模式选择器
   Widget _buildThemeItem(bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -507,7 +507,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '浅色、深色或跟随系统',
+                  '明暗适配',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDarkMode
@@ -518,7 +518,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          // 修复主题切换器溢出问题
           Container(
             height: 32,
             child: ThemeSwitch(

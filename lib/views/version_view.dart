@@ -5,6 +5,9 @@ import '../widgets/adaptive_top_bar.dart';
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
+  // 版本号统一在这里定义，ConfigView 会通过此常量获取
+  static const String appVersion = 'v0.9.9';
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -122,7 +125,7 @@ class VersionView extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 12),
                                       Text(
-                                        'v1.0.0',
+                                        appVersion,
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: isDarkMode
