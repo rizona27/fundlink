@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Divider;
+import '../widgets/adaptive_top_bar.dart';
+import 'package:flutter/material.dart' show Colors;
 
 class LicenseView extends StatelessWidget {
   const LicenseView({super.key});
@@ -8,42 +9,58 @@ class LicenseView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    double scrollOffset = 0;
 
     return CupertinoPageScaffold(
-      backgroundColor: backgroundColor,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('开源许可'),
-        backgroundColor: CupertinoColors.systemBackground,
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: CupertinoScrollbar(
-            child: SingleChildScrollView(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDarkMode
-                      ? CupertinoColors.systemGrey6.withOpacity(0.4)
-                      : CupertinoColors.white,
-                  borderRadius: BorderRadius.circular(16),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        color: backgroundColor,
+        child: SafeArea(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification) {
+                // 不需要更新状态
+              }
+              return false;
+            },
+            child: Column(
+              children: [
+                AdaptiveTopBar(
+                  scrollOffset: scrollOffset,
+                  showBack: true,
+                  onBack: () => Navigator.of(context).pop(),
+                  showRefresh: false,
+                  showExpandCollapse: false,
+                  showSearch: false,
+                  showReset: false,
+                  showFilter: false,
+                  showSort: false,
+                  backgroundColor: Colors.transparent,
+                  iconColor: CupertinoTheme.of(context).primaryColor,
+                  iconSize: 24,
+                  buttonSpacing: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _licenseText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.5,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.9)
-                            : CupertinoColors.label,
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: Text(
+                        _licenseText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: isDarkMode
+                              ? CupertinoColors.white.withOpacity(0.9)
+                              : CupertinoColors.label,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -51,8 +68,7 @@ class LicenseView extends StatelessWidget {
     );
   }
 
-  static const String _licenseText = '''
-                    GNU AFFERO GENERAL PUBLIC LICENSE
+  static const String _licenseText = '''GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
@@ -712,6 +728,5 @@ specific requirements.
   You should also get your employer (if you work as a programmer) or school,
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
-<https://www.gnu.org/licenses/>.
-''';
+<https://www.gnu.org/licenses/>.''';
 }
