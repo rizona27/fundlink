@@ -27,6 +27,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   final TextEditingController _renameController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
@@ -261,12 +266,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     final hasData = _dataManager.holdings.isNotEmpty;
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false,
-        leading: const SizedBox.shrink(),
-        middle: const SizedBox.shrink(), // 去掉标题
-        backgroundColor: Colors.transparent,
-      ),
+      backgroundColor: Colors.transparent,
       child: Container(
         color: backgroundColor,
         child: SafeArea(

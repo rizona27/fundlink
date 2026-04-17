@@ -518,9 +518,9 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          // 使用 SizedBox 限制宽度，让 ThemeSwitch 按比例缩放
-          SizedBox(
-            width: 160,
+          // 修复主题切换器溢出问题
+          Container(
+            height: 32,
             child: ThemeSwitch(
               initialMode: _dataManager.themeMode,
               onChanged: (mode) => _dataManager.setThemeMode(mode),
