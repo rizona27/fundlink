@@ -1,8 +1,17 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../services/data_manager.dart';
+import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
+import '../models/profit_result.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/adaptive_top_bar.dart';
+import '../widgets/gradient_card.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/toast.dart';
+import 'add_holding_view.dart';
 
 enum SortType {
   amount,
@@ -24,6 +33,32 @@ extension SortTypeExtension on SortType {
         return '天数';
     }
   }
+
+  IconData get icon {
+    switch (this) {
+      case SortType.amount:
+        return CupertinoIcons.money_dollar;
+      case SortType.profit:
+        return CupertinoIcons.chart_bar;
+      case SortType.profitRate:
+        return CupertinoIcons.percent;
+      case SortType.days:
+        return CupertinoIcons.calendar;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case SortType.amount:
+        return const Color(0xFF4A90D9);
+      case SortType.profit:
+        return const Color(0xFF50B86C);
+      case SortType.profitRate:
+        return const Color(0xFFFF9500);
+      case SortType.days:
+        return const Color(0xFFD46B6B);
+    }
+  }
 }
 
 class TopPerformersView extends StatefulWidget {
@@ -35,229 +70,483 @@ class TopPerformersView extends StatefulWidget {
 
 class _TopPerformersViewState extends State<TopPerformersView> {
   late DataManager _dataManager;
+  late FundService _fundService;
+  late VoidCallback _dataListener;
+
   SortType _sortType = SortType.profit;
   bool _isAscending = false;
 
-  String _fundCodeFilter = '';
+  String _searchText = '';
   double? _minAmount;
   double? _maxAmount;
   double? _minProfitRate;
   double? _maxProfitRate;
+  double? _minDays;
+  double? _maxDays;
 
   bool _showFilter = false;
+  double _scrollOffset = 0;
+  Timer? _scrollThrottleTimer;
+
+  List<_RankItem> _cachedItems = [];
+
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataListener = () {
+      if (mounted) {
+        _updateCachedItems();
+      }
+    };
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _dataManager.addLog('进入收益排行页面', type: LogType.info);
+    _fundService = FundService(_dataManager);
+
+    if (!_isInitialized) {
+      _dataManager.addListener(_dataListener);
+      _isInitialized = true;
+      _updateCachedItems();
+      _dataManager.addLog('进入收益排行页面', type: LogType.info);
+    }
   }
 
-  List<FundHolding> get _validHoldings {
-    return _dataManager.holdings.where((h) => h.isValid && h.currentNav > 0).toList();
+  void _onScrollUpdate(double offset) {
+    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
+      return;
+    }
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+      if (mounted && _scrollOffset != offset) {
+        setState(() {
+          _scrollOffset = offset;
+        });
+      }
+      _scrollThrottleTimer = null;
+    });
   }
 
-  List<FundHolding> get _filteredHoldings {
-    var result = _validHoldings;
+  @override
+  void dispose() {
+    _scrollThrottleTimer?.cancel();
+    if (_isInitialized) {
+      _dataManager.removeListener(_dataListener);
+    }
+    super.dispose();
+  }
 
-    if (_fundCodeFilter.isNotEmpty) {
-      result = result.where((h) =>
-      h.fundCode.contains(_fundCodeFilter) ||
-          h.fundName.contains(_fundCodeFilter)
-      ).toList();
+  void _updateCachedItems() {
+    if (!mounted) return;
+
+    final holdings = _dataManager.holdings;
+    final validHoldings = <FundHolding>[];
+
+    for (final h in holdings) {
+      if (h.isValid && h.currentNav > 0) {
+        validHoldings.add(h);
+      }
+    }
+
+    var filtered = List<FundHolding>.from(validHoldings);
+
+    if (_searchText.isNotEmpty) {
+      final lower = _searchText.toLowerCase();
+      filtered = filtered.where((h) {
+        final code = h.fundCode.toLowerCase();
+        final name = h.fundName.toLowerCase();
+        final client = h.clientName.toLowerCase();
+        return code.contains(lower) || name.contains(lower) || client.contains(lower);
+      }).toList();
     }
 
     if (_minAmount != null) {
-      result = result.where((h) => h.purchaseAmount >= _minAmount!).toList();
+      filtered = filtered.where((h) => h.purchaseAmount >= _minAmount!).toList();
     }
 
     if (_maxAmount != null) {
-      result = result.where((h) => h.purchaseAmount <= _maxAmount!).toList();
+      filtered = filtered.where((h) => h.purchaseAmount <= _maxAmount!).toList();
     }
 
     if (_minProfitRate != null) {
-      result = result.where((h) => h.annualizedProfitRate >= _minProfitRate!).toList();
+      filtered = filtered.where((h) {
+        final profit = _dataManager.calculateProfit(h);
+        return profit.annualized >= _minProfitRate!;
+      }).toList();
     }
 
     if (_maxProfitRate != null) {
-      result = result.where((h) => h.annualizedProfitRate <= _maxProfitRate!).toList();
+      filtered = filtered.where((h) {
+        final profit = _dataManager.calculateProfit(h);
+        return profit.annualized <= _maxProfitRate!;
+      }).toList();
     }
 
-    return result;
-  }
+    if (_minDays != null) {
+      filtered = filtered.where((h) {
+        final days = DateTime.now().difference(h.purchaseDate).inDays;
+        return days >= _minDays!;
+      }).toList();
+    }
 
-  List<FundHolding> get _sortedHoldings {
-    final result = List<FundHolding>.from(_filteredHoldings);
+    if (_maxDays != null) {
+      filtered = filtered.where((h) {
+        final days = DateTime.now().difference(h.purchaseDate).inDays;
+        return days <= _maxDays!;
+      }).toList();
+    }
 
-    result.sort((a, b) {
+    final items = <_RankItem>[];
+    for (final holding in filtered) {
+      final profit = _dataManager.calculateProfit(holding);
+      final days = DateTime.now().difference(holding.purchaseDate).inDays;
+      items.add(_RankItem(
+        holding: holding,
+        profit: profit,
+        daysHeld: days,
+      ));
+    }
+
+    items.sort((a, b) {
       double valueA;
       double valueB;
 
       switch (_sortType) {
         case SortType.amount:
-          valueA = a.purchaseAmount;
-          valueB = b.purchaseAmount;
+          valueA = a.holding.purchaseAmount;
+          valueB = b.holding.purchaseAmount;
           break;
         case SortType.profit:
-          final profitA = _dataManager.calculateProfit(a);
-          final profitB = _dataManager.calculateProfit(b);
-          valueA = profitA.absolute;
-          valueB = profitB.absolute;
+          valueA = a.profit.absolute;
+          valueB = b.profit.absolute;
           break;
         case SortType.profitRate:
-          final profitA = _dataManager.calculateProfit(a);
-          final profitB = _dataManager.calculateProfit(b);
-          valueA = profitA.annualized;
-          valueB = profitB.annualized;
+          valueA = a.profit.annualized;
+          valueB = b.profit.annualized;
           break;
         case SortType.days:
-          valueA = DateTime.now().difference(a.purchaseDate).inDays.toDouble();
-          valueB = DateTime.now().difference(b.purchaseDate).inDays.toDouble();
+          valueA = a.daysHeld.toDouble();
+          valueB = b.daysHeld.toDouble();
           break;
       }
 
       return _isAscending ? valueA.compareTo(valueB) : valueB.compareTo(valueA);
     });
 
-    return result;
+    if (mounted) {
+      setState(() {
+        _cachedItems = items;
+      });
+    }
+  }
+
+  bool get _hasData {
+    final holdings = _dataManager.holdings;
+    for (final h in holdings) {
+      if (h.isValid && h.currentNav > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _resetFilters() {
-    setState(() {
-      _fundCodeFilter = '';
-      _minAmount = null;
-      _maxAmount = null;
-      _minProfitRate = null;
-      _maxProfitRate = null;
-    });
+    _searchText = '';
+    _minAmount = null;
+    _maxAmount = null;
+    _minProfitRate = null;
+    _maxProfitRate = null;
+    _minDays = null;
+    _maxDays = null;
+    _updateCachedItems();
     _dataManager.addLog('重置收益排行筛选条件', type: LogType.info);
+    context.showToast('筛选条件已重置');
+  }
+
+  void _applyFilters() {
+    _updateCachedItems();
+    context.showToast('已筛选出 ${_cachedItems.length} 条记录');
+    _dataManager.addLog('应用筛选条件，结果数: ${_cachedItems.length}', type: LogType.info);
+  }
+
+  void _toggleSort(SortType type) {
+    setState(() {
+      if (_sortType == type) {
+        _isAscending = !_isAscending;
+      } else {
+        _sortType = type;
+        _isAscending = false;
+      }
+    });
+    _updateCachedItems();
+    _dataManager.addLog('排序方式切换为: ${type.label}${_isAscending ? "(升序)" : "(降序)"}', type: LogType.info);
+  }
+
+  void _toggleFilter() {
+    setState(() {
+      _showFilter = !_showFilter;
+    });
+  }
+
+  void _onSearchChanged(String value) {
+    _searchText = value;
+    _updateCachedItems();
+  }
+
+  void _onSearchClear() {
+    _searchText = '';
+    _updateCachedItems();
+  }
+
+  Future<void> _onRefresh() async {
+    await _dataManager.refreshAllHoldingsForce(_fundService, null);
+    _updateCachedItems();
+  }
+
+  Color _getReturnColor(double? value) {
+    if (value == null) return CupertinoColors.systemGrey;
+    if (value > 0) return const Color(0xFF50B86C);
+    if (value < 0) return const Color(0xFFFF5E5E);
+    return CupertinoColors.systemGrey;
+  }
+
+  List<Color> _getRankGradient(int index) {
+    if (index == 0) {
+      return [const Color(0xFFFFD700), const Color(0xFFFFB347)];
+    } else if (index == 1) {
+      return [const Color(0xFFC0C0C0), const Color(0xFFA8A8A8)];
+    } else if (index == 2) {
+      return [const Color(0xFFCD7F32), const Color(0xFFB8860B)];
+    }
+    return [const Color(0xFFA8C4E0), CupertinoColors.white];
   }
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false,
-        middle: const Text('收益排行'),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () {
-            setState(() {
-              _showFilter = !_showFilter;
-            });
-          },
-          child: Icon(
-            _showFilter ? CupertinoIcons.slider_horizontal_3 : CupertinoIcons.slider_horizontal_3,
-            size: 22,
-          ),
-        ),
-      ),
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    const bottomNavBarHeight = 56.0;
+    final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
+
+    final hasData = _hasData;
+    final items = _cachedItems;
+
+    return Container(
+      color: backgroundColor,
       child: SafeArea(
-        child: Column(
-          children: [
-            if (_showFilter) _buildFilterBar(),
-            _buildSortBar(),
-            Expanded(
-              child: _sortedHoldings.isEmpty
-                  ? EmptyState(
-                icon: CupertinoIcons.star_slash,
-                title: '没有符合条件的数据',
-                message: '尝试调整筛选条件或添加更多持仓',
-                actionText: '重置筛选',
-                onAction: _resetFilters,
-              )
-                  : _buildHoldingsList(),
-            ),
-          ],
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollUpdateNotification) {
+              _onScrollUpdate(notification.metrics.pixels);
+            }
+            return false;
+          },
+          child: Column(
+            children: [
+              AdaptiveTopBar(
+                scrollOffset: _scrollOffset,
+                showRefresh: true,
+                showExpandCollapse: false,
+                showSearch: hasData,
+                showReset: false,
+                showFilter: hasData,
+                showSort: false,
+                isAllExpanded: false,
+                searchText: _searchText,
+                dataManager: _dataManager,
+                fundService: _fundService,
+                onRefresh: _onRefresh,
+                onSearchChanged: hasData ? _onSearchChanged : null,
+                onSearchClear: hasData ? _onSearchClear : null,
+                backgroundColor: Colors.transparent,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+                iconSize: 24,
+                buttonSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              if (_showFilter && hasData) _buildFilterBar(isDarkMode),
+              Expanded(
+                child: !hasData
+                    ? EmptyState(
+                  icon: CupertinoIcons.star,
+                  title: '点击开始添加吧～',
+                  message: '',
+                  titleFontWeight: FontWeight.normal,
+                  titleFontSize: 18,
+                  customButton: GlassButton(
+                    label: 'Go!',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                      );
+                    },
+                    isPrimary: false,
+                    width: null,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                  ),
+                )
+                    : Column(
+                  children: [
+                    _buildSortBar(isDarkMode),
+                    Expanded(
+                      child: items.isEmpty
+                          ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              CupertinoIcons.search,
+                              size: 48,
+                              color: isDarkMode ? CupertinoColors.white.withOpacity(0.3) : CupertinoColors.systemGrey.withOpacity(0.5),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '没有找到匹配的数据',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            GlassButton(
+                              label: '重置筛选',
+                              onPressed: _resetFilters,
+                              isPrimary: false,
+                              width: 120,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                          ],
+                        ),
+                      )
+                          : ListView.builder(
+                        padding: EdgeInsets.only(
+                          left: 12,
+                          right: 12,
+                          top: 8,
+                          bottom: totalBottomPadding,
+                        ),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          return _buildRankCard(items[index], index, isDarkMode);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFilterBar() {
+  Widget _buildFilterBar(bool isDarkMode) {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: CupertinoColors.systemGrey6,
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+          ),
+        ),
+      ),
       child: Column(
         children: [
           Row(
             children: [
               Expanded(
-                child: CupertinoTextField(
-                  placeholder: '基金代码/名称',
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: _buildFilterTextField(
+                  placeholder: '金额(万) 最低',
                   onChanged: (value) {
-                    setState(() {
-                      _fundCodeFilter = value;
-                    });
+                    _minAmount = double.tryParse(value);
+                    if (_minAmount != null) _minAmount = _minAmount! * 10000;
+                    _applyFilters();
                   },
+                  isDarkMode: isDarkMode,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
-                child: CupertinoTextField(
-                  placeholder: '最低金额(万)',
-                  keyboardType: TextInputType.number,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: _buildFilterTextField(
+                  placeholder: '金额(万) 最高',
                   onChanged: (value) {
-                    setState(() {
-                      _minAmount = double.tryParse(value);
-                      if (_minAmount != null) _minAmount = _minAmount! * 10000;
-                    });
+                    _maxAmount = double.tryParse(value);
+                    if (_maxAmount != null) _maxAmount = _maxAmount! * 10000;
+                    _applyFilters();
                   },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: CupertinoTextField(
-                  placeholder: '最高金额(万)',
-                  keyboardType: TextInputType.number,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  onChanged: (value) {
-                    setState(() {
-                      _maxAmount = double.tryParse(value);
-                      if (_maxAmount != null) _maxAmount = _maxAmount! * 10000;
-                    });
-                  },
+                  isDarkMode: isDarkMode,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: CupertinoTextField(
-                  placeholder: '最低收益率(%)',
-                  keyboardType: TextInputType.number,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: _buildFilterTextField(
+                  placeholder: '收益率(%) 最低',
                   onChanged: (value) {
-                    setState(() {
-                      _minProfitRate = double.tryParse(value);
-                    });
+                    _minProfitRate = double.tryParse(value);
+                    _applyFilters();
                   },
+                  isDarkMode: isDarkMode,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
-                child: CupertinoTextField(
-                  placeholder: '最高收益率(%)',
-                  keyboardType: TextInputType.number,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: _buildFilterTextField(
+                  placeholder: '收益率(%) 最高',
                   onChanged: (value) {
-                    setState(() {
-                      _maxProfitRate = double.tryParse(value);
-                    });
+                    _maxProfitRate = double.tryParse(value);
+                    _applyFilters();
                   },
+                  isDarkMode: isDarkMode,
                 ),
               ),
-              const SizedBox(width: 8),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                color: CupertinoColors.systemOrange,
-                borderRadius: BorderRadius.circular(8),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildFilterTextField(
+                  placeholder: '持有天数 最低',
+                  onChanged: (value) {
+                    _minDays = double.tryParse(value);
+                    _applyFilters();
+                  },
+                  isDarkMode: isDarkMode,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildFilterTextField(
+                  placeholder: '持有天数 最高',
+                  onChanged: (value) {
+                    _maxDays = double.tryParse(value);
+                    _applyFilters();
+                  },
+                  isDarkMode: isDarkMode,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              GlassButton(
+                label: '重置',
                 onPressed: _resetFilters,
-                child: const Text('重置', style: TextStyle(color: CupertinoColors.white)),
+                isPrimary: false,
+                width: 80,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               ),
             ],
           ),
@@ -266,167 +555,282 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     );
   }
 
-  Widget _buildSortBar() {
+  Widget _buildFilterTextField({
+    required String placeholder,
+    required Function(String) onChanged,
+    required bool isDarkMode,
+  }) {
+    return CupertinoTextField(
+      placeholder: placeholder,
+      placeholderStyle: TextStyle(
+        fontSize: 13,
+        color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      style: TextStyle(
+        fontSize: 14,
+        color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+      ),
+      keyboardType: TextInputType.number,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildSortBar(bool isDarkMode) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: SortType.values.map((type) {
-          final isSelected = _sortType == type;
-          return CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            borderRadius: BorderRadius.circular(20),
-            color: isSelected
-                ? CupertinoColors.systemBlue
-                : CupertinoColors.systemGrey5,
-            onPressed: () {
-              setState(() {
-                if (_sortType == type) {
-                  _isAscending = !_isAscending;
-                } else {
-                  _sortType = type;
-                  _isAscending = false;
-                }
-              });
-              _dataManager.addLog('排序方式切换为: ${type.label}${_isAscending ? "(升序)" : "(降序)"}', type: LogType.info);
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  type.label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                    color: isSelected ? CupertinoColors.white : CupertinoColors.black,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+        border: Border(
+          bottom: BorderSide(
+            color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+          ),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: SortType.values.map((type) {
+            final isSelected = _sortType == type;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => _toggleSort(type),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: isSelected
+                        ? LinearGradient(
+                      colors: [type.color, type.color.withOpacity(0.7)],
+                    )
+                        : null,
+                    color: isSelected ? null : (isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? Colors.transparent : (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        type.icon,
+                        size: 14,
+                        color: isSelected ? CupertinoColors.white : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        type.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          color: isSelected ? CupertinoColors.white : (isDarkMode ? CupertinoColors.white : CupertinoColors.black),
+                        ),
+                      ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          _isAscending ? CupertinoIcons.arrow_up : CupertinoIcons.arrow_down,
+                          size: 12,
+                          color: CupertinoColors.white,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                if (isSelected)
-                  Icon(
-                    _isAscending
-                        ? CupertinoIcons.arrow_up
-                        : CupertinoIcons.arrow_down,
-                    size: 12,
-                    color: CupertinoColors.white,
-                  ),
-              ],
-            ),
-          );
-        }).toList(),
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  Widget _buildHoldingsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _sortedHoldings.length,
-      itemBuilder: (context, index) {
-        final holding = _sortedHoldings[index];
-        final days = DateTime.now().difference(holding.purchaseDate).inDays;
-        final profit = _dataManager.calculateProfit(holding);
+  Widget _buildRankCard(_RankItem item, int index, bool isDarkMode) {
+    final holding = item.holding;
+    final profit = item.profit;
+    final days = item.daysHeld;
+    final gradient = _getRankGradient(index);
+    final isTop3 = index < 3;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
-            borderRadius: BorderRadius.circular(10),
+    final rankWidget = Container(
+      width: 36,
+      height: 36,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: isTop3 ? Colors.white.withOpacity(0.3) : (isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '${index + 1}',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: isTop3 ? CupertinoColors.white : (isDarkMode ? CupertinoColors.white : CupertinoColors.black),
+        ),
+      ),
+    );
+
+    final trailingWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${(holding.purchaseAmount / 10000).toStringAsFixed(2)}万',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
           ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '收益: ${profit.absolute >= 0 ? '+' : ''}${profit.absolute.toStringAsFixed(2)}',
+          style: TextStyle(
+            fontSize: 12,
+            color: _getReturnColor(profit.absolute),
+          ),
+        ),
+      ],
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          rankWidget,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GradientCard(
+                  title: holding.fundName,
+                  subtitle: holding.fundCode,
+                  gradient: gradient,
+                  isExpanded: false,
+                  isDarkMode: isDarkMode,
+                  onTap: () {},
+                  trailing: trailingWidget,
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: index < 3
-                          ? CupertinoColors.systemYellow
-                          : CupertinoColors.systemGrey4,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${index + 1}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: index < 3 ? CupertinoColors.black : CupertinoColors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          holding.fundName,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${holding.fundCode} | ${_dataManager.obscuredName(holding.clientName)}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: CupertinoColors.systemGrey,
-                          ),
+                      ],
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildInfoChip(
+                          label: '年化收益率',
+                          value: '${profit.annualized >= 0 ? '+' : ''}${profit.annualized.toStringAsFixed(2)}%',
+                          valueColor: _getReturnColor(profit.annualized),
+                          isDarkMode: isDarkMode,
+                        ),
+                        _buildInfoChip(
+                          label: '持有天数',
+                          value: '$days天',
+                          valueColor: null,
+                          isDarkMode: isDarkMode,
+                        ),
+                        _buildInfoChip(
+                          label: '客户',
+                          value: _dataManager.obscuredName(holding.clientName),
+                          valueColor: null,
+                          isDarkMode: isDarkMode,
+                        ),
+                        _buildInfoChip(
+                          label: '净值日期',
+                          value: _formatDate(holding.navDate),
+                          valueColor: null,
+                          isDarkMode: isDarkMode,
+                        ),
+                        _buildInfoChip(
+                          label: '当前净值',
+                          value: holding.currentNav.toStringAsFixed(4),
+                          valueColor: null,
+                          isDarkMode: isDarkMode,
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildInfoItem('金额', '${(holding.purchaseAmount / 10000).toStringAsFixed(2)}万'),
-                  _buildInfoItem('收益', '${profit.absolute >= 0 ? '+' : ''}${profit.absolute.toStringAsFixed(2)}'),
-                  _buildInfoItem('年化收益', '${profit.annualized >= 0 ? '+' : ''}${profit.annualized.toStringAsFixed(2)}%'),
-                  _buildInfoItem('持有', '${days}天'),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildInfoItem(String label, String value) {
-    final isProfit = label == '收益' || label == '年化收益';
-    Color? valueColor;
-    if (isProfit) {
-      final numValue = double.tryParse(value.replaceAll('%', '').replaceAll('+', ''));
-      if (numValue != null) {
-        valueColor = numValue >= 0
-            ? CupertinoColors.systemGreen
-            : CupertinoColors.systemRed;
-      }
-    }
-
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: valueColor,
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildInfoChip({
+    required String label,
+    required String value,
+    Color? valueColor,
+    required bool isDarkMode,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: valueColor ?? (isDarkMode ? CupertinoColors.white : CupertinoColors.black),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}';
+  }
+}
+
+class _RankItem {
+  final FundHolding holding;
+  final ProfitResult profit;
+  final int daysHeld;
+
+  _RankItem({
+    required this.holding,
+    required this.profit,
+    required this.daysHeld,
+  });
 }
