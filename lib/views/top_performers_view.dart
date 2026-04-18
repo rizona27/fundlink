@@ -30,6 +30,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   // 筛选输入框控制器
   final TextEditingController _minAmountController = TextEditingController();
   final TextEditingController _maxAmountController = TextEditingController();
+  final TextEditingController _minProfitController = TextEditingController();   // 新增：收益金额最低
+  final TextEditingController _maxProfitController = TextEditingController();   // 新增：收益金额最高
   final TextEditingController _minProfitRateController = TextEditingController();
   final TextEditingController _maxProfitRateController = TextEditingController();
   final TextEditingController _minDaysController = TextEditingController();
@@ -38,6 +40,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   // 实际筛选值（防抖后应用）
   double? _minAmount;
   double? _maxAmount;
+  double? _minProfit;      // 新增：收益金额最低
+  double? _maxProfit;      // 新增：收益金额最高
   double? _minProfitRate;
   double? _maxProfitRate;
   double? _minDays;
@@ -101,6 +105,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     _scrollController.dispose();
     _minAmountController.dispose();
     _maxAmountController.dispose();
+    _minProfitController.dispose();
+    _maxProfitController.dispose();
     _minProfitRateController.dispose();
     _maxProfitRateController.dispose();
     _minDaysController.dispose();
@@ -121,6 +127,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   void _applyFilters() {
     final minAmount = _minAmountController.text.isEmpty ? null : double.tryParse(_minAmountController.text);
     final maxAmount = _maxAmountController.text.isEmpty ? null : double.tryParse(_maxAmountController.text);
+    final minProfit = _minProfitController.text.isEmpty ? null : double.tryParse(_minProfitController.text);
+    final maxProfit = _maxProfitController.text.isEmpty ? null : double.tryParse(_maxProfitController.text);
     final minProfitRate = _minProfitRateController.text.isEmpty ? null : double.tryParse(_minProfitRateController.text);
     final maxProfitRate = _maxProfitRateController.text.isEmpty ? null : double.tryParse(_maxProfitRateController.text);
     final minDays = _minDaysController.text.isEmpty ? null : double.tryParse(_minDaysController.text);
@@ -129,6 +137,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     setState(() {
       _minAmount = minAmount != null ? minAmount * 10000 : null;
       _maxAmount = maxAmount != null ? maxAmount * 10000 : null;
+      _minProfit = minProfit != null ? minProfit * 10000 : null;
+      _maxProfit = maxProfit != null ? maxProfit * 10000 : null;
       _minProfitRate = minProfitRate;
       _maxProfitRate = maxProfitRate;
       _minDays = minDays;
@@ -152,12 +162,29 @@ class _TopPerformersViewState extends State<TopPerformersView> {
 
     var filtered = List<FundHolding>.from(validHoldings);
 
+    // 金额筛选
     if (_minAmount != null) {
       filtered = filtered.where((h) => h.purchaseAmount >= _minAmount!).toList();
     }
     if (_maxAmount != null) {
       filtered = filtered.where((h) => h.purchaseAmount <= _maxAmount!).toList();
     }
+
+    // 收益金额筛选
+    if (_minProfit != null) {
+      filtered = filtered.where((h) {
+        final profit = _dataManager.calculateProfit(h);
+        return profit.absolute >= _minProfit!;
+      }).toList();
+    }
+    if (_maxProfit != null) {
+      filtered = filtered.where((h) {
+        final profit = _dataManager.calculateProfit(h);
+        return profit.absolute <= _maxProfit!;
+      }).toList();
+    }
+
+    // 收益率筛选
     if (_minProfitRate != null) {
       filtered = filtered.where((h) {
         final profit = _dataManager.calculateProfit(h);
@@ -170,6 +197,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
         return profit.annualized <= _maxProfitRate!;
       }).toList();
     }
+
+    // 持有天数筛选
     if (_minDays != null) {
       filtered = filtered.where((h) {
         final days = DateTime.now().difference(h.purchaseDate).inDays;
@@ -240,6 +269,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   void _resetFilters() {
     _minAmountController.clear();
     _maxAmountController.clear();
+    _minProfitController.clear();
+    _maxProfitController.clear();
     _minProfitRateController.clear();
     _maxProfitRateController.clear();
     _minDaysController.clear();
@@ -248,6 +279,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     setState(() {
       _minAmount = null;
       _maxAmount = null;
+      _minProfit = null;
+      _maxProfit = null;
       _minProfitRate = null;
       _maxProfitRate = null;
       _minDays = null;
@@ -332,7 +365,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             children: [
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
-                showRefresh: false,  // 不显示刷新按钮
+                showRefresh: false,
                 showExpandCollapse: false,
                 showSearch: false,
                 showReset: _showFilter && hasData,
@@ -450,6 +483,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       ),
       child: Column(
         children: [
+          // 第一行：金额筛选
           Row(
             children: [
               Expanded(
@@ -472,6 +506,30 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             ],
           ),
           const SizedBox(height: 12),
+          // 第二行：收益金额筛选
+          Row(
+            children: [
+              Expanded(
+                child: _buildFilterTextField(
+                  placeholder: '收益(万) 最低',
+                  controller: _minProfitController,
+                  onChanged: (_) => _scheduleFilterApply(),
+                  isDarkMode: isDarkMode,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildFilterTextField(
+                  placeholder: '收益(万) 最高',
+                  controller: _maxProfitController,
+                  onChanged: (_) => _scheduleFilterApply(),
+                  isDarkMode: isDarkMode,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 第三行：收益率筛选
           Row(
             children: [
               Expanded(
@@ -494,6 +552,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             ],
           ),
           const SizedBox(height: 12),
+          // 第四行：持有天数筛选
           Row(
             children: [
               Expanded(
