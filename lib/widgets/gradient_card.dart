@@ -13,6 +13,7 @@ class GradientCard extends StatelessWidget {
   final Widget? trailing;
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
+  final String? debugSource;
 
   const GradientCard({
     super.key,
@@ -27,6 +28,7 @@ class GradientCard extends StatelessWidget {
     this.trailing,
     this.padding,
     this.borderRadius = 10,
+    this.debugSource,
   });
 
   Color _getCountColor(int? count) {
@@ -84,17 +86,12 @@ class GradientCard extends StatelessWidget {
     final shadowColor = _getShadowColor();
     final boxShadowColor = _getBoxShadowColor();
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-      margin: EdgeInsets.only(
-        left: 0,
-        right: isExpanded ? 16 : 0,
-      ),
+    return Container(
+      margin: EdgeInsets.zero,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: padding ?? const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          padding: padding ?? const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: gradientColors,
@@ -116,29 +113,34 @@ class GradientCard extends StatelessWidget {
             ],
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      color: textColor,
+                      height: 1.2,
                     ),
                     children: [
                       TextSpan(text: title),
                       if (clientId != null && clientId!.isNotEmpty)
                         TextSpan(
                           text: ' ($clientId)',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.normal,
                             color: CupertinoColors.systemGrey,
+                            height: 1.2,
                           ),
                         ),
                     ],
                   ),
                   overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  softWrap: false,
+                  strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
                 ),
               ),
               if (trailing != null)
@@ -152,6 +154,7 @@ class GradientCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: subTextColor,
+                        height: 1.2,
                       ),
                     ),
                     if (countValue != null) ...[
@@ -163,6 +166,7 @@ class GradientCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           fontStyle: FontStyle.italic,
                           color: countColor,
+                          height: 1.2,
                         ),
                       ),
                       Text(
@@ -170,6 +174,7 @@ class GradientCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           color: subTextColor,
+                          height: 1.2,
                         ),
                       ),
                     ],

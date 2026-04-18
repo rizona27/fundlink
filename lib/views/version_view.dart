@@ -55,27 +55,8 @@ class VersionView extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // 图标占位（后续可自定义替换）
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    const Color(0xFF6366F1),
-                                    const Color(0xFF8B5CF6),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                CupertinoIcons.chart_bar_fill,
-                                size: 24,
-                                color: CupertinoColors.white,
-                              ),
-                            ),
+                            // 使用生成的应用图标
+                            _buildAppIcon(isDarkMode),
                             const SizedBox(width: 12),
                             // 标题区域
                             Expanded(
@@ -203,6 +184,42 @@ class VersionView extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // 构建应用图标（使用生成的应用图标）
+  Widget _buildAppIcon(bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        'assets/icon/app_icon.png',
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          // 如果图标加载失败，显示渐变占位符
+          return Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF6366F1),
+                  Color(0xFF8B5CF6),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              CupertinoIcons.chart_bar_fill,
+              size: 24,
+              color: CupertinoColors.white,
+            ),
+          );
+        },
       ),
     );
   }

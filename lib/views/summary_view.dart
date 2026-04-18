@@ -446,11 +446,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         style: TextStyle(
           color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
           fontSize: 13,
+          height: 1.2,
         ),
       ));
       children.add(TextSpan(
         text: '($retStr)',
-        style: TextStyle(color: retColor, fontSize: 12),
+        style: TextStyle(color: retColor, fontSize: 12, height: 1.2),
       ));
       if (i < sorted.length - 1) {
         children.add(const TextSpan(text: '、'));
@@ -517,7 +518,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+            style: const TextStyle(fontSize: 11, color: CupertinoColors.systemGrey, height: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
@@ -526,6 +527,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: textColor,
+              height: 1.2,
             ),
           ),
         ],
@@ -648,27 +650,28 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                           final gszzl = cache['gszzl'] as double;
                           final changeColor = _getChangeColor(gszzl);
 
-                          trailing = RichText(
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: changeColor,
-                                  ),
+                          trailing = Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.2,
+                                  color: changeColor,
                                 ),
-                                TextSpan(
-                                  text: ' (${gsz.toStringAsFixed(4)})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal,
-                                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                                  ),
+                              ),
+                              Text(
+                                ' (${gsz.toStringAsFixed(4)})',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  height: 1.2,
+                                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           );
                         } else {
                           trailing = Text(
@@ -676,6 +679,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
+                              height: 1.2,
                               color: isDark ? CupertinoColors.white : CupertinoColors.black,
                             ),
                           );
@@ -691,6 +695,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            height: 1.2,
                             color: valueColor,
                           ),
                         );
@@ -703,6 +708,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             '持有人数: ',
                             style: TextStyle(
                               fontSize: 12,
+                              height: 1.2,
                               color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                             ),
                           ),
@@ -712,6 +718,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               fontStyle: FontStyle.italic,
+                              height: 1.2,
                               color: _colorForHoldingCount(holderCount),
                             ),
                           ),
@@ -719,6 +726,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             '人',
                             style: TextStyle(
                               fontSize: 12,
+                              height: 1.2,
                               color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                             ),
                           ),
@@ -726,32 +734,29 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       );
                     }
 
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      child: Column(
-                        children: [
-                          GradientCard(
-                            title: first.fundName,
-                            clientId: fundCode,
-                            gradient: gradient,
-                            isExpanded: isExpanded,
-                            onTap: () => _toggleExpand(fundCode),
-                            isDarkMode: isDark,
-                            trailing: trailing,
-                          ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOutCubic,
-                            child: isExpanded
-                                ? ClipRect(
-                              child: _buildExpandedContent(first, holdings, isDark),
-                            )
-                                : const SizedBox.shrink(),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ),
+                    return Column(
+                      children: [
+                        GradientCard(
+                          title: first.fundName,
+                          clientId: fundCode,
+                          gradient: gradient,
+                          isExpanded: isExpanded,
+                          onTap: () => _toggleExpand(fundCode),
+                          isDarkMode: isDark,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                          trailing: trailing,
+                        ),
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          child: isExpanded
+                              ? ClipRect(
+                            child: _buildExpandedContent(first, holdings, isDark),
+                          )
+                              : const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                     );
                   },
                 ),

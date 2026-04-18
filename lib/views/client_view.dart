@@ -13,6 +13,21 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import 'add_holding_view.dart';
 
+// 将 _ClientGroup 移到类外部
+class _ClientGroup {
+  final String key;
+  final String displayName;
+  final String clientId;
+  final List<FundHolding> holdings;
+
+  _ClientGroup({
+    required this.key,
+    required this.displayName,
+    required this.clientId,
+    required this.holdings,
+  });
+}
+
 class ClientView extends StatefulWidget {
   const ClientView({super.key});
 
@@ -50,6 +65,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   Future<void> _checkAndFixGarbledFundNames() async {
     if (_autoFixTriggered) return;
     await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+
     bool hasGarbled = false;
     for (final holding in _dataManager.holdings) {
       final name = holding.fundName;
@@ -100,7 +117,11 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _dataManager.addListener(_onDataManagerChanged);
   }
 
-  void _onDataManagerChanged() => setState(() {});
+  void _onDataManagerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   List<FundHolding> get _filteredHoldings {
     if (_searchText.isEmpty) return _dataManager.holdings;
@@ -117,24 +138,41 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     return _filteredHoldings.where((h) => h.isPinned).toList();
   }
 
-  Map<String, List<FundHolding>> get _groupedHoldings {
-    final map = <String, List<FundHolding>>{};
+  // 修复：使用 clientId 作为分组 key，而不是模糊后的名称
+  List<_ClientGroup> get _clientGroups {
+    final map = <String, _ClientGroup>{};
     for (final holding in _filteredHoldings) {
-      final name = _dataManager.obscuredName(holding.clientName);
-      map.putIfAbsent(name, () => []).add(holding);
-    }
-    return map;
-  }
+      final key = holding.clientId.isNotEmpty ? holding.clientId : holding.clientName;
 
-  List<String> get _sortedClientNames {
-    final names = _groupedHoldings.keys.toList();
-    names.sort();
-    return names;
+      if (!map.containsKey(key)) {
+        map[key] = _ClientGroup(
+          key: key,
+          displayName: _dataManager.obscuredName(holding.clientName),
+          clientId: holding.clientId,
+          holdings: [],
+        );
+      }
+      map[key]!.holdings.add(holding);
+    }
+
+    var groups = map.values.toList();
+    groups.sort((a, b) => a.displayName.compareTo(b.displayName));
+    return groups;
   }
 
   bool get _areAnyCardsExpanded => _expandedClients.isNotEmpty;
-  void _expandAll() => setState(() => _expandedClients.addAll(_sortedClientNames));
-  void _collapseAll() => setState(() => _expandedClients.clear());
+
+  void _expandAll() {
+    setState(() {
+      _expandedClients.addAll(_clientGroups.map((g) => g.key));
+    });
+  }
+
+  void _collapseAll() {
+    setState(() {
+      _expandedClients.clear();
+    });
+  }
 
   List<Color> _getGradientForOriginalName(String originalName) {
     int hash = 0;
@@ -196,7 +234,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
 
     final hasPinned = _filteredPinnedHoldings.isNotEmpty;
-    final hasGroups = _groupedHoldings.isNotEmpty;
+    final groups = _clientGroups;
+    final hasGroups = groups.isNotEmpty;
     final hasData = hasPinned || hasGroups;
     final enableButtons = hasData;
 
@@ -290,6 +329,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                         isExpanded: _isPinnedSectionExpanded,
                         isDarkMode: isDarkMode,
                         onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -297,6 +337,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                               '数量: ',
                               style: TextStyle(
                                 fontSize: 12,
+                                height: 1.2,
                                 color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                               ),
                             ),
@@ -306,6 +347,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 fontStyle: FontStyle.italic,
+                                height: 1.2,
                                 color: _colorForHoldingCount(_filteredPinnedHoldings.length),
                               ),
                             ),
@@ -313,6 +355,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                               '支',
                               style: TextStyle(
                                 fontSize: 12,
+                                height: 1.2,
                                 color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                               ),
                             ),
@@ -330,7 +373,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                       const SizedBox(height: 16),
                     ],
                     if (hasGroups) ...[
-                      ..._buildClientGroups(),
+                      ..._buildClientGroups(groups),
                     ],
                   ],
                 ),
@@ -342,14 +385,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     );
   }
 
-  List<Widget> _buildClientGroups() {
-    final groups = <Widget>[];
-    for (int i = 0; i < _sortedClientNames.length; i++) {
-      final name = _sortedClientNames[i];
-      final holdings = _groupedHoldings[name];
-      if (holdings == null || holdings.isEmpty) continue;
-      final isExpanded = _expandedClients.contains(name);
-      final gradient = _getGradientForOriginalName(holdings.first.clientName);
+  List<Widget> _buildClientGroups(List<_ClientGroup> groups) {
+    final result = <Widget>[];
+    for (int i = 0; i < groups.length; i++) {
+      final group = groups[i];
+      final isExpanded = _expandedClients.contains(group.key);
+      final gradient = _getGradientForOriginalName(group.holdings.first.clientName);
       final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
       final trailing = Row(
@@ -359,43 +400,53 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
             '持仓数: ',
             style: TextStyle(
               fontSize: 12,
+              height: 1.2,
               color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
             ),
           ),
           Text(
-            '${holdings.length}',
+            '${group.holdings.length}',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
               fontStyle: FontStyle.italic,
-              color: _colorForHoldingCount(holdings.length),
+              height: 1.2,
+              color: _colorForHoldingCount(group.holdings.length),
             ),
           ),
           Text(
             '支',
             style: TextStyle(
               fontSize: 12,
+              height: 1.2,
               color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
             ),
           ),
         ],
       );
 
-      groups.add(
+      result.add(
         RepaintBoundary(
-          key: ValueKey('repaint_$name'),
+          key: ValueKey('repaint_${group.key}'),
           child: Container(
-            key: ValueKey('client_$name'),
-            margin: EdgeInsets.only(bottom: i == _sortedClientNames.length - 1 ? 0 : 8),
+            key: ValueKey('client_${group.key}'),
+            margin: EdgeInsets.only(bottom: i == groups.length - 1 ? 0 : 8),
             child: Column(
               children: [
                 GradientCard(
-                  title: name,
-                  clientId: holdings.first.clientId,
+                  title: group.displayName,
+                  clientId: group.clientId.isNotEmpty ? group.clientId : null,
                   gradient: gradient,
                   isExpanded: isExpanded,
                   isDarkMode: isDarkMode,
-                  onTap: () => setState(() => isExpanded ? _expandedClients.remove(name) : _expandedClients.add(name)),
+                  onTap: () => setState(() {
+                    if (isExpanded) {
+                      _expandedClients.remove(group.key);
+                    } else {
+                      _expandedClients.add(group.key);
+                    }
+                  }),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                   trailing: trailing,
                 ),
                 AnimatedSize(
@@ -404,7 +455,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   child: isExpanded
                       ? Container(
                     margin: const EdgeInsets.only(top: 8),
-                    child: Column(children: _buildAnimatedFundCards(holdings)),
+                    child: Column(children: _buildAnimatedFundCards(group.holdings)),
                   )
                       : const SizedBox.shrink(),
                 ),
@@ -414,7 +465,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         ),
       );
     }
-    return groups;
+    return result;
   }
 
   List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings) {

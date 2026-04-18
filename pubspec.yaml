@@ -21,6 +21,42 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1  # 添加图标生成工具
 
 flutter:
   uses-material-design: true
+
+  # 添加资源目录
+  assets:
+    - assets/icon/
+
+# 图标配置
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+
+  # Android 自适应图标
+  adaptive_icon_background: "#6366F1"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+
+  # iOS 配置
+  remove_alpha_ios: true
+
+  # Web 配置
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#6366F1"
+    theme_color: "#6366F1"
+
+  # macOS 桌面端（可选）
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+
+  # Windows 桌面端（可选）
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 48
