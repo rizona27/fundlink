@@ -214,7 +214,7 @@ class AdaptiveTopBar extends StatefulWidget {
   final int? valuationRefreshIntervalSeconds;
   final VoidCallback? onValuationRefresh;
   final VoidCallback? onValuationRefreshIntervalChanged;
-  final String? valuationUpdateTime;  // 估值更新时间
+  final String? valuationUpdateTime;
 
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
@@ -547,7 +547,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       );
     }
 
-    // 估值定时刷新按钮（独立于基金刷新，只在最新估值排序时显示）
+    // 估值定时刷新按钮
     if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
       children.add(CountdownRefreshButton(
         onRefresh: _onValuationRefresh,
@@ -560,21 +560,64 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         children.add(const SizedBox(width: 4));
       }
     }
+
+    // 重置按钮 - 淡入淡出动画
     if (widget.showReset) {
-      children.add(_buildResetButton());
+      children.add(
+        AnimatedOpacity(
+          opacity: widget.showReset ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          child: _buildResetButton(),
+        ),
+      );
     }
+
+    // 筛选按钮 - 淡入淡出动画
     if (widget.showFilter) {
-      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
-      children.add(_buildFilterButton());
+      if (children.isNotEmpty && !widget.showReset) {
+        children.add(const SizedBox(width: 4));
+      }
+      children.add(
+        AnimatedOpacity(
+          opacity: widget.showFilter ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          child: _buildFilterButton(),
+        ),
+      );
     }
+
+    // 搜索按钮 - 淡入淡出动画
     if (widget.showSearch) {
-      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
-      children.add(_buildSearchButton());
+      if (children.isNotEmpty && !widget.showReset && !widget.showFilter) {
+        children.add(const SizedBox(width: 4));
+      }
+      children.add(
+        AnimatedOpacity(
+          opacity: widget.showSearch ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          child: _buildSearchButton(),
+        ),
+      );
     }
+
+    // 展开/折叠按钮 - 淡入淡出动画
     if (widget.showExpandCollapse) {
-      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
-      children.add(_buildExpandCollapseButton());
+      if (children.isNotEmpty && !widget.showReset && !widget.showFilter && !widget.showSearch) {
+        children.add(const SizedBox(width: 4));
+      }
+      children.add(
+        AnimatedOpacity(
+          opacity: widget.showExpandCollapse ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          child: _buildExpandCollapseButton(),
+        ),
+      );
     }
+
     if (children.isEmpty) return const SizedBox.shrink();
     return _wrapWithGlass(Row(mainAxisSize: MainAxisSize.min, children: children), disabled: !_hasData);
   }
