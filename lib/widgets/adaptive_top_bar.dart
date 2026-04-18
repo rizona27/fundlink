@@ -273,6 +273,20 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   bool get _hasData => widget.dataManager?.holdings.isNotEmpty ?? false;
 
+  // 检查是否有需要刷新的基金（缺失收益率数据）
+  bool get _hasMissingReturnData {
+    final holdings = widget.dataManager?.holdings ?? [];
+    for (final holding in holdings) {
+      if (holding.navReturn1m == null &&
+          holding.navReturn3m == null &&
+          holding.navReturn6m == null &&
+          holding.navReturn1y == null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -367,18 +381,26 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
+    // 检查是否有缺失收益率数据的基金
+    if (!_hasMissingReturnData) {
+      context.showToast('所有基金已有收益率数据，无需刷新', duration: const Duration(seconds: 2));
+      widget.dataManager?.addLog('手动刷新: 所有基金已有收益率数据，跳过刷新', type: LogType.info);
+      return;
+    }
+
     setState(() => _isRefreshing = true);
-    context.showToast('正在刷新数据...', duration: const Duration(seconds: 1));
+    context.showToast('正在刷新缺失数据的基金...', duration: const Duration(seconds: 1));
 
     try {
       await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
       if (mounted) {
         context.showToast('刷新完成');
-        widget.dataManager?.addLog('手动刷新数据', type: LogType.info);
+        widget.dataManager?.addLog('手动刷新数据完成', type: LogType.success);
       }
     } catch (e) {
       if (mounted) {
         context.showToast('刷新失败: $e');
+        widget.dataManager?.addLog('手动刷新失败: $e', type: LogType.error);
       }
     } finally {
       if (mounted) {
@@ -399,11 +421,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
       if (mounted) {
         context.showToast('强制刷新完成');
-        widget.dataManager?.addLog('强制刷新所有基金数据', type: LogType.info);
+        widget.dataManager?.addLog('强制刷新所有基金数据完成', type: LogType.success);
       }
     } catch (e) {
       if (mounted) {
         context.showToast('强制刷新失败: $e');
+        widget.dataManager?.addLog('强制刷新失败: $e', type: LogType.error);
       }
     } finally {
       if (mounted) {
@@ -566,7 +589,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           ],
         ),
         child: Icon(
-          CupertinoIcons.clear_circled,  // 改为清除图标
+          CupertinoIcons.delete,  // 改为垃圾桶图标
           size: widget.iconSize,
           color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
         ),
