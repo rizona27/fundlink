@@ -2,31 +2,30 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'dart:ui' show ImageFilter;
-import 'refresh_button.dart';
 import 'search.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
+import 'toast.dart';
 
 // 排序循环类型枚举
 enum SortCycleType {
-  fundReturns,  // 基金收益率循环: none -> navReturn1m -> navReturn3m -> navReturn6m -> navReturn1y -> none
-  holdings,     // 持仓排行循环: none -> amount -> profit -> profitRate -> days -> none
+  fundReturns,
+  holdings,
 }
 
 // 排序字段枚举
 enum SortKey {
   none,
-  // 基金收益率相关（用于 SummaryView）
   navReturn1m,
   navReturn3m,
   navReturn6m,
   navReturn1y,
-  // 收益排行相关（用于 TopPerformersView）
-  amount,      // 金额
-  profit,      // 收益
-  profitRate,  // 收益率
-  days,        // 天数
+  amount,
+  profit,
+  profitRate,
+  days,
 }
 
 extension SortKeyExtension on SortKey {
@@ -34,7 +33,6 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return '无排序';
-    // 基金收益率
       case SortKey.navReturn1m:
         return '近1月';
       case SortKey.navReturn3m:
@@ -43,7 +41,6 @@ extension SortKeyExtension on SortKey {
         return '近6月';
       case SortKey.navReturn1y:
         return '近1年';
-    // 收益排行
       case SortKey.amount:
         return '金额';
       case SortKey.profit:
@@ -59,7 +56,6 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return CupertinoColors.systemGrey;
-    // 基金收益率
       case SortKey.navReturn1m:
         return CupertinoColors.systemBlue;
       case SortKey.navReturn3m:
@@ -68,7 +64,6 @@ extension SortKeyExtension on SortKey {
         return CupertinoColors.systemOrange;
       case SortKey.navReturn1y:
         return CupertinoColors.systemRed;
-    // 收益排行
       case SortKey.amount:
         return const Color(0xFF4A90D9);
       case SortKey.profit:
@@ -84,13 +79,11 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return CupertinoIcons.line_horizontal_3_decrease;
-    // 基金收益率
       case SortKey.navReturn1m:
       case SortKey.navReturn3m:
       case SortKey.navReturn6m:
       case SortKey.navReturn1y:
         return CupertinoIcons.chart_bar;
-    // 收益排行
       case SortKey.amount:
         return CupertinoIcons.money_dollar;
       case SortKey.profit:
@@ -102,7 +95,6 @@ extension SortKeyExtension on SortKey {
     }
   }
 
-  // 根据循环类型获取下一个排序值
   SortKey next({SortCycleType cycleType = SortCycleType.fundReturns}) {
     switch (cycleType) {
       case SortCycleType.fundReturns:
@@ -140,7 +132,6 @@ extension SortKeyExtension on SortKey {
 
   double? getValue(FundHolding holding) {
     switch (this) {
-    // 基金收益率
       case SortKey.navReturn1m:
         return holding.navReturn1m;
       case SortKey.navReturn3m:
@@ -149,7 +140,6 @@ extension SortKeyExtension on SortKey {
         return holding.navReturn6m;
       case SortKey.navReturn1y:
         return holding.navReturn1y;
-    // 收益排行
       case SortKey.amount:
         return holding.purchaseAmount;
       case SortKey.profit:
@@ -197,7 +187,7 @@ class AdaptiveTopBar extends StatefulWidget {
 
   final SortKey sortKey;
   final SortOrder sortOrder;
-  final SortCycleType sortCycleType;  // 新增：排序循环类型
+  final SortCycleType sortCycleType;
   final ValueChanged<SortKey>? onSortKeyChanged;
   final ValueChanged<SortOrder>? onSortOrderChanged;
 
@@ -223,12 +213,6 @@ class AdaptiveTopBar extends StatefulWidget {
   final Duration animationDuration;
   final Curve animationCurve;
 
-  final Widget Function(BuildContext context, Widget defaultButton)? refreshButtonBuilder;
-  final Widget Function(BuildContext context, Widget defaultButton)? expandCollapseButtonBuilder;
-  final Widget Function(BuildContext context, Widget defaultButton)? searchButtonBuilder;
-  final Widget Function(BuildContext context, Widget defaultButton)? resetButtonBuilder;
-  final Widget Function(BuildContext context, Widget defaultButton)? filterButtonBuilder;
-
   const AdaptiveTopBar({
     super.key,
     required this.scrollOffset,
@@ -244,7 +228,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.isSearchVisible,
     this.sortKey = SortKey.none,
     this.sortOrder = SortOrder.descending,
-    this.sortCycleType = SortCycleType.fundReturns,  // 默认基金收益率循环
+    this.sortCycleType = SortCycleType.fundReturns,
     this.onSortKeyChanged,
     this.onSortOrderChanged,
     this.dataManager,
@@ -266,11 +250,6 @@ class AdaptiveTopBar extends StatefulWidget {
     this.minHeight = 0,
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOutCubic,
-    this.refreshButtonBuilder,
-    this.expandCollapseButtonBuilder,
-    this.searchButtonBuilder,
-    this.resetButtonBuilder,
-    this.filterButtonBuilder,
   });
 
   @override
@@ -285,13 +264,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   late AnimationController _hideController;
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
+  bool _isRefreshing = false;
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
   String get _currentSearchText => _externallyControlSearchText ? widget.searchText! : _internalSearchText;
   bool get _currentSearchVisible => _externallyControlSearchVisible ? widget.isSearchVisible! : _internalSearchVisible;
 
-  bool get _useBuiltInRefresh => widget.dataManager != null && widget.fundService != null;
   bool get _hasData => widget.dataManager?.holdings.isNotEmpty ?? false;
 
   @override
@@ -383,6 +362,56 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
+  // 普通刷新
+  Future<void> _onRefresh() async {
+    if (_isRefreshing) return;
+    if (widget.dataManager == null || widget.fundService == null) return;
+
+    setState(() => _isRefreshing = true);
+    context.showToast('正在刷新数据...', duration: const Duration(seconds: 1));
+
+    try {
+      await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
+      if (mounted) {
+        context.showToast('刷新完成');
+        widget.dataManager?.addLog('手动刷新数据', type: LogType.info);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('刷新失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
+  // 强制刷新（长按）
+  Future<void> _onLongPressRefresh() async {
+    if (_isRefreshing) return;
+    if (widget.dataManager == null || widget.fundService == null) return;
+
+    setState(() => _isRefreshing = true);
+    context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
+
+    try {
+      await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
+      if (mounted) {
+        context.showToast('强制刷新完成');
+        widget.dataManager?.addLog('强制刷新所有基金数据', type: LogType.info);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('强制刷新失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
   Color _getBackgroundColor(double progress, bool isDarkMode) {
     if (progress >= 0.95) {
       return isDarkMode
@@ -397,7 +426,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 磨玻璃容器包装（支持禁用状态）
+  // 磨玻璃容器包装
   Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
     if (!enabled) return child;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -442,7 +471,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
     if (widget.showRefresh) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_wrapWithGlass(_buildRefreshButton(), disabled: !_hasData));
+      children.add(_buildRefreshButton());
     }
     if (widget.showSort) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
@@ -451,35 +480,22 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return children;
   }
 
-  // 将搜索和折叠按钮合并为一个磨玻璃容器
   Widget _buildRightGroup() {
     final children = <Widget>[];
+    if (widget.showReset) {
+      children.add(_buildResetButton());
+    }
+    if (widget.showFilter) {
+      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
+      children.add(_buildFilterButton());
+    }
     if (widget.showSearch) {
-      children.add(
-        CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          onPressed: _hasData ? () => _setSearchVisible(!_currentSearchVisible) : null,
-          child: Icon(
-            _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
-            size: widget.iconSize,
-            color: _hasData ? widget.iconColor : CupertinoColors.systemGrey3,
-          ),
-        ),
-      );
+      if (children.isNotEmpty) children.add(const SizedBox(width: 4));
+      children.add(_buildSearchButton());
     }
     if (widget.showExpandCollapse) {
       if (children.isNotEmpty) children.add(const SizedBox(width: 4));
-      children.add(
-        CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          onPressed: _hasData ? widget.onToggleExpandAll : null,
-          child: Icon(
-            widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
-            size: widget.iconSize,
-            color: _hasData ? widget.iconColor : CupertinoColors.systemGrey3,
-          ),
-        ),
-      );
+      children.add(_buildExpandCollapseButton());
     }
     if (children.isEmpty) return const SizedBox.shrink();
     return _wrapWithGlass(Row(mainAxisSize: MainAxisSize.min, children: children), disabled: !_hasData);
@@ -488,52 +504,159 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   List<Widget> _buildRightChildren() {
     final children = <Widget>[];
     children.add(_buildRightGroup());
-    if (widget.showReset) {
-      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_wrapWithGlass(
-        _buildIconButton(
-          icon: CupertinoIcons.refresh_thin,
-          onPressed: _onReset,
-        ),
-        disabled: !_hasData,
-      ));
-    }
-    if (widget.showFilter) {
-      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_wrapWithGlass(
-        _buildIconButton(
-          icon: CupertinoIcons.slider_horizontal_3,
-          onPressed: widget.onFilter,
-        ),
-        disabled: !_hasData,
-      ));
-    }
     return children;
   }
 
   Widget _buildRefreshButton() {
     final hasData = _hasData;
-
-    if (widget.refreshButtonBuilder != null) {
-      final placeholder = Container();
-      return widget.refreshButtonBuilder!(context, placeholder);
-    }
-
-    if (_useBuiltInRefresh) {
-      return RefreshButton(
-        dataManager: widget.dataManager!,
-        fundService: widget.fundService!,
-        maxConcurrentRequests: 3,
-      );
-    }
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
     return GestureDetector(
-      onLongPress: hasData ? widget.onLongPressRefresh : null,
-      child: CupertinoButton(
+      onTap: hasData ? _onRefresh : null,
+      onLongPress: hasData ? _onLongPressRefresh : null,
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        onPressed: hasData ? widget.onRefresh : null,
-        child: Icon(
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: _isRefreshing
+            ? SizedBox(
+          width: widget.iconSize,
+          height: widget.iconSize,
+          child: const CupertinoActivityIndicator(),
+        )
+            : Icon(
           CupertinoIcons.arrow_clockwise,
+          size: widget.iconSize,
+          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetButton() {
+    final hasData = _hasData;
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    return GestureDetector(
+      onTap: hasData ? widget.onReset : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          CupertinoIcons.refresh_thin,
+          size: widget.iconSize,
+          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterButton() {
+    final hasData = _hasData;
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    return GestureDetector(
+      onTap: hasData ? widget.onFilter : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          CupertinoIcons.slider_horizontal_3,
+          size: widget.iconSize,
+          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchButton() {
+    final hasData = _hasData;
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    return GestureDetector(
+      onTap: hasData ? () => _setSearchVisible(!_currentSearchVisible) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
+          size: widget.iconSize,
+          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandCollapseButton() {
+    final hasData = _hasData;
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    return GestureDetector(
+      onTap: hasData ? widget.onToggleExpandAll : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
           size: widget.iconSize,
           color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
         ),
@@ -612,22 +735,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildIconButton({
-    required IconData icon,
-    required VoidCallback? onPressed,
-    bool isActive = false,
-  }) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      onPressed: onPressed,
-      child: Icon(
-        icon,
-        size: widget.iconSize,
-        color: isActive ? CupertinoColors.activeBlue : widget.iconColor,
       ),
     );
   }
