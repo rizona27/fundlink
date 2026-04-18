@@ -566,7 +566,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           ],
         ),
         child: Icon(
-          CupertinoIcons.refresh_thin,
+          CupertinoIcons.clear_circled,  // 改为清除图标
           size: widget.iconSize,
           color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
         ),

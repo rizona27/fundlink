@@ -283,24 +283,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     });
   }
 
-  // 普通刷新
-  Future<void> _onRefresh() async {
-    context.showToast('正在刷新数据...', duration: const Duration(seconds: 1));
-    await _dataManager.refreshAllHoldingsForce(_fundService, null);
-    _updateCachedItems();
-    context.showToast('刷新完成');
-    _dataManager.addLog('手动刷新数据', type: LogType.info);
-  }
-
-  // 强制刷新（长按）
-  Future<void> _onLongPressRefresh() async {
-    context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
-    await _dataManager.refreshAllHoldingsForce(_fundService, null);
-    _updateCachedItems();
-    context.showToast('强制刷新完成');
-    _dataManager.addLog('强制刷新所有基金数据', type: LogType.info);
-  }
-
   Color _getValueColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
     if (value > 0) return const Color(0xFFFF3B30);
@@ -350,7 +332,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             children: [
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
-                showRefresh: hasData,
+                showRefresh: false,  // 不显示刷新按钮
                 showExpandCollapse: false,
                 showSearch: false,
                 showReset: _showFilter && hasData,
@@ -365,8 +347,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                 onSortOrderChanged: hasData ? _onSortOrderChanged : null,
                 dataManager: _dataManager,
                 fundService: _fundService,
-                onRefresh: _onRefresh,
-                onLongPressRefresh: _onLongPressRefresh,
                 onReset: _resetFilters,
                 onFilter: _toggleFilter,
                 backgroundColor: Colors.transparent,
