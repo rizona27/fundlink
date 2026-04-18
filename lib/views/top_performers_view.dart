@@ -58,7 +58,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   final ScrollController _scrollController = ScrollController();
 
   static const Duration _debounceDelay = Duration(milliseconds: 500);
-  static const Duration _animationDuration = Duration(milliseconds: 300);
+  static const Duration _animationDuration = Duration(milliseconds: 400);
+  static const Curve _animationCurve = Curves.easeOutCubic;
 
   @override
   void initState() {
@@ -294,7 +295,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       }
     });
     _updateCachedItems();
-    // 添加排序切换 Toast
     String sortType = key.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
@@ -306,7 +306,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       _sortOrder = order;
     });
     _updateCachedItems();
-    // 添加排序顺序切换 Toast
     String sortType = _sortKey.displayName;
     String orderText = order == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType} $orderText');
@@ -342,10 +341,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
         : _cachedItems[index + 1].profit.absolute;
 
     if (_sortOrder == SortOrder.descending) {
-      // 降序：正收益和负收益的交界处显示分割线（正→负）
       return currentProfit >= 0 && nextProfit < 0;
     } else {
-      // 升序：负收益和正收益的交界处显示分割线（负→正）
       return currentProfit < 0 && nextProfit >= 0;
     }
   }
@@ -398,79 +395,74 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-              AnimatedOpacity(
-                opacity: _showFilter && hasData ? 1.0 : 0.0,
+              // 使用 AnimatedSize + SizeTransition 实现柔和动画（类似 ClientView）
+              AnimatedSize(
                 duration: _animationDuration,
-                curve: Curves.easeInOutCubic,
+                curve: _animationCurve,
                 child: _showFilter && hasData ? _buildFilterBar(isDarkMode) : const SizedBox.shrink(),
               ),
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: _animationDuration,
-                  switchInCurve: Curves.easeInOutCubic,
-                  switchOutCurve: Curves.easeInOutCubic,
-                  child: !hasData
-                      ? EmptyState(
-                    key: const ValueKey('empty'),
-                    icon: CupertinoIcons.star,
-                    title: '点击开始添加吧～',
-                    message: '',
-                    titleFontWeight: FontWeight.normal,
-                    titleFontSize: 18,
-                    customButton: GlassButton(
-                      label: 'Go!',
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute(builder: (_) => const AddHoldingView()),
-                        );
-                      },
-                      isPrimary: false,
-                      width: null,
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                    ),
-                  )
-                      : items.isEmpty
-                      ? Center(
-                    key: const ValueKey('no_results'),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          CupertinoIcons.slider_horizontal_3,
-                          size: 48,
-                          color: isDarkMode
-                              ? CupertinoColors.white.withOpacity(0.3)
-                              : CupertinoColors.systemGrey.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '没有找到匹配的数据',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isDarkMode
-                                ? CupertinoColors.white.withOpacity(0.5)
-                                : CupertinoColors.systemGrey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                      : Column(
-                    key: const ValueKey('results'),
+                child: !hasData
+                    ? EmptyState(
+                  key: const ValueKey('empty'),
+                  icon: CupertinoIcons.star,
+                  title: '点击开始添加吧～',
+                  message: '',
+                  titleFontWeight: FontWeight.normal,
+                  titleFontSize: 18,
+                  customButton: GlassButton(
+                    label: 'Go!',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                      );
+                    },
+                    isPrimary: false,
+                    width: null,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                  ),
+                )
+                    : items.isEmpty
+                    ? Center(
+                  key: const ValueKey('no_results'),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildHeaderRow(isDarkMode),
-                      Expanded(
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: EdgeInsets.only(bottom: totalBottomPadding),
-                          itemCount: items.length,
-                          itemBuilder: (context, index) {
-                            return _buildHoldingRow(items[index], index, isDarkMode);
-                          },
+                      Icon(
+                        CupertinoIcons.slider_horizontal_3,
+                        size: 48,
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.3)
+                            : CupertinoColors.systemGrey.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '没有找到匹配的数据',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDarkMode
+                              ? CupertinoColors.white.withOpacity(0.5)
+                              : CupertinoColors.systemGrey,
                         ),
                       ),
                     ],
                   ),
+                )
+                    : Column(
+                  key: const ValueKey('results'),
+                  children: [
+                    _buildHeaderRow(isDarkMode),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: EdgeInsets.only(bottom: totalBottomPadding),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          return _buildHoldingRow(items[index], index, isDarkMode);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
