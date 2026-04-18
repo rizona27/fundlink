@@ -8,13 +8,25 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 
+// 排序循环类型枚举
+enum SortCycleType {
+  fundReturns,  // 基金收益率循环: none -> navReturn1m -> navReturn3m -> navReturn6m -> navReturn1y -> none
+  holdings,     // 持仓排行循环: none -> amount -> profit -> profitRate -> days -> none
+}
+
 // 排序字段枚举
 enum SortKey {
   none,
+  // 基金收益率相关（用于 SummaryView）
   navReturn1m,
   navReturn3m,
   navReturn6m,
   navReturn1y,
+  // 收益排行相关（用于 TopPerformersView）
+  amount,      // 金额
+  profit,      // 收益
+  profitRate,  // 收益率
+  days,        // 天数
 }
 
 extension SortKeyExtension on SortKey {
@@ -22,6 +34,7 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return '无排序';
+    // 基金收益率
       case SortKey.navReturn1m:
         return '近1月';
       case SortKey.navReturn3m:
@@ -30,6 +43,15 @@ extension SortKeyExtension on SortKey {
         return '近6月';
       case SortKey.navReturn1y:
         return '近1年';
+    // 收益排行
+      case SortKey.amount:
+        return '金额';
+      case SortKey.profit:
+        return '收益';
+      case SortKey.profitRate:
+        return '收益率';
+      case SortKey.days:
+        return '天数';
     }
   }
 
@@ -37,6 +59,7 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return CupertinoColors.systemGrey;
+    // 基金收益率
       case SortKey.navReturn1m:
         return CupertinoColors.systemBlue;
       case SortKey.navReturn3m:
@@ -45,26 +68,79 @@ extension SortKeyExtension on SortKey {
         return CupertinoColors.systemOrange;
       case SortKey.navReturn1y:
         return CupertinoColors.systemRed;
+    // 收益排行
+      case SortKey.amount:
+        return const Color(0xFF4A90D9);
+      case SortKey.profit:
+        return const Color(0xFF34C759);
+      case SortKey.profitRate:
+        return const Color(0xFFFF9500);
+      case SortKey.days:
+        return const Color(0xFFD46B6B);
     }
   }
 
-  SortKey get next {
+  IconData get icon {
     switch (this) {
       case SortKey.none:
-        return SortKey.navReturn1m;
+        return CupertinoIcons.line_horizontal_3_decrease;
+    // 基金收益率
       case SortKey.navReturn1m:
-        return SortKey.navReturn3m;
       case SortKey.navReturn3m:
-        return SortKey.navReturn6m;
       case SortKey.navReturn6m:
-        return SortKey.navReturn1y;
       case SortKey.navReturn1y:
-        return SortKey.none;
+        return CupertinoIcons.chart_bar;
+    // 收益排行
+      case SortKey.amount:
+        return CupertinoIcons.money_dollar;
+      case SortKey.profit:
+        return CupertinoIcons.chart_bar;
+      case SortKey.profitRate:
+        return CupertinoIcons.percent;
+      case SortKey.days:
+        return CupertinoIcons.calendar;
+    }
+  }
+
+  // 根据循环类型获取下一个排序值
+  SortKey next({SortCycleType cycleType = SortCycleType.fundReturns}) {
+    switch (cycleType) {
+      case SortCycleType.fundReturns:
+        switch (this) {
+          case SortKey.none:
+            return SortKey.navReturn1m;
+          case SortKey.navReturn1m:
+            return SortKey.navReturn3m;
+          case SortKey.navReturn3m:
+            return SortKey.navReturn6m;
+          case SortKey.navReturn6m:
+            return SortKey.navReturn1y;
+          case SortKey.navReturn1y:
+            return SortKey.none;
+          default:
+            return SortKey.none;
+        }
+      case SortCycleType.holdings:
+        switch (this) {
+          case SortKey.none:
+            return SortKey.amount;
+          case SortKey.amount:
+            return SortKey.profit;
+          case SortKey.profit:
+            return SortKey.profitRate;
+          case SortKey.profitRate:
+            return SortKey.days;
+          case SortKey.days:
+            return SortKey.none;
+          default:
+            return SortKey.none;
+        }
     }
   }
 
   double? getValue(FundHolding holding) {
     switch (this) {
+    // 基金收益率
       case SortKey.navReturn1m:
         return holding.navReturn1m;
       case SortKey.navReturn3m:
@@ -73,6 +149,15 @@ extension SortKeyExtension on SortKey {
         return holding.navReturn6m;
       case SortKey.navReturn1y:
         return holding.navReturn1y;
+    // 收益排行
+      case SortKey.amount:
+        return holding.purchaseAmount;
+      case SortKey.profit:
+        return holding.profit;
+      case SortKey.profitRate:
+        return holding.annualizedProfitRate;
+      case SortKey.days:
+        return DateTime.now().difference(holding.purchaseDate).inDays.toDouble();
       case SortKey.none:
         return null;
     }
@@ -112,6 +197,7 @@ class AdaptiveTopBar extends StatefulWidget {
 
   final SortKey sortKey;
   final SortOrder sortOrder;
+  final SortCycleType sortCycleType;  // 新增：排序循环类型
   final ValueChanged<SortKey>? onSortKeyChanged;
   final ValueChanged<SortOrder>? onSortOrderChanged;
 
@@ -158,6 +244,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.isSearchVisible,
     this.sortKey = SortKey.none,
     this.sortOrder = SortOrder.descending,
+    this.sortCycleType = SortCycleType.fundReturns,  // 默认基金收益率循环
     this.onSortKeyChanged,
     this.onSortOrderChanged,
     this.dataManager,
@@ -482,14 +569,14 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           children: [
             CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(widget.sortKey.next),
+              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(
+                  widget.sortKey.next(cycleType: widget.sortCycleType)
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    widget.sortKey == SortKey.none
-                        ? CupertinoIcons.line_horizontal_3_decrease_circle
-                        : CupertinoIcons.calendar,
+                    widget.sortKey.icon,
                     size: 16,
                     color: textColor,
                   ),

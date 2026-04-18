@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show Colors;
 
 class GlassButton extends StatelessWidget {
   final String label;
+  final IconData? icon;           // 新增：图标参数
   final VoidCallback? onPressed;
   final bool isPrimary;
   final double? width;           // 固定宽度，优先级最高
@@ -15,6 +16,7 @@ class GlassButton extends StatelessWidget {
   const GlassButton({
     super.key,
     required this.label,
+    this.icon,
     this.onPressed,
     this.isPrimary = true,
     this.width,
@@ -45,9 +47,51 @@ class GlassButton extends StatelessWidget {
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label).withValues(alpha: 0.5)
         : (isPrimary ? CupertinoColors.activeBlue : (isDarkMode ? CupertinoColors.white : CupertinoColors.label));
 
+    // 构建按钮内容
+    Widget buttonContent;
+    if (icon != null && label.isEmpty) {
+      // 只有图标，没有文字
+      buttonContent = Icon(
+        icon,
+        size: 18,
+        color: textColor,
+      );
+    } else if (icon != null) {
+      // 图标 + 文字
+      buttonContent = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: textColor,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+        ],
+      );
+    } else {
+      // 只有文字
+      buttonContent = Text(
+        label,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      );
+    }
+
     Widget button = Container(
       // 宽度优先级：width > expand（全宽） > 约束最小宽度（minWidth + 内容自适应）
-      width: width ?? (expand ? null : null),  // expand 时 width = null，由父容器撑满
+      width: width ?? (expand ? null : null),
       height: height,
       decoration: BoxDecoration(
         color: effectiveBgColor,
@@ -64,14 +108,7 @@ class GlassButton extends StatelessWidget {
         onPressed: onPressed,
         padding: padding,
         borderRadius: BorderRadius.circular(borderRadius),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
-        ),
+        child: buttonContent,
       ),
     );
 

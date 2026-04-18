@@ -12,97 +12,6 @@ import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 import 'add_holding_view.dart';
 
-// 排序字段枚举（与 AdaptiveTopBar 兼容）
-enum TopPerformersSortKey {
-  none,
-  amount,
-  profit,
-  profitRate,
-  days,
-}
-
-extension TopPerformersSortKeyExtension on TopPerformersSortKey {
-  String get displayName {
-    switch (this) {
-      case TopPerformersSortKey.none:
-        return '无排序';
-      case TopPerformersSortKey.amount:
-        return '金额';
-      case TopPerformersSortKey.profit:
-        return '收益';
-      case TopPerformersSortKey.profitRate:
-        return '收益率';
-      case TopPerformersSortKey.days:
-        return '天数';
-    }
-  }
-
-  Color get color {
-    switch (this) {
-      case TopPerformersSortKey.none:
-        return CupertinoColors.systemGrey;
-      case TopPerformersSortKey.amount:
-        return const Color(0xFF4A90D9);
-      case TopPerformersSortKey.profit:
-        return const Color(0xFF34C759);
-      case TopPerformersSortKey.profitRate:
-        return const Color(0xFFFF9500);
-      case TopPerformersSortKey.days:
-        return const Color(0xFFD46B6B);
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case TopPerformersSortKey.none:
-        return CupertinoIcons.line_horizontal_3_decrease;
-      case TopPerformersSortKey.amount:
-        return CupertinoIcons.money_dollar;
-      case TopPerformersSortKey.profit:
-        return CupertinoIcons.chart_bar;
-      case TopPerformersSortKey.profitRate:
-        return CupertinoIcons.percent;
-      case TopPerformersSortKey.days:
-        return CupertinoIcons.calendar;
-    }
-  }
-
-  TopPerformersSortKey get next {
-    switch (this) {
-      case TopPerformersSortKey.none:
-        return TopPerformersSortKey.amount;
-      case TopPerformersSortKey.amount:
-        return TopPerformersSortKey.profit;
-      case TopPerformersSortKey.profit:
-        return TopPerformersSortKey.profitRate;
-      case TopPerformersSortKey.profitRate:
-        return TopPerformersSortKey.days;
-      case TopPerformersSortKey.days:
-        return TopPerformersSortKey.none;
-    }
-  }
-
-  double? getValue(FundHolding holding, ProfitResult profit, int daysHeld) {
-    switch (this) {
-      case TopPerformersSortKey.amount:
-        return holding.purchaseAmount;
-      case TopPerformersSortKey.profit:
-        return profit.absolute;
-      case TopPerformersSortKey.profitRate:
-        return profit.annualized;
-      case TopPerformersSortKey.days:
-        return daysHeld.toDouble();
-      case TopPerformersSortKey.none:
-        return null;
-    }
-  }
-}
-
-enum TopPerformersSortOrder {
-  ascending,
-  descending,
-}
-
 class TopPerformersView extends StatefulWidget {
   const TopPerformersView({super.key});
 
@@ -115,8 +24,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   late FundService _fundService;
   late VoidCallback _dataListener;
 
-  TopPerformersSortKey _sortKey = TopPerformersSortKey.none;
-  TopPerformersSortOrder _sortOrder = TopPerformersSortOrder.descending;
+  SortKey _sortKey = SortKey.none;
+  SortOrder _sortOrder = SortOrder.descending;
 
   double? _minAmount;
   double? _maxAmount;
@@ -132,7 +41,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   List<_RankItem> _cachedItems = [];
   bool _isInitialized = false;
 
-  // 滚动控制器
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -244,19 +152,41 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       ));
     }
 
+    // 排序
     items.sort((a, b) {
-      if (_sortKey == TopPerformersSortKey.none) {
+      if (_sortKey == SortKey.none) {
         return a.holding.fundCode.compareTo(b.holding.fundCode);
       }
 
-      final valueA = _sortKey.getValue(a.holding, a.profit, a.daysHeld);
-      final valueB = _sortKey.getValue(b.holding, b.profit, b.daysHeld);
+      double? valueA;
+      double? valueB;
+
+      switch (_sortKey) {
+        case SortKey.amount:
+          valueA = a.holding.purchaseAmount;
+          valueB = b.holding.purchaseAmount;
+          break;
+        case SortKey.profit:
+          valueA = a.profit.absolute;
+          valueB = b.profit.absolute;
+          break;
+        case SortKey.profitRate:
+          valueA = a.profit.annualized;
+          valueB = b.profit.annualized;
+          break;
+        case SortKey.days:
+          valueA = a.daysHeld.toDouble();
+          valueB = b.daysHeld.toDouble();
+          break;
+        default:
+          return a.holding.fundCode.compareTo(b.holding.fundCode);
+      }
 
       if (valueA == null && valueB == null) return 0;
       if (valueA == null) return 1;
       if (valueB == null) return -1;
 
-      return _sortOrder == TopPerformersSortOrder.ascending
+      return _sortOrder == SortOrder.ascending
           ? valueA.compareTo(valueB)
           : valueB.compareTo(valueA);
     });
@@ -296,29 +226,27 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     _dataManager.addLog('应用筛选条件，结果数: ${_cachedItems.length}', type: LogType.info);
   }
 
-  void _onSortKeyChanged(TopPerformersSortKey key) {
+  void _onSortKeyChanged(SortKey key) {
     setState(() {
       if (_sortKey == key) {
-        // 同一个排序字段，切换升序/降序
-        _sortOrder = _sortOrder == TopPerformersSortOrder.ascending
-            ? TopPerformersSortOrder.descending
-            : TopPerformersSortOrder.ascending;
+        _sortOrder = _sortOrder == SortOrder.ascending
+            ? SortOrder.descending
+            : SortOrder.ascending;
       } else {
-        // 新排序字段，默认降序
         _sortKey = key;
-        _sortOrder = TopPerformersSortOrder.descending;
+        _sortOrder = SortOrder.descending;
       }
     });
     _updateCachedItems();
-    _dataManager.addLog('排序方式切换为: ${_sortKey.displayName}${_sortOrder == TopPerformersSortOrder.ascending ? "(升序)" : "(降序)"}', type: LogType.info);
+    _dataManager.addLog('排序方式切换为: ${key.displayName}${_sortOrder == SortOrder.ascending ? "(升序)" : "(降序)"}', type: LogType.info);
   }
 
-  void _onSortOrderChanged(TopPerformersSortOrder order) {
+  void _onSortOrderChanged(SortOrder order) {
     setState(() {
       _sortOrder = order;
     });
     _updateCachedItems();
-    _dataManager.addLog('排序顺序切换为: ${order == TopPerformersSortOrder.ascending ? "升序" : "降序"}', type: LogType.info);
+    _dataManager.addLog('排序顺序切换为: ${order == SortOrder.ascending ? "升序" : "降序"}', type: LogType.info);
   }
 
   void _toggleFilter() {
@@ -327,15 +255,11 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     });
   }
 
-  Future<void> _onRefresh() async {
-    await _dataManager.refreshAllHoldingsForce(_fundService, null);
-    _updateCachedItems();
-  }
-
+  // 正收益红色，负收益绿色，0灰色
   Color _getValueColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
-    if (value > 0) return const Color(0xFF34C759);
-    if (value < 0) return const Color(0xFFFF3B30);
+    if (value > 0) return const Color(0xFFFF3B30);  // 红色
+    if (value < 0) return const Color(0xFF34C759);  // 绿色
     return CupertinoColors.systemGrey;
   }
 
@@ -344,36 +268,20 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   }
 
   bool _shouldShowDivider(int index) {
-    if (_sortKey != TopPerformersSortKey.profitRate && _sortKey != TopPerformersSortKey.profit) {
+    if (_sortKey != SortKey.profitRate && _sortKey != SortKey.profit) {
       return false;
     }
 
     if (index >= _cachedItems.length - 1) return false;
 
-    final currentProfit = _sortKey == TopPerformersSortKey.profitRate
+    final currentProfit = _sortKey == SortKey.profitRate
         ? _cachedItems[index].profit.annualized
         : _cachedItems[index].profit.absolute;
-    final nextProfit = _sortKey == TopPerformersSortKey.profitRate
+    final nextProfit = _sortKey == SortKey.profitRate
         ? _cachedItems[index + 1].profit.annualized
         : _cachedItems[index + 1].profit.absolute;
 
     return currentProfit >= 0 && nextProfit < 0;
-  }
-
-  // 转换排序类型以兼容 AdaptiveTopBar
-  SortKey _convertToAdaptiveSortKey(TopPerformersSortKey key) {
-    switch (key) {
-      case TopPerformersSortKey.amount:
-        return SortKey.navReturn1m; // 复用，实际不使用其值
-      case TopPerformersSortKey.profit:
-        return SortKey.navReturn3m;
-      case TopPerformersSortKey.profitRate:
-        return SortKey.navReturn6m;
-      case TopPerformersSortKey.days:
-        return SortKey.navReturn1y;
-      case TopPerformersSortKey.none:
-        return SortKey.none;
-    }
   }
 
   @override
@@ -399,51 +307,24 @@ class _TopPerformersViewState extends State<TopPerformersView> {
           },
           child: Column(
             children: [
-              // 顶部栏（带排序按钮和筛选按钮）
+              // 顶部栏
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
-                showRefresh: hasData,  // 有数据时才显示刷新按钮
+                showRefresh: false,
                 showExpandCollapse: false,
                 showSearch: false,
                 showReset: false,
                 showFilter: hasData,
-                showSort: hasData,  // 显示排序按钮
+                showSort: hasData,
                 isAllExpanded: false,
                 searchText: '',
-                sortKey: _convertToAdaptiveSortKey(_sortKey),
-                sortOrder: _sortOrder == TopPerformersSortOrder.ascending
-                    ? SortOrder.ascending
-                    : SortOrder.descending,
-                onSortKeyChanged: hasData ? (key) {
-                  // 将 SortKey 转换回 TopPerformersSortKey
-                  TopPerformersSortKey newKey;
-                  switch (key) {
-                    case SortKey.navReturn1m:
-                      newKey = TopPerformersSortKey.amount;
-                      break;
-                    case SortKey.navReturn3m:
-                      newKey = TopPerformersSortKey.profit;
-                      break;
-                    case SortKey.navReturn6m:
-                      newKey = TopPerformersSortKey.profitRate;
-                      break;
-                    case SortKey.navReturn1y:
-                      newKey = TopPerformersSortKey.days;
-                      break;
-                    case SortKey.none:
-                      newKey = TopPerformersSortKey.none;
-                      break;
-                  }
-                  _onSortKeyChanged(newKey);
-                } : null,
-                onSortOrderChanged: hasData ? (order) {
-                  _onSortOrderChanged(order == SortOrder.ascending
-                      ? TopPerformersSortOrder.ascending
-                      : TopPerformersSortOrder.descending);
-                } : null,
+                sortKey: _sortKey,
+                sortOrder: _sortOrder,
+                sortCycleType: SortCycleType.holdings,
+                onSortKeyChanged: hasData ? _onSortKeyChanged : null,
+                onSortOrderChanged: hasData ? _onSortOrderChanged : null,
                 dataManager: _dataManager,
                 fundService: _fundService,
-                onRefresh: _onRefresh,
                 onFilter: _toggleFilter,
                 backgroundColor: Colors.transparent,
                 iconColor: CupertinoTheme.of(context).primaryColor,
@@ -451,8 +332,12 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-              // 筛选栏（仅在筛选按钮打开时显示，且包含重置按钮）
-              if (_showFilter && hasData) _buildFilterBar(isDarkMode),
+              // 筛选栏（带淡入淡出动画）
+              AnimatedOpacity(
+                opacity: _showFilter && hasData ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: _showFilter && hasData ? _buildFilterBar(isDarkMode) : const SizedBox.shrink(),
+              ),
               // 主内容区
               Expanded(
                 child: !hasData
@@ -509,9 +394,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                 )
                     : Column(
                   children: [
-                    // 固定表头
                     _buildHeaderRow(isDarkMode),
-                    // 可滚动列表
                     Expanded(
                       child: ListView.builder(
                         controller: _scrollController,
@@ -628,12 +511,15 @@ class _TopPerformersViewState extends State<TopPerformersView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              // 重置按钮改为图标形式
               GlassButton(
-                label: '重置',
+                label: '',
+                icon: CupertinoIcons.refresh_thin,
                 onPressed: _resetFilters,
                 isPrimary: false,
-                width: 80,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                width: 44,
+                height: 36,
+                padding: EdgeInsets.zero,
               ),
             ],
           ),
@@ -763,7 +649,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     final profit = item.profit;
     final days = item.daysHeld;
 
-    // 白灰白灰相间的底色
     final backgroundColor = isDarkMode
         ? (index % 2 == 0
         ? const Color(0xFF1C1C1E)
