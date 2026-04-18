@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/gradient_card.dart';
@@ -28,8 +31,13 @@ class _SummaryViewState extends State<SummaryView> {
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
 
+  // 估值定时刷新相关状态
+  int _valuationRefreshIntervalSeconds = 60; // 默认1分钟
+  bool _isValuationRefreshing = false;
+
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
+  bool get _showValuationRefresh => _sortKey == SortKey.latestNav && _hasData;
 
   @override
   void initState() {
@@ -37,6 +45,7 @@ class _SummaryViewState extends State<SummaryView> {
     _dataListener = () {
       if (mounted) setState(() {});
     };
+    _loadValuationRefreshInterval();
   }
 
   @override
@@ -52,6 +61,123 @@ class _SummaryViewState extends State<SummaryView> {
   void dispose() {
     _dataManager.removeListener(_dataListener);
     super.dispose();
+  }
+
+  Future<void> _loadValuationRefreshInterval() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seconds = prefs.getInt('valuationRefreshInterval');
+      if (seconds != null && [60, 180, 300].contains(seconds)) {
+        setState(() {
+          _valuationRefreshIntervalSeconds = seconds;
+        });
+      }
+    } catch (e) {
+      // 忽略
+    }
+  }
+
+  Future<void> _saveValuationRefreshInterval(int seconds) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('valuationRefreshInterval', seconds);
+    } catch (e) {
+      // 忽略
+    }
+  }
+
+  void _onValuationRefreshIntervalChanged() async {
+    setState(() {
+      if (_valuationRefreshIntervalSeconds == 60) {
+        _valuationRefreshIntervalSeconds = 180;
+      } else if (_valuationRefreshIntervalSeconds == 180) {
+        _valuationRefreshIntervalSeconds = 300;
+      } else {
+        _valuationRefreshIntervalSeconds = 60;
+      }
+    });
+    await _saveValuationRefreshInterval(_valuationRefreshIntervalSeconds);
+    String intervalText = _valuationRefreshIntervalSeconds == 60 ? '1分钟'
+        : (_valuationRefreshIntervalSeconds == 180 ? '3分钟' : '5分钟');
+    if (mounted) {
+      context.showToast('估值刷新间隔已改为 $intervalText', duration: const Duration(seconds: 2));
+    }
+  }
+
+  // 估值刷新方法
+  Future<void> _onValuationRefresh() async {
+    if (_isValuationRefreshing) return;
+    setState(() => _isValuationRefreshing = true);
+    context.showToast('正在刷新估值数据...', duration: const Duration(seconds: 1));
+
+    try {
+      // 获取所有需要刷新估值的基金代码
+      final codes = _dataManager.holdings.map((h) => h.fundCode).toList();
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final code in codes) {
+        try {
+          final valuation = await _fundService.fetchRealtimeValuation(code);
+          if (valuation['gsz'] != null && valuation['gsz'] > 0) {
+            // 更新基金的估值数据
+            final holdings = _dataManager.holdings;
+            final index = holdings.indexWhere((h) => h.fundCode == code);
+            if (index != -1) {
+              final updated = holdings[index].copyWith(
+                currentNav: valuation['gsz'] as double? ?? holdings[index].currentNav,
+                navDate: DateTime.now(),
+              );
+              await _dataManager.updateHolding(updated);
+              successCount++;
+            }
+          } else {
+            failCount++;
+          }
+        } catch (e) {
+          failCount++;
+          await _dataManager.addLog('刷新估值失败 $code: $e', type: LogType.error);
+        }
+      }
+
+      if (mounted) {
+        context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
+        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('估值刷新失败: $e');
+        await _dataManager.addLog('估值刷新失败: $e', type: LogType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isValuationRefreshing = false);
+      }
+    }
+  }
+
+  // 基金净值刷新（普通点击）
+  Future<void> _onFundRefresh() async {
+    if (!mounted) return;
+    context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
+    await _dataManager.refreshAllHoldingsForce(_fundService, null);
+    if (mounted) {
+      setState(() {});
+      context.showToast('刷新完成');
+      await _dataManager.addLog('手动刷新基金数据完成', type: LogType.success);
+    }
+  }
+
+  // 基金净值强制刷新（长按）
+  Future<void> _onFundLongPressRefresh() async {
+    if (!mounted) return;
+    context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
+    await _dataManager.refreshAllHoldingsForce(_fundService, null);
+    if (mounted) {
+      setState(() {});
+      context.showToast('强制刷新完成');
+      await _dataManager.addLog('强制刷新所有基金数据完成', type: LogType.success);
+    }
   }
 
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
@@ -156,7 +282,7 @@ class _SummaryViewState extends State<SummaryView> {
     return CupertinoColors.systemGrey;
   }
 
-  // 持有客户列表（根据排序顺序排列，隐私模式开启且无搜索时不显示）
+  // 持有客户列表
   Widget? _buildHoldersListInline(List<FundHolding> holdings, bool isDarkMode) {
     if (_dataManager.isPrivacyMode && _searchText.isEmpty) return null;
 
@@ -305,6 +431,7 @@ class _SummaryViewState extends State<SummaryView> {
               searchText: _searchText,
               sortKey: _sortKey,
               sortOrder: _sortOrder,
+              sortCycleType: SortCycleType.fundReturns,
               onSortKeyChanged: enableButtons
                   ? (key) {
                 setState(() => _sortKey = key);
@@ -319,6 +446,13 @@ class _SummaryViewState extends State<SummaryView> {
                   : null,
               dataManager: _dataManager,
               fundService: _fundService,
+              onRefresh: _onFundRefresh,
+              onLongPressRefresh: _onFundLongPressRefresh,
+              // 估值定时刷新相关（只在最新估值排序时显示）
+              showValuationRefresh: _showValuationRefresh,
+              valuationRefreshIntervalSeconds: _valuationRefreshIntervalSeconds,
+              onValuationRefresh: _onValuationRefresh,
+              onValuationRefreshIntervalChanged: _onValuationRefreshIntervalChanged,
               onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
               onSearchChanged: enableButtons
                   ? (text) => setState(() => _searchText = text)
@@ -326,7 +460,6 @@ class _SummaryViewState extends State<SummaryView> {
               onSearchClear: enableButtons
                   ? () => setState(() => _searchText = '')
                   : null,
-              onLongPressRefresh: () {},
               backgroundColor: Colors.transparent,
               iconColor: CupertinoTheme.of(context).primaryColor,
               iconSize: 24,
@@ -372,9 +505,14 @@ class _SummaryViewState extends State<SummaryView> {
                     Widget? trailing;
                     if (_sortKey != SortKey.none) {
                       final sortValue = _sortKey.getValue(first);
-                      final valueStr = sortValue != null
-                          ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
-                          : '--';
+                      String valueStr;
+                      if (_sortKey == SortKey.latestNav) {
+                        valueStr = sortValue != null ? sortValue.toStringAsFixed(4) : '--';
+                      } else {
+                        valueStr = sortValue != null
+                            ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
+                            : '--';
+                      }
                       final valueColor = _getReturnColor(sortValue);
                       trailing = Text(
                         valueStr,

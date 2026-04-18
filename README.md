@@ -1,10 +1,10 @@
 ```text
 lib/
-├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统），管理主题切换动画
+├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统）
 │
 ├── services/
-│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、日志记录、隐私模式、收益计算、SharedPreferences持久化
-│   └── fund_service.dart                  # 基金API服务，调用天天基金接口获取净值/名称/收益率，含缓存和重试机制
+│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、日志记录、隐私模式、收益计算、持久化
+│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、购买金额/份额/日期、净值、收益计算属性
@@ -14,29 +14,30 @@ lib/
 │   └── top_holding.dart                   # 十大重仓情况
 │
 ├── views/
-│   ├── add_holding_view.dart              # 新增持仓页，表单输入客户姓名/基金代码/金额/份额/日期，保存后自动获取基金信息
-│   ├── client_view.dart                   # 客户视图页，按客户分组展示持仓，支持搜索、展开/折叠、刷新、隐私模式
-│   ├── config_view.dart                   # 设置页，隐私模式开关、主题切换、日志查询、新增/管理持仓入口
-│   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息，基金代码变更时重新获取基金数据
-│   ├── fund_detail_page.dart              # 基金详情页，包含估值、净值趋势、十大重仓
-│   ├── license_view.dart                  # 开源协议
-│   ├── log_view.dart                      # 日志页面，按照日志类型进行分类，倒序显示（最新在上）
-│   ├── manage_holdings_view.dart          # 管理持仓页，批量修改客户姓名、批量删除客户、单个编辑/删除持仓
-│   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示每个基金的持有人及收益
+│   ├── add_holding_view.dart              # 新增持仓页，表单输入信息
+│   ├── client_view.dart                   # 客户视图页，分组展示持仓
+│   ├── config_view.dart                   # 程序设置相关页面，隐私/主题切换/日志查询/持仓管理及其他
+│   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息
+│   ├── fund_detail_page.dart              # 基金详情页，包含估值/净值趋势/十大重仓
+│   ├── license_view.dart                  # 本程序应用的开源协议AGPL v3
+│   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
+│   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息
+│   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
-│   └── version_view.dart                  # 版本信息
+│   └── version_view.dart                  # 更新软件和版本信息
 │
 └── widgets/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含是刷新、搜索、筛选等
+    ├── countdown_refresh_button.dart      # 顶部工具栏内估值组件，自动更新，间隔设置
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，支持深色模式
+    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率
     ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用
-    ├── glass_button.dart                  # 全局，磨玻璃风格按钮组件
-    ├── gradient_card.dart                 # 渐变卡片组件，客户分组标题，支持展开/折叠动画，深色/浅色模式适配
-    ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑（并发控制、重试机制、加载遮罩），显示刷新动画
-    ├── search.dart                        # 搜索栏组件，防抖支持名称、客户号、基金名、基金代码搜索
-    ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关，支持浅色/跟随系统/深色三种模式
+    ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
+    ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
+    ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
+    ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
+    ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关，浅色/跟随系统/深色
     └── toast.dart                         # Toast提示组件，全局消息提示，淡入淡出动画，自动消失
 text
 ```

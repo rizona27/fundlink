@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'dart:ui' show ImageFilter;
 import 'search.dart';
+import 'countdown_refresh_button.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -18,6 +19,7 @@ enum SortCycleType {
 // 排序字段枚举
 enum SortKey {
   none,
+  latestNav,
   navReturn1m,
   navReturn3m,
   navReturn6m,
@@ -33,6 +35,8 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return '无排序';
+      case SortKey.latestNav:
+        return '最新估值';
       case SortKey.navReturn1m:
         return '近1月';
       case SortKey.navReturn3m:
@@ -56,6 +60,8 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return CupertinoColors.systemGrey;
+      case SortKey.latestNav:
+        return const Color(0xFF8B5CF6);
       case SortKey.navReturn1m:
         return CupertinoColors.systemBlue;
       case SortKey.navReturn3m:
@@ -79,6 +85,8 @@ extension SortKeyExtension on SortKey {
     switch (this) {
       case SortKey.none:
         return CupertinoIcons.line_horizontal_3_decrease;
+      case SortKey.latestNav:
+        return CupertinoIcons.chart_bar;
       case SortKey.navReturn1m:
       case SortKey.navReturn3m:
       case SortKey.navReturn6m:
@@ -100,6 +108,8 @@ extension SortKeyExtension on SortKey {
       case SortCycleType.fundReturns:
         switch (this) {
           case SortKey.none:
+            return SortKey.latestNav;
+          case SortKey.latestNav:
             return SortKey.navReturn1m;
           case SortKey.navReturn1m:
             return SortKey.navReturn3m;
@@ -132,6 +142,8 @@ extension SortKeyExtension on SortKey {
 
   double? getValue(FundHolding holding) {
     switch (this) {
+      case SortKey.latestNav:
+        return holding.currentNav;
       case SortKey.navReturn1m:
         return holding.navReturn1m;
       case SortKey.navReturn3m:
@@ -197,6 +209,12 @@ class AdaptiveTopBar extends StatefulWidget {
   final VoidCallback? onRefresh;
   final VoidCallback? onLongPressRefresh;
 
+  // 估值定时刷新相关（独立于基金刷新）
+  final bool showValuationRefresh;
+  final int? valuationRefreshIntervalSeconds;
+  final VoidCallback? onValuationRefresh;
+  final VoidCallback? onValuationRefreshIntervalChanged;
+
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onSearchClear;
@@ -236,6 +254,10 @@ class AdaptiveTopBar extends StatefulWidget {
     this.onBack,
     this.onRefresh,
     this.onLongPressRefresh,
+    this.showValuationRefresh = false,
+    this.valuationRefreshIntervalSeconds,
+    this.onValuationRefresh,
+    this.onValuationRefreshIntervalChanged,
     this.onToggleExpandAll,
     this.onSearchChanged,
     this.onSearchClear,
@@ -265,6 +287,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
   bool _isRefreshing = false;
+  bool _isValuationRefreshing = false;
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
@@ -272,20 +295,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   bool get _currentSearchVisible => _externallyControlSearchVisible ? widget.isSearchVisible! : _internalSearchVisible;
 
   bool get _hasData => widget.dataManager?.holdings.isNotEmpty ?? false;
-
-  // 检查是否有需要刷新的基金（缺失收益率数据）
-  bool get _hasMissingReturnData {
-    final holdings = widget.dataManager?.holdings ?? [];
-    for (final holding in holdings) {
-      if (holding.navReturn1m == null &&
-          holding.navReturn3m == null &&
-          holding.navReturn6m == null &&
-          holding.navReturn1y == null) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   @override
   void initState() {
@@ -376,31 +385,24 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
-  // 普通刷新
+  // 基金净值刷新（普通点击）
   Future<void> _onRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
-    // 检查是否有缺失收益率数据的基金
-    if (!_hasMissingReturnData) {
-      context.showToast('所有基金已有收益率数据，无需刷新', duration: const Duration(seconds: 2));
-      widget.dataManager?.addLog('手动刷新: 所有基金已有收益率数据，跳过刷新', type: LogType.info);
-      return;
-    }
-
     setState(() => _isRefreshing = true);
-    context.showToast('正在刷新缺失数据的基金...', duration: const Duration(seconds: 1));
+    context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
 
     try {
       await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
       if (mounted) {
         context.showToast('刷新完成');
-        widget.dataManager?.addLog('手动刷新数据完成', type: LogType.success);
+        widget.dataManager?.addLog('手动刷新基金数据完成', type: LogType.success);
       }
     } catch (e) {
       if (mounted) {
         context.showToast('刷新失败: $e');
-        widget.dataManager?.addLog('手动刷新失败: $e', type: LogType.error);
+        widget.dataManager?.addLog('手动刷新基金数据失败: $e', type: LogType.error);
       }
     } finally {
       if (mounted) {
@@ -409,7 +411,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 强制刷新（长按）
+  // 基金净值强制刷新（长按）
   Future<void> _onLongPressRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
@@ -426,11 +428,27 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     } catch (e) {
       if (mounted) {
         context.showToast('强制刷新失败: $e');
-        widget.dataManager?.addLog('强制刷新失败: $e', type: LogType.error);
+        widget.dataManager?.addLog('强制刷新所有基金数据失败: $e', type: LogType.error);
       }
     } finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
+  // 估值刷新（定时刷新）
+  Future<void> _onValuationRefresh() async {
+    if (_isValuationRefreshing) return;
+    setState(() => _isValuationRefreshing = true);
+    try {
+      // onValuationRefresh 是 VoidCallback? 类型，直接调用
+      widget.onValuationRefresh?.call();
+      // 给刷新操作一点时间
+      await Future.delayed(const Duration(milliseconds: 100));
+    } finally {
+      if (mounted) {
+        setState(() => _isValuationRefreshing = false);
       }
     }
   }
@@ -505,6 +523,19 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRightGroup() {
     final children = <Widget>[];
+    // 估值定时刷新按钮（独立于基金刷新，只在最新估值排序时显示）
+    if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
+      children.add(CountdownRefreshButton(
+        onRefresh: _onValuationRefresh,
+        refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
+        isRefreshing: _isValuationRefreshing,
+        size: 32,
+        onIntervalChanged: widget.onValuationRefreshIntervalChanged,
+      ));
+      if (widget.showReset || widget.showFilter || widget.showSearch || widget.showExpandCollapse) {
+        children.add(const SizedBox(width: 4));
+      }
+    }
     if (widget.showReset) {
       children.add(_buildResetButton());
     }
@@ -589,7 +620,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           ],
         ),
         child: Icon(
-          CupertinoIcons.delete,  // 改为垃圾桶图标
+          CupertinoIcons.delete,
           size: widget.iconSize,
           color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
         ),
