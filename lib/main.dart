@@ -117,12 +117,11 @@ class _MainTabViewState extends State<MainTabView> {
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.settings), label: '设置'),
   ];
 
-  // 自定义每个标签的渐变色（起始色、结束色）
   final List<Color> _activeColors = [
-    const Color(0xFF667EEA), // 一览
-    const Color(0xFFF093FB), // 客户
-    const Color(0xFF4FACFE), // 排名
-    const Color(0xFF43E97B), // 设置
+    const Color(0xFF667EEA),
+    const Color(0xFFF093FB),
+    const Color(0xFF4FACFE),
+    const Color(0xFF43E97B),
   ];
   final List<Color> _activeColorsEnd = [
     const Color(0xFF764BA2),
@@ -135,18 +134,23 @@ class _MainTabViewState extends State<MainTabView> {
     _tabBarKey.currentState?.onScroll();
   }
 
+  void _onTabTap(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    _tabBarKey.currentState?.restore();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollUpdateNotification) {
-              _handleScroll();
-            }
-            return false;
-          },
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeInOutCubic,
+          switchOutCurve: Curves.easeInOutCubic,
           child: IndexedStack(
+            key: ValueKey(_selectedIndex),
             index: _selectedIndex,
             children: _pages,
           ),
@@ -159,12 +163,7 @@ class _MainTabViewState extends State<MainTabView> {
             child: FloatingTabBar(
               key: _tabBarKey,
               currentIndex: _selectedIndex,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-                _tabBarKey.currentState?.restore();
-              },
+              onTap: _onTabTap,
               items: _tabItems,
               activeColors: _activeColors,
               activeColorsEnd: _activeColorsEnd,

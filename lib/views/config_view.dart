@@ -16,9 +16,12 @@ class ConfigView extends StatefulWidget {
   State<ConfigView> createState() => _ConfigViewState();
 }
 
-class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateMixin {
+class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late AnimationController _fadeController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -44,6 +47,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
@@ -73,7 +77,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 通用区块 ==================
   Widget _buildGeneralSection(bool isDarkMode) {
     return _buildSection(
       title: '基础配置',
@@ -97,7 +100,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 持仓管理区块 ==================
   Widget _buildHoldingsManagementSection(bool isDarkMode) {
     return _buildSection(
       title: '持仓管理',
@@ -142,7 +144,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 导入/导出区块 ==================
   Widget _buildImportExportSection(bool isDarkMode) {
     return _buildSection(
       title: '数据迁移',
@@ -168,7 +169,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 日志区块 ==================
   Widget _buildLogSection(bool isDarkMode) {
     return _buildSection(
       title: '日志',
@@ -191,7 +191,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 关于区块 ==================
   Widget _buildAboutSection(bool isDarkMode) {
     return _buildSection(
       title: '关于',
@@ -201,7 +200,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
           title: '版本信息',
-          subtitle: VersionView.appVersion,  // 使用 VersionView 中的版本号常量
+          subtitle: VersionView.appVersion,
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -227,7 +226,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // ================== 通用UI组件 ==================
   Widget _buildSection({
     required String title,
     required String icon,
@@ -474,7 +472,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  // 主题模式选择器
   Widget _buildThemeItem(bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

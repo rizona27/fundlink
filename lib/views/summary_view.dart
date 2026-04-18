@@ -20,7 +20,7 @@ class SummaryView extends StatefulWidget {
   State<SummaryView> createState() => _SummaryViewState();
 }
 
-class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
+class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -31,21 +31,21 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
 
-  // 估值定时刷新相关状态
-  int _valuationRefreshIntervalSeconds = 180; // 默认3分钟
+  int _valuationRefreshIntervalSeconds = 180;
   bool _isValuationRefreshing = false;
 
-  // 缓存估值数据（用于显示涨幅和时间）
   final Map<String, Map<String, dynamic>> _valuationCache = {};
   String _lastValuationUpdateTime = '';
 
-  // 定时器相关
   Timer? _valuationTimer;
   bool _isPageVisible = true;
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
   bool get _showValuationRefresh => _sortKey == SortKey.latestNav && _hasData;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -151,7 +151,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('valuationRefreshInterval', seconds);
     } catch (e) {
-      // 忽略
     }
   }
 
@@ -174,7 +173,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
     }
   }
 
-  // 获取单个基金的估值数据
   Future<Map<String, dynamic>?> _fetchSingleValuation(String code) async {
     try {
       final valuation = await _fundService.fetchRealtimeValuation(code);
@@ -186,12 +184,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
         };
       }
     } catch (e) {
-      // 忽略
     }
     return null;
   }
 
-  // 刷新所有估值（用于定时刷新）
   Future<void> _onValuationRefresh() async {
     if (_isValuationRefreshing) return;
     setState(() => _isValuationRefreshing = true);
@@ -256,12 +252,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      // 忽略
     }
     return gztime;
   }
 
-  // 基金净值刷新（普通点击）- 只显示结果
   Future<void> _onFundRefresh() async {
     if (!mounted) return;
     try {
@@ -279,7 +273,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
     }
   }
 
-  // 基金净值强制刷新（长按）- 只显示结果
   Future<void> _onFundLongPressRefresh() async {
     if (!mounted) return;
     try {
@@ -297,7 +290,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
     }
   }
 
-  // 获取估值显示文本
   String _getValuationDisplayText(FundHolding holding) {
     final cache = _valuationCache[holding.fundCode];
     if (cache != null) {
@@ -308,7 +300,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
     return '--% (--)';
   }
 
-  // 获取涨幅颜色
   Color _getChangeColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
     if (value > 0) return CupertinoColors.systemRed;
@@ -428,7 +419,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
     return CupertinoColors.systemGrey;
   }
 
-  // 持有客户列表
   Widget? _buildHoldersListInline(List<FundHolding> holdings, bool isDarkMode) {
     if (_dataManager.isPrivacyMode && _searchText.isEmpty) return null;
 
@@ -551,6 +541,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final groups = _filteredGroupedFunds;
     final sortedCodes = _sortedFundCodes;
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -651,7 +642,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
                     Widget? trailing;
                     if (_sortKey != SortKey.none) {
                       if (_sortKey == SortKey.latestNav) {
-                        // 估值显示：涨幅% (净值)，涨幅用粗体
                         final cache = _valuationCache[fundCode];
                         if (cache != null) {
                           final gsz = cache['gsz'] as double;

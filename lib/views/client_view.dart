@@ -20,7 +20,7 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
+class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
@@ -31,6 +31,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
   Timer? _debounceTimer;
   Timer? _scrollThrottleTimer;
   late AnimationController _scrollAnimationController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -185,6 +188,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     final bottomPadding = MediaQuery.of(context).padding.bottom;

@@ -19,7 +19,7 @@ class TopPerformersView extends StatefulWidget {
   State<TopPerformersView> createState() => _TopPerformersViewState();
 }
 
-class _TopPerformersViewState extends State<TopPerformersView> {
+class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -27,7 +27,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
 
-  // 筛选输入框控制器
   final TextEditingController _minAmountController = TextEditingController();
   final TextEditingController _maxAmountController = TextEditingController();
   final TextEditingController _minProfitController = TextEditingController();
@@ -37,7 +36,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   final TextEditingController _minDaysController = TextEditingController();
   final TextEditingController _maxDaysController = TextEditingController();
 
-  // 实际筛选值（防抖后应用）
   double? _minAmount;
   double? _maxAmount;
   double? _minProfit;
@@ -60,6 +58,9 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   static const Duration _debounceDelay = Duration(milliseconds: 500);
   static const Duration _animationDuration = Duration(milliseconds: 400);
   static const Curve _animationCurve = Curves.easeOutCubic;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -349,6 +350,7 @@ class _TopPerformersViewState extends State<TopPerformersView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
@@ -395,7 +397,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-              // 使用 AnimatedSize + SizeTransition 实现柔和动画（类似 ClientView）
               AnimatedSize(
                 duration: _animationDuration,
                 curve: _animationCurve,
@@ -485,7 +486,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       ),
       child: Column(
         children: [
-          // 第一行：金额 和 收益
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -511,7 +511,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
             ],
           ),
           const SizedBox(height: 12),
-          // 第二行：收益率 和 持有天数
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
