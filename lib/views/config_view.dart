@@ -76,14 +76,14 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   // ================== 通用区块 ==================
   Widget _buildGeneralSection(bool isDarkMode) {
     return _buildSection(
-      title: '通用设置',
+      title: '基础配置',
       icon: '通用',
       isDarkMode: isDarkMode,
       children: [
         _buildSwitchItem(
           icon: CupertinoIcons.lock_fill,
           title: '隐私模式',
-          subtitle: '用户姓名脱敏',
+          subtitle: '信息脱敏',
           value: _dataManager.isPrivacyMode,
           isDarkMode: isDarkMode,
           onChanged: (value) async {
@@ -145,7 +145,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   // ================== 导入/导出区块 ==================
   Widget _buildImportExportSection(bool isDarkMode) {
     return _buildSection(
-      title: '数据导入导出',
+      title: '数据迁移',
       icon: '通用',
       isDarkMode: isDarkMode,
       children: [
