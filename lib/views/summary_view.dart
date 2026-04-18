@@ -20,7 +20,7 @@ class SummaryView extends StatefulWidget {
   State<SummaryView> createState() => _SummaryViewState();
 }
 
-class _SummaryViewState extends State<SummaryView> {
+class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -32,8 +32,16 @@ class _SummaryViewState extends State<SummaryView> {
   SortOrder _sortOrder = SortOrder.descending;
 
   // 估值定时刷新相关状态
-  int _valuationRefreshIntervalSeconds = 60; // 默认1分钟
+  int _valuationRefreshIntervalSeconds = 180; // 默认3分钟
   bool _isValuationRefreshing = false;
+
+  // 缓存估值数据（用于显示涨幅和时间）
+  final Map<String, Map<String, dynamic>> _valuationCache = {};
+  String _lastValuationUpdateTime = '';
+
+  // 定时器相关
+  Timer? _valuationTimer;
+  bool _isPageVisible = true;
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
@@ -42,10 +50,22 @@ class _SummaryViewState extends State<SummaryView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _dataListener = () {
       if (mounted) setState(() {});
     };
     _loadValuationRefreshInterval();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _isPageVisible = true;
+      _restartValuationTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _isPageVisible = false;
+      _stopValuationTimer();
+    }
   }
 
   @override
@@ -59,8 +79,49 @@ class _SummaryViewState extends State<SummaryView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopValuationTimer();
     _dataManager.removeListener(_dataListener);
     super.dispose();
+  }
+
+  @override
+  void deactivate() {
+    _stopValuationTimer();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    if (_showValuationRefresh) {
+      _restartValuationTimer();
+    }
+  }
+
+  void _startValuationTimer() {
+    _stopValuationTimer();
+    if (!_showValuationRefresh || !_isPageVisible) return;
+
+    _valuationTimer = Timer.periodic(
+      Duration(seconds: _valuationRefreshIntervalSeconds),
+          (timer) {
+        if (_isPageVisible && mounted && _showValuationRefresh) {
+          _onValuationRefresh();
+        }
+      },
+    );
+  }
+
+  void _stopValuationTimer() {
+    _valuationTimer?.cancel();
+    _valuationTimer = null;
+  }
+
+  void _restartValuationTimer() {
+    if (_showValuationRefresh && _isPageVisible) {
+      _startValuationTimer();
+    }
   }
 
   Future<void> _loadValuationRefreshInterval() async {
@@ -71,9 +132,17 @@ class _SummaryViewState extends State<SummaryView> {
         setState(() {
           _valuationRefreshIntervalSeconds = seconds;
         });
+      } else {
+        setState(() {
+          _valuationRefreshIntervalSeconds = 180;
+        });
       }
+      _restartValuationTimer();
     } catch (e) {
-      // 忽略
+      setState(() {
+        _valuationRefreshIntervalSeconds = 180;
+      });
+      _restartValuationTimer();
     }
   }
 
@@ -97,6 +166,7 @@ class _SummaryViewState extends State<SummaryView> {
       }
     });
     await _saveValuationRefreshInterval(_valuationRefreshIntervalSeconds);
+    _restartValuationTimer();
     String intervalText = _valuationRefreshIntervalSeconds == 60 ? '1分钟'
         : (_valuationRefreshIntervalSeconds == 180 ? '3分钟' : '5分钟');
     if (mounted) {
@@ -104,45 +174,64 @@ class _SummaryViewState extends State<SummaryView> {
     }
   }
 
-  // 估值刷新方法
+  // 获取单个基金的估值数据
+  Future<Map<String, dynamic>?> _fetchSingleValuation(String code) async {
+    try {
+      final valuation = await _fundService.fetchRealtimeValuation(code);
+      if (valuation != null && valuation['gsz'] != null && valuation['gsz'] > 0) {
+        return {
+          'gsz': valuation['gsz'],
+          'gszzl': valuation['gszzl'] ?? 0.0,
+          'gztime': valuation['gztime'] ?? '',
+        };
+      }
+    } catch (e) {
+      // 忽略
+    }
+    return null;
+  }
+
+  // 刷新所有估值（用于定时刷新）
   Future<void> _onValuationRefresh() async {
     if (_isValuationRefreshing) return;
     setState(() => _isValuationRefreshing = true);
-    context.showToast('正在刷新估值数据...', duration: const Duration(seconds: 1));
 
     try {
-      // 获取所有需要刷新估值的基金代码
       final codes = _dataManager.holdings.map((h) => h.fundCode).toList();
       int successCount = 0;
       int failCount = 0;
+      final newCache = <String, Map<String, dynamic>>{};
+      String latestTime = '';
 
       for (final code in codes) {
-        try {
-          final valuation = await _fundService.fetchRealtimeValuation(code);
-          if (valuation['gsz'] != null && valuation['gsz'] > 0) {
-            // 更新基金的估值数据
-            final holdings = _dataManager.holdings;
-            final index = holdings.indexWhere((h) => h.fundCode == code);
-            if (index != -1) {
-              final updated = holdings[index].copyWith(
-                currentNav: valuation['gsz'] as double? ?? holdings[index].currentNav,
-                navDate: DateTime.now(),
-              );
-              await _dataManager.updateHolding(updated);
-              successCount++;
-            }
-          } else {
-            failCount++;
+        final valuation = await _fetchSingleValuation(code);
+        if (valuation != null) {
+          newCache[code] = valuation;
+          successCount++;
+          if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
+            latestTime = valuation['gztime'];
           }
-        } catch (e) {
+        } else {
           failCount++;
-          await _dataManager.addLog('刷新估值失败 $code: $e', type: LogType.error);
         }
       }
 
       if (mounted) {
-        context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
-        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+        setState(() {
+          _valuationCache.clear();
+          _valuationCache.addAll(newCache);
+          if (latestTime.isNotEmpty) {
+            _lastValuationUpdateTime = _formatGzTime(latestTime);
+          }
+        });
+
+        if (successCount > 0) {
+          context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
+          await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+        } else if (failCount > 0) {
+          context.showToast('估值刷新失败: 全部失败');
+          await _dataManager.addLog('估值刷新失败: 全部失败', type: LogType.error);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -156,28 +245,75 @@ class _SummaryViewState extends State<SummaryView> {
     }
   }
 
-  // 基金净值刷新（普通点击）
+  String _formatGzTime(String gztime) {
+    if (gztime.isEmpty) return '--';
+    try {
+      final parts = gztime.split(' ');
+      if (parts.length >= 2) {
+        final dateParts = parts[0].split('-');
+        if (dateParts.length >= 3) {
+          return '${dateParts[1]}/${dateParts[2]} ${parts[1].substring(0, 5)}';
+        }
+      }
+    } catch (e) {
+      // 忽略
+    }
+    return gztime;
+  }
+
+  // 基金净值刷新（普通点击）- 只显示结果
   Future<void> _onFundRefresh() async {
     if (!mounted) return;
-    context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
-    await _dataManager.refreshAllHoldingsForce(_fundService, null);
-    if (mounted) {
-      setState(() {});
-      context.showToast('刷新完成');
-      await _dataManager.addLog('手动刷新基金数据完成', type: LogType.success);
+    try {
+      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+      if (mounted) {
+        setState(() {});
+        context.showToast('基金数据刷新完成');
+        await _dataManager.addLog('手动刷新基金数据完成', type: LogType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('基金数据刷新失败: $e');
+        await _dataManager.addLog('手动刷新基金数据失败: $e', type: LogType.error);
+      }
     }
   }
 
-  // 基金净值强制刷新（长按）
+  // 基金净值强制刷新（长按）- 只显示结果
   Future<void> _onFundLongPressRefresh() async {
     if (!mounted) return;
-    context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
-    await _dataManager.refreshAllHoldingsForce(_fundService, null);
-    if (mounted) {
-      setState(() {});
-      context.showToast('强制刷新完成');
-      await _dataManager.addLog('强制刷新所有基金数据完成', type: LogType.success);
+    try {
+      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+      if (mounted) {
+        setState(() {});
+        context.showToast('强制刷新完成');
+        await _dataManager.addLog('强制刷新所有基金数据完成', type: LogType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('强制刷新失败: $e');
+        await _dataManager.addLog('强制刷新所有基金数据失败: $e', type: LogType.error);
+      }
     }
+  }
+
+  // 获取估值显示文本
+  String _getValuationDisplayText(FundHolding holding) {
+    final cache = _valuationCache[holding.fundCode];
+    if (cache != null) {
+      final gsz = cache['gsz'] as double;
+      final gszzl = cache['gszzl'] as double;
+      return '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}% (${gsz.toStringAsFixed(4)})';
+    }
+    return '--% (--)';
+  }
+
+  // 获取涨幅颜色
+  Color _getChangeColor(double? value) {
+    if (value == null) return CupertinoColors.systemGrey;
+    if (value > 0) return CupertinoColors.systemRed;
+    if (value < 0) return CupertinoColors.systemGreen;
+    return CupertinoColors.systemGrey;
   }
 
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
@@ -210,10 +346,20 @@ class _SummaryViewState extends State<SummaryView> {
     codes.sort((a, b) {
       final fundsA = _filteredGroupedFunds[a]!;
       final fundsB = _filteredGroupedFunds[b]!;
-      final firstA = fundsA.first;
-      final firstB = fundsB.first;
-      final valueA = _sortKey.getValue(firstA);
-      final valueB = _sortKey.getValue(firstB);
+
+      double? valueA, valueB;
+      if (_sortKey == SortKey.latestNav) {
+        final cacheA = _valuationCache[a];
+        final cacheB = _valuationCache[b];
+        valueA = cacheA != null ? cacheA['gszzl'] as double : null;
+        valueB = cacheB != null ? cacheB['gszzl'] as double : null;
+      } else {
+        final firstA = fundsA.first;
+        final firstB = fundsB.first;
+        valueA = _sortKey.getValue(firstA);
+        valueB = _sortKey.getValue(firstB);
+      }
+
       if (valueA == null && valueB == null) return a.compareTo(b);
       if (valueA == null) return 1;
       if (valueB == null) return -1;
@@ -448,11 +594,11 @@ class _SummaryViewState extends State<SummaryView> {
               fundService: _fundService,
               onRefresh: _onFundRefresh,
               onLongPressRefresh: _onFundLongPressRefresh,
-              // 估值定时刷新相关（只在最新估值排序时显示）
               showValuationRefresh: _showValuationRefresh,
               valuationRefreshIntervalSeconds: _valuationRefreshIntervalSeconds,
               onValuationRefresh: _onValuationRefresh,
               onValuationRefreshIntervalChanged: _onValuationRefreshIntervalChanged,
+              valuationUpdateTime: _lastValuationUpdateTime,
               onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
               onSearchChanged: enableButtons
                   ? (text) => setState(() => _searchText = text)
@@ -504,24 +650,61 @@ class _SummaryViewState extends State<SummaryView> {
 
                     Widget? trailing;
                     if (_sortKey != SortKey.none) {
-                      final sortValue = _sortKey.getValue(first);
-                      String valueStr;
                       if (_sortKey == SortKey.latestNav) {
-                        valueStr = sortValue != null ? sortValue.toStringAsFixed(4) : '--';
+                        // 估值显示：涨幅% (净值)，涨幅用粗体
+                        final cache = _valuationCache[fundCode];
+                        if (cache != null) {
+                          final gsz = cache['gsz'] as double;
+                          final gszzl = cache['gszzl'] as double;
+                          final changeColor = _getChangeColor(gszzl);
+
+                          trailing = RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: changeColor,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' (${gsz.toStringAsFixed(4)})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.normal,
+                                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          trailing = Text(
+                            '--% (--)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                          );
+                        }
                       } else {
-                        valueStr = sortValue != null
+                        final sortValue = _sortKey.getValue(first);
+                        final valueStr = sortValue != null
                             ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
                             : '--';
+                        final valueColor = _getReturnColor(sortValue);
+                        trailing = Text(
+                          valueStr,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: valueColor,
+                          ),
+                        );
                       }
-                      final valueColor = _getReturnColor(sortValue);
-                      trailing = Text(
-                        valueStr,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: valueColor,
-                        ),
-                      );
                     } else if (showHolderCount) {
                       trailing = Row(
                         mainAxisSize: MainAxisSize.min,

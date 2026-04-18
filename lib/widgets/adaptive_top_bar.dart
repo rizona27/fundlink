@@ -214,6 +214,7 @@ class AdaptiveTopBar extends StatefulWidget {
   final int? valuationRefreshIntervalSeconds;
   final VoidCallback? onValuationRefresh;
   final VoidCallback? onValuationRefreshIntervalChanged;
+  final String? valuationUpdateTime;  // 估值更新时间
 
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
@@ -258,6 +259,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.valuationRefreshIntervalSeconds,
     this.onValuationRefresh,
     this.onValuationRefreshIntervalChanged,
+    this.valuationUpdateTime,
     this.onToggleExpandAll,
     this.onSearchChanged,
     this.onSearchClear,
@@ -438,15 +440,18 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   // 估值刷新（定时刷新）
-  Future<void> _onValuationRefresh() async {
+  void _onValuationRefresh() {
     if (_isValuationRefreshing) return;
     setState(() => _isValuationRefreshing = true);
     try {
-      // onValuationRefresh 是 VoidCallback? 类型，直接调用
       widget.onValuationRefresh?.call();
       // 给刷新操作一点时间
-      await Future.delayed(const Duration(milliseconds: 100));
-    } finally {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          setState(() => _isValuationRefreshing = false);
+        }
+      });
+    } catch (e) {
       if (mounted) {
         setState(() => _isValuationRefreshing = false);
       }
@@ -523,6 +528,25 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRightGroup() {
     final children = <Widget>[];
+
+    // 估值更新时间显示（在圆环按钮左边，右对齐）
+    if (widget.showValuationRefresh && widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Text(
+            widget.valuationUpdateTime!,
+            style: TextStyle(
+              fontSize: 10,
+              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                  ? CupertinoColors.white.withOpacity(0.5)
+                  : CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      );
+    }
+
     // 估值定时刷新按钮（独立于基金刷新，只在最新估值排序时显示）
     if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
       children.add(CountdownRefreshButton(
