@@ -124,7 +124,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                   fontSize: 14,
                   color: CupertinoColors.label,
                 ),
-                textAlign: TextAlign.left, // 文本左对齐
+                textAlign: TextAlign.left,
               ),
             ),
           ),

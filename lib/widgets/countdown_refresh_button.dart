@@ -27,8 +27,9 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   late Timer _timer;
   int _remainingSeconds = 0;
   late DateTime _lastRefreshTime;
+  bool _isDisposed = false;
 
-  static const List<int> intervalOptions = [60, 180, 300]; // 1分钟、3分钟、5分钟
+  static const List<int> intervalOptions = [60, 180, 300];
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   }
 
   void _startTimer() {
+    if (_isDisposed) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (widget.isRefreshing) return;
 
@@ -48,13 +50,13 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
       if (remaining <= 0) {
         _lastRefreshTime = DateTime.now();
         widget.onRefresh();
-        if (mounted) {
+        if (mounted && !_isDisposed) {
           setState(() {
             _remainingSeconds = widget.refreshIntervalSeconds;
           });
         }
       } else {
-        if (mounted) {
+        if (mounted && !_isDisposed) {
           setState(() {
             _remainingSeconds = remaining;
           });
@@ -63,8 +65,17 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     });
   }
 
+  void _restartTimer() {
+    if (_isDisposed) return;
+    _timer.cancel();
+    _lastRefreshTime = DateTime.now();
+    _remainingSeconds = widget.refreshIntervalSeconds;
+    _startTimer();
+  }
+
   void _manualRefresh() {
-    if (widget.isRefreshing) return;
+    if (widget.isRefreshing || _isDisposed) return;
+    if (!mounted) return;
     _lastRefreshTime = DateTime.now();
     setState(() {
       _remainingSeconds = widget.refreshIntervalSeconds;
@@ -73,6 +84,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   }
 
   void _showIntervalPickerDialog() {
+    if (_isDisposed) return;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
     showCupertinoModalPopup(
@@ -147,11 +159,13 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     if (oldWidget.refreshIntervalSeconds != widget.refreshIntervalSeconds) {
       _remainingSeconds = widget.refreshIntervalSeconds;
       _lastRefreshTime = DateTime.now();
+      _restartTimer();
     }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _timer.cancel();
     super.dispose();
   }
@@ -159,7 +173,9 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final progress = 1 - (_remainingSeconds / widget.refreshIntervalSeconds);
+    // 防止除零错误
+    final interval = widget.refreshIntervalSeconds > 0 ? widget.refreshIntervalSeconds : 60;
+    final progress = 1 - (_remainingSeconds / interval);
 
     return GestureDetector(
       onTap: _manualRefresh,
@@ -183,7 +199,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 圆形进度指示器
             if (!widget.isRefreshing)
               SizedBox(
                 width: widget.size - 6,
@@ -198,14 +213,13 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
                   ),
                 ),
               ),
-            // 图标或倒计时数字
             if (widget.isRefreshing)
               SizedBox(
                 width: widget.size - 8,
                 height: widget.size - 8,
                 child: const CupertinoActivityIndicator(),
               )
-            else if (_remainingSeconds > 0 && _remainingSeconds <= widget.refreshIntervalSeconds)
+            else if (_remainingSeconds > 0 && _remainingSeconds <= interval)
               Text(
                 '$_remainingSeconds',
                 style: TextStyle(

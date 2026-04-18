@@ -49,6 +49,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   DateTime _lastUpdateTime = DateTime.now();
 
   final GlobalKey _chartKey = GlobalKey();
+  final GlobalKey _chartContainerKey = GlobalKey();
 
   @override
   void initState() {
@@ -326,7 +327,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final interval = _getNiceInterval(minY, maxY);
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
 
-    // 动态计算 X 轴最大标签数量（根据屏幕宽度自适应）
     final screenWidth = MediaQuery.of(context).size.width;
     final maxXAxisTicks = screenWidth < 600 ? 4 : 6;
     final bottomInterval = (_maxIndex / maxXAxisTicks).ceilToDouble();
@@ -340,7 +340,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final avgValue = _getHoverAvgReturn();
     final hsValue = _getHoverHsReturn();
 
-    // 莫兰迪低饱和度中性色（适配深浅模式）
     final morandiColor = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF8A8A8A);
 
     return Container(
@@ -412,265 +411,266 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             )).toList(),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 240,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: Container(
-                    key: _chartKey,
-                    child: LineChart(
-                      LineChartData(
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: interval,
-                          getDrawingHorizontalLine: (value) => FlLine(
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.08)
-                                : CupertinoColors.systemGrey.withOpacity(0.15),
-                            strokeWidth: 0.5,
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 45,
-                              interval: interval,
-                              getTitlesWidget: (value, meta) {
-                                final percent = value * 100;
-                                String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
-                                if (percent > 0) label = '+$label%';
-                                if (percent < 0) label = '$label%';
-                                if (percent == 0) label = '0%';
-                                return Text(
-                                  label,
-                                  style: TextStyle(fontSize: 10, color: morandiColor),
-                                );
-                              },
+          RepaintBoundary(
+            key: _chartContainerKey,
+            child: SizedBox(
+              height: 240,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.easeInOut,
+                    switchOutCurve: Curves.easeInOut,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: Container(
+                      key: _chartKey,
+                      child: LineChart(
+                        LineChartData(
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: interval,
+                            getDrawingHorizontalLine: (value) => FlLine(
+                              color: isDark
+                                  ? CupertinoColors.white.withOpacity(0.08)
+                                  : CupertinoColors.systemGrey.withOpacity(0.15),
+                              strokeWidth: 0.5,
                             ),
                           ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 30,
-                              interval: bottomInterval,
-                              getTitlesWidget: (value, meta) {
-                                final idx = value.toInt();
-                                if (idx >= 0 && idx < _sliceDates.length) {
-                                  return Transform.rotate(
-                                    angle: -0.5,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        _formatDateShort(_sliceDates[idx]),
-                                        style: TextStyle(fontSize: 10, color: morandiColor),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
+                          titlesData: FlTitlesData(
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 45,
+                                interval: interval,
+                                getTitlesWidget: (value, meta) {
+                                  final percent = value * 100;
+                                  String label = percent.toStringAsFixed(percent % 1 == 0 ? 0 : 1);
+                                  if (percent > 0) label = '+$label%';
+                                  if (percent < 0) label = '$label%';
+                                  if (percent == 0) label = '0%';
+                                  return Text(
+                                    label,
+                                    style: TextStyle(fontSize: 10, color: morandiColor),
                                   );
-                                }
-                                return const Text('');
-                              },
+                                },
+                              ),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 30,
+                                interval: bottomInterval,
+                                getTitlesWidget: (value, meta) {
+                                  final idx = value.toInt();
+                                  if (idx >= 0 && idx < _sliceDates.length) {
+                                    return Transform.rotate(
+                                      angle: -0.5,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          _formatDateShort(_sliceDates[idx]),
+                                          style: TextStyle(fontSize: 10, color: morandiColor),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const Text('');
+                                },
+                              ),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
                             ),
                           ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
+                          borderData: FlBorderData(
+                            show: true,
+                            border: Border.all(
+                              color: isDark
+                                  ? CupertinoColors.white.withOpacity(0.2)
+                                  : CupertinoColors.systemGrey.withOpacity(0.5),
+                            ),
                           ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                        ),
-                        borderData: FlBorderData(
-                          show: true,
-                          border: Border.all(
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.2)
-                                : CupertinoColors.systemGrey.withOpacity(0.5),
-                          ),
-                        ),
-                        minX: 0,
-                        maxX: _maxIndex.toDouble(),
-                        minY: minY,
-                        maxY: maxY,
-                        lineTouchData: LineTouchData(
-                          enabled: true,
-                          handleBuiltInTouches: true,
-                          touchSpotThreshold: 20,
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipItems: (touchedSpots) {
-                              return List<LineTooltipItem?>.filled(touchedSpots.length, null);
+                          minX: 0,
+                          maxX: _maxIndex.toDouble(),
+                          minY: minY,
+                          maxY: maxY,
+                          lineTouchData: LineTouchData(
+                            enabled: true,
+                            handleBuiltInTouches: true,
+                            touchSpotThreshold: 20,
+                            touchTooltipData: LineTouchTooltipData(
+                              getTooltipItems: (touchedSpots) {
+                                return List<LineTooltipItem?>.filled(touchedSpots.length, null);
+                              },
+                            ),
+                            getTouchedSpotIndicator: (barData, spotIndexes) {
+                              return spotIndexes.map((index) {
+                                return TouchedSpotIndicatorData(
+                                  FlLine(color: Colors.transparent, strokeWidth: 0),
+                                  FlDotData(
+                                    show: barData.color == fundLineColor,
+                                    getDotPainter: (spot, percent, barData, index) {
+                                      return FlDotCirclePainter(
+                                        radius: 3,
+                                        color: barData.color!,
+                                        strokeWidth: 2,
+                                        strokeColor: isDark ? Colors.black : Colors.white,
+                                      );
+                                    },
+                                  ),
+                                );
+                              }).toList();
+                            },
+                            touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                              if (!event.isInterestedForInteractions ||
+                                  response == null ||
+                                  response.lineBarSpots == null ||
+                                  response.lineBarSpots!.isEmpty) {
+                                if (_hoverIndex != -1) {
+                                  setState(() => _hoverIndex = -1);
+                                }
+                                return;
+                              }
+
+                              final spot = response.lineBarSpots!.firstWhere(
+                                    (s) => s.bar.color == fundLineColor,
+                                orElse: () => response.lineBarSpots!.first,
+                              );
+                              final newIndex = spot.x.toInt();
+                              final now = DateTime.now();
+                              if (newIndex != _hoverIndex && now.difference(_lastUpdateTime) > const Duration(milliseconds: 33)) {
+                                _lastUpdateTime = now;
+                                setState(() {
+                                  _hoverIndex = newIndex;
+                                  const leftMargin = 45.0;
+                                  const bottomMargin = 30.0;
+                                  final plotWidth = _chartWidth - leftMargin;
+                                  final plotHeight = _chartHeight - bottomMargin;
+                                  if (plotWidth > 0 && plotHeight > 0 && _maxIndex > 0) {
+                                    _crosshairX = leftMargin + (newIndex / _maxIndex) * plotWidth;
+                                    final yRange = _currentMaxY - _currentMinY;
+                                    final normalized = yRange > 0 ? (spot.y - _currentMinY) / yRange : 0.5;
+                                    _crosshairY = plotHeight * (1 - normalized);
+                                  }
+                                  final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+                                  if (renderBox != null) {
+                                    _chartWidth = renderBox.size.width;
+                                    _chartHeight = renderBox.size.height;
+                                    final newPlotWidth = _chartWidth - leftMargin;
+                                    final newPlotHeight = _chartHeight - bottomMargin;
+                                    if (newPlotWidth > 0 && newPlotHeight > 0 && _maxIndex > 0) {
+                                      _crosshairX = leftMargin + (newIndex / _maxIndex) * newPlotWidth;
+                                      final yRange2 = _currentMaxY - _currentMinY;
+                                      final normalized2 = yRange2 > 0 ? (spot.y - _currentMinY) / yRange2 : 0.5;
+                                      _crosshairY = newPlotHeight * (1 - normalized2);
+                                    }
+                                  }
+                                });
+                              }
                             },
                           ),
-                          getTouchedSpotIndicator: (barData, spotIndexes) {
-                            return spotIndexes.map((index) {
-                              return TouchedSpotIndicatorData(
-                                FlLine(color: Colors.transparent, strokeWidth: 0),
-                                FlDotData(
-                                  show: barData.color == fundLineColor,
-                                  getDotPainter: (spot, percent, barData, index) {
-                                    return FlDotCirclePainter(
-                                      radius: 3,
-                                      color: barData.color!,
-                                      strokeWidth: 2,
-                                      strokeColor: isDark ? Colors.black : Colors.white,
-                                    );
-                                  },
-                                ),
-                              );
-                            }).toList();
-                          },
-                          touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                            if (!event.isInterestedForInteractions ||
-                                response == null ||
-                                response.lineBarSpots == null ||
-                                response.lineBarSpots!.isEmpty) {
-                              if (_hoverIndex != -1) {
-                                setState(() => _hoverIndex = -1);
-                              }
-                              return;
-                            }
-
-                            final spot = response.lineBarSpots!.firstWhere(
-                                  (s) => s.bar.color == fundLineColor,
-                              orElse: () => response.lineBarSpots!.first,
-                            );
-                            final newIndex = spot.x.toInt();
-                            final now = DateTime.now();
-                            if (newIndex != _hoverIndex && now.difference(_lastUpdateTime) > const Duration(milliseconds: 33)) {
-                              _lastUpdateTime = now;
-                              setState(() {
-                                _hoverIndex = newIndex;
-                                const leftMargin = 45.0;
-                                const bottomMargin = 30.0;
-                                final plotWidth = _chartWidth - leftMargin;
-                                final plotHeight = _chartHeight - bottomMargin;
-                                if (plotWidth > 0 && plotHeight > 0 && _maxIndex > 0) {
-                                  _crosshairX = leftMargin + (newIndex / _maxIndex) * plotWidth;
-                                  final yRange = _currentMaxY - _currentMinY;
-                                  final normalized = yRange > 0 ? (spot.y - _currentMinY) / yRange : 0.5;
-                                  _crosshairY = plotHeight * (1 - normalized);
-                                }
-                                final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
-                                if (renderBox != null) {
-                                  _chartWidth = renderBox.size.width;
-                                  _chartHeight = renderBox.size.height;
-                                  final newPlotWidth = _chartWidth - leftMargin;
-                                  final newPlotHeight = _chartHeight - bottomMargin;
-                                  if (newPlotWidth > 0 && newPlotHeight > 0 && _maxIndex > 0) {
-                                    _crosshairX = leftMargin + (newIndex / _maxIndex) * newPlotWidth;
-                                    final yRange2 = _currentMaxY - _currentMinY;
-                                    final normalized2 = yRange2 > 0 ? (spot.y - _currentMinY) / yRange2 : 0.5;
-                                    _crosshairY = newPlotHeight * (1 - normalized2);
-                                  }
-                                }
-                              });
-                            }
-                          },
-                        ),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: fundSpots,
-                            isCurved: true,
-                            color: fundLineColor,
-                            barWidth: 2,
-                            dotData: const FlDotData(show: false),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: fillColor,
-                              cutOffY: 0,
-                              applyCutOffY: true,
-                            ),
-                            aboveBarData: BarAreaData(
-                              show: true,
-                              color: fillColor,
-                              cutOffY: 0,
-                              applyCutOffY: true,
-                            ),
-                          ),
-                          if (_showAverage && avgSpots.isNotEmpty)
+                          lineBarsData: [
                             LineChartBarData(
-                              spots: avgSpots,
+                              spots: fundSpots,
                               isCurved: true,
-                              color: CupertinoColors.systemBlue,
-                              barWidth: 1.5,
+                              color: fundLineColor,
+                              barWidth: 2,
                               dotData: const FlDotData(show: false),
-                              belowBarData: BarAreaData(show: false),
-                              aboveBarData: BarAreaData(show: false),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                color: fillColor,
+                                cutOffY: 0,
+                                applyCutOffY: true,
+                              ),
+                              aboveBarData: BarAreaData(
+                                show: true,
+                                color: fillColor,
+                                cutOffY: 0,
+                                applyCutOffY: true,
+                              ),
                             ),
-                          if (_showHs300 && hsSpots.isNotEmpty)
-                            LineChartBarData(
-                              spots: hsSpots,
-                              isCurved: true,
-                              color: CupertinoColors.systemGrey,
-                              barWidth: 1.5,
-                              dotData: const FlDotData(show: false),
-                              belowBarData: BarAreaData(show: false),
-                              aboveBarData: BarAreaData(show: false),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (_hoverIndex >= 0 && _chartWidth > 0 && _chartHeight > 0)
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _CrosshairPainter(
-                        crossX: _crosshairX,
-                        crossY: _crosshairY,
-                        color: morandiColor,
-                      ),
-                    ),
-                  ),
-                // X轴悬停日期标签（风格与Y轴涨跌幅标签统一）
-                if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
-                  Positioned(
-                    left: _crosshairX - 40,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: morandiColor, // 纯色背景，与涨跌幅标签一致
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
-                        ),
-                        child: Text(
-                          _getHoverDate(),
-                          style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                            if (_showAverage && avgSpots.isNotEmpty)
+                              LineChartBarData(
+                                spots: avgSpots,
+                                isCurved: true,
+                                color: CupertinoColors.systemBlue,
+                                barWidth: 1.5,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(show: false),
+                                aboveBarData: BarAreaData(show: false),
+                              ),
+                            if (_showHs300 && hsSpots.isNotEmpty)
+                              LineChartBarData(
+                                spots: hsSpots,
+                                isCurved: true,
+                                color: CupertinoColors.systemGrey,
+                                barWidth: 1.5,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(show: false),
+                                aboveBarData: BarAreaData(show: false),
+                              ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                // Y轴涨跌幅标签
-                if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
-                  Positioned(
-                    left: 0,
-                    top: _crosshairY - 12,
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
+                  if (_hoverIndex >= 0 && _chartWidth > 0 && _chartHeight > 0)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _CrosshairPainter(
+                          crossX: _crosshairX,
+                          crossY: _crosshairY,
                           color: morandiColor,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${fundValue >= 0 ? '+' : ''}${fundValue.toStringAsFixed(2)}%',
-                          style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                  if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
+                    Positioned(
+                      left: _crosshairX - 40,
+                      bottom: 0,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: morandiColor,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                          ),
+                          child: Text(
+                            _getHoverDate(),
+                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
+                    Positioned(
+                      left: 0,
+                      top: _crosshairY - 12,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: morandiColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${fundValue >= 0 ? '+' : ''}${fundValue.toStringAsFixed(2)}%',
+                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -762,7 +762,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   }
 }
 
-/// 绘制完整的十字虚线（垂直+水平），确保贯穿整个图表
 class _CrosshairPainter extends CustomPainter {
   final double crossX;
   final double crossY;

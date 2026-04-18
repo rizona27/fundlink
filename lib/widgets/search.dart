@@ -2,7 +2,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 
-/// 封装的搜索组件（增强磨玻璃风格）
 class Search extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -20,11 +19,9 @@ class Search extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    // 优化磨玻璃背景色：深色模式使用更深更透的底色，浅色模式保持半透白
     final frostedBgColor = isDarkMode
-        ? const Color(0xFF1C1C1E).withValues(alpha: 0.75)
-        : CupertinoColors.white.withValues(alpha: 0.75);
-    // 增强模糊强度
+        ? const Color(0xFF1C1C1E).withOpacity(0.75)
+        : CupertinoColors.white.withOpacity(0.75);
     const blurSigma = 12.0;
 
     return Container(
@@ -33,7 +30,7 @@ class Search extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -49,8 +46,8 @@ class Search extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDarkMode
-                    ? CupertinoColors.white.withValues(alpha: 0.15)
-                    : CupertinoColors.black.withValues(alpha: 0.05),
+                    ? CupertinoColors.white.withOpacity(0.15)
+                    : CupertinoColors.black.withOpacity(0.05),
                 width: 0.5,
               ),
             ),
@@ -61,8 +58,8 @@ class Search extends StatelessWidget {
               placeholderStyle: TextStyle(
                 fontSize: 15,
                 color: isDarkMode
-                    ? CupertinoColors.white.withValues(alpha: 0.6)
-                    : CupertinoColors.systemGrey.withValues(alpha: 0.9),
+                    ? CupertinoColors.white.withOpacity(0.6)
+                    : CupertinoColors.systemGrey.withOpacity(0.9),
               ),
               style: TextStyle(
                 fontSize: 15,
@@ -74,6 +71,7 @@ class Search extends StatelessWidget {
                 controller.clear();
                 onClear();
                 onChanged('');
+                focusNode.requestFocus();
               },
             ),
           ),

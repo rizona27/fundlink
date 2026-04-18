@@ -3,7 +3,7 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
-import '../views/fund_detail_page.dart';   // 导入详情页
+import '../views/fund_detail_page.dart';
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;
@@ -31,15 +31,21 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   double _dragOffset = 0;
   static const double _maxSwipeOffset = 70;
   DataManager? _dataManager;
+  bool _isListenerRegistered = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final dm = DataManagerProvider.of(context);
     if (_dataManager != dm) {
-      _dataManager?.removeListener(_onDataManagerChanged);
+      if (_isListenerRegistered && _dataManager != null) {
+        _dataManager!.removeListener(_onDataManagerChanged);
+      }
       _dataManager = dm;
-      _dataManager?.addListener(_onDataManagerChanged);
+      if (!_isListenerRegistered && _dataManager != null) {
+        _dataManager!.addListener(_onDataManagerChanged);
+        _isListenerRegistered = true;
+      }
     }
   }
 
@@ -49,7 +55,10 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
-    _dataManager?.removeListener(_onDataManagerChanged);
+    if (_isListenerRegistered && _dataManager != null) {
+      _dataManager!.removeListener(_onDataManagerChanged);
+      _isListenerRegistered = false;
+    }
     super.dispose();
   }
 
@@ -151,7 +160,6 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
     widget.onCopyClientId?.call();
   }
 
-  // 原有报告功能：复制文本报告
   void _onGenerateReport() {
     final report = _reportContent;
     Clipboard.setData(ClipboardData(text: report)).then((_) {
@@ -208,7 +216,6 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
 
   String _formatSwiftShortDate(DateTime date) => '${date.year.toString().substring(2)}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  // 新增：跳转到详情页
   void _onNavigateToDetail() {
     Navigator.of(context).push(
       CupertinoPageRoute(
@@ -226,7 +233,6 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     final bool hasNoData = !widget.holding.isValid || widget.holding.currentNav <= 0;
     final isPinned = widget.holding.isPinned;
 
-    // 断言 _dataManager 非空（didChangeDependencies 已调用）
     final dataManager = _dataManager!;
     final displayClientName = dataManager.obscuredName(widget.holding.clientName);
 
@@ -402,9 +408,8 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                   ],
                   const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,  // 改为 spaceBetween，使左右按钮分开
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 新增：左下角“详情”按钮
                       CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minSize: 0,

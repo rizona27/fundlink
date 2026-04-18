@@ -2,16 +2,12 @@ import 'dart:async';
 import 'dart:ui' as ui show Color;
 import 'package:flutter/cupertino.dart';
 
-/// 悬浮药丸状底部导航栏（滚动时降低透明度，纯阴影立体感，无边框）
-/// 支持每个标签独立渐变色，点击动画：
-/// - 未选中时图标顺时针旋转270°再逆时针返回，同时颜色从灰色渐变为激活色
-/// - 已选中时图标缩放，颜色先减弱再增强
 class FloatingTabBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final List<BottomNavigationBarItem> items;
-  final List<ui.Color>? activeColors;      // 渐变起始色（也用于文字）
-  final List<ui.Color>? activeColorsEnd;   // 渐变结束色
+  final List<ui.Color>? activeColors;
+  final List<ui.Color>? activeColorsEnd;
 
   const FloatingTabBar({
     super.key,
@@ -226,14 +222,12 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                               colorAnimation,
                             ]),
                             builder: (context, child) {
-                              // 旋转角度：顺时针 270° 再逆时针返回
                               double t = _rotateControllers[index].value;
                               double angle = 270 * (1 - (2 * t - 1).abs()) * 3.14159 / 180;
 
                               // 图标颜色处理
                               Color iconColor;
                               if (isSelected) {
-                                // 选中状态：缩放动画期间颜色变弱（半透明），否则白色
                                 double scaleValue = _scaleAnimations[index].value;
                                 if (scaleValue < 1.0) {
                                   iconColor = CupertinoColors.white.withValues(alpha: 0.6);
@@ -241,7 +235,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                                   iconColor = CupertinoColors.white;
                                 }
                               } else {
-                                // 未选中状态：旋转动画期间使用渐变色，否则非激活色
                                 iconColor = (_rotateControllers[index].isAnimating
                                     ? (colorAnimation.value ?? inactiveIconColor)
                                     : inactiveIconColor);

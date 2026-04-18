@@ -1,10 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 
-/// 通用渐变卡片组件
 class GradientCard extends StatelessWidget {
   final String title;
-  final String? clientId;           // 新增：客户号（浅灰色显示）
+  final String? clientId;
   final String? subtitle;
   final int? countValue;
   final List<Color> gradient;
@@ -59,6 +58,9 @@ class GradientCard extends StatelessWidget {
   }
 
   Color _getShadowColor() {
+    if (gradient.isEmpty) {
+      return isDarkMode ? CupertinoColors.black.withOpacity(0.3) : Colors.black.withOpacity(0.15);
+    }
     if (isDarkMode) {
       return CupertinoColors.black.withOpacity(0.3);
     }
@@ -75,7 +77,7 @@ class GradientCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final endColor = _getEndColor();
-    final adjustedGradient = [gradient[0], endColor];
+    final gradientColors = gradient.isNotEmpty ? [gradient[0], endColor] : [endColor, endColor];
     final countColor = _getCountColor(countValue);
     final textColor = _getTextColor();
     final subTextColor = _getSubTextColor();
@@ -95,7 +97,7 @@ class GradientCard extends StatelessWidget {
           padding: padding ?? const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: adjustedGradient,
+              colors: gradientColors,
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),

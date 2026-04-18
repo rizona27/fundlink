@@ -67,7 +67,7 @@ class EmptyState extends StatelessWidget {
                 ),
                 Opacity(
                   opacity: isDarkMode ? 0.03 : 0.01,
-                  child: const _GridBackground(),
+                  child: const _GridBackgroundWidget(),
                 ),
               ],
             ),
@@ -223,19 +223,21 @@ class _GlassButton extends StatelessWidget {
   }
 }
 
-class _GridBackground extends StatelessWidget {
-  const _GridBackground();
+class _GridBackgroundWidget extends StatelessWidget {
+  const _GridBackgroundWidget();
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _GridPainter(),
+      painter: const _GridPainter(),
       size: Size.infinite,
     );
   }
 }
 
 class _GridPainter extends CustomPainter {
+  const _GridPainter();
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()

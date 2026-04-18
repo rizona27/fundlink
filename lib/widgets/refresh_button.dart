@@ -85,9 +85,7 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   void _showLoadingOverlay(BuildContext context, {String message = '刷新中...'}) {
     _hideLoadingOverlay();
 
-    // 获取当前主题亮度，决定遮罩颜色
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    // 深色模式使用更暗的遮罩，浅色模式使用半透明遮罩
     final overlayColor = isDarkMode
         ? Colors.black.withOpacity(0.7 * _overlayOpacity)
         : Colors.black.withOpacity(0.3 * _overlayOpacity);
@@ -97,7 +95,9 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
       vsync: this,
     )..addListener(() {
       _overlayOpacity = _fadeController!.value;
-      _loadingOverlayEntry?.markNeedsBuild();
+      if (_loadingOverlayEntry != null && _loadingOverlayEntry!.mounted) {
+        _loadingOverlayEntry!.markNeedsBuild();
+      }
     });
 
     _loadingOverlayEntry = OverlayEntry(
@@ -109,7 +109,6 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
               decoration: BoxDecoration(
-                // 深色模式下使用更暗的背景，浅色模式使用系统背景
                 color: isDarkMode
                     ? const Color(0xFF1C1C1E).withOpacity(0.95)
                     : CupertinoColors.systemBackground,
@@ -173,14 +172,12 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
     final holdings = widget.dataManager.holdings;
     final totalCount = holdings.length;
 
-    // 决定哪些基金需要刷新
     List<FundHolding> needsRefreshHoldings;
     if (forceAll) {
       needsRefreshHoldings = List.from(holdings);
     } else {
       needsRefreshHoldings = [];
       for (final holding in holdings) {
-        // 只刷新那些没有任何收益率数据的基金（近1/3/6月、近1年全为 null）
         if (_hasNoReturnData(holding)) {
           needsRefreshHoldings.add(holding);
         }
@@ -224,7 +221,13 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
       type: LogType.success,
     );
 
+    // 保持遮罩至少显示 500ms，避免闪烁
+    final overlayStartTime = DateTime.now();
     _hideLoadingOverlay();
+    final elapsed = DateTime.now().difference(overlayStartTime);
+    if (elapsed < const Duration(milliseconds: 500)) {
+      await Future.delayed(Duration(milliseconds: 500 - elapsed.inMilliseconds));
+    }
 
     if (mounted) {
       setState(() {
