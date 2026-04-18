@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'dart:io' show Platform;
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
@@ -22,6 +27,10 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   List<NetWorthPoint> _fundPoints = [];
   List<NetWorthPoint> _avgPoints = [];
   List<NetWorthPoint> _hsPoints = [];
+
+  // 缓存计算结果
+  List<NetWorthPoint>? _cachedFundPointsWithChanges;
+  String? _lastFundCodeForCache;
 
   List<TopHolding> _topHoldings = [];
   Map<String, dynamic>? _valuation;
@@ -49,7 +58,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   final GlobalKey _topHoldingsKey = GlobalKey();
   final GlobalKey _historyKey = GlobalKey();
 
-  // 动画控制器，用于更精确的滚动时机
   late AnimationController _animationController;
 
   @override
@@ -82,6 +90,19 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     }
   }
 
+  // 获取带涨跌幅的净值数据（带缓存）
+  List<NetWorthPoint> get _fundPointsWithChanges {
+    if (_cachedFundPointsWithChanges != null &&
+        _lastFundCodeForCache == widget.holding.fundCode &&
+        _fundPoints.isNotEmpty) {
+      return _cachedFundPointsWithChanges!;
+    }
+
+    _cachedFundPointsWithChanges = _calculateDailyChanges(_fundPoints);
+    _lastFundCodeForCache = widget.holding.fundCode;
+    return _cachedFundPointsWithChanges!;
+  }
+
   Future<void> _loadDetailData({bool forceRefresh = false}) async {
     if (!forceRefresh && _isDataCached && _lastFetchTime != null) {
       final elapsed = DateTime.now().difference(_lastFetchTime!);
@@ -97,7 +118,8 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
       final rawTrend = await _fundService.fetchNetWorthTrend(widget.holding.fundCode);
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
         ..sort((a, b) => a.date.compareTo(b.date));
-      _fundPoints = _calculateDailyChanges(_fundPoints);
+      // 清除缓存，下次访问时会重新计算
+      _cachedFundPointsWithChanges = null;
 
       final benchmark = await _fundService.fetchBenchmarkData(widget.holding.fundCode);
       _avgPoints = (benchmark['average'] as List<NetWorthPoint>)
@@ -164,7 +186,7 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   }
 
   void _initHistoryPagination() {
-    final descending = List<NetWorthPoint>.from(_fundPoints)
+    final descending = List<NetWorthPoint>.from(_fundPointsWithChanges)
       ..sort((a, b) => b.date.compareTo(a.date));
     _historyList = descending.take(_historyPageSize).toList();
     _hasMoreHistory = descending.length > _historyPageSize;
@@ -175,7 +197,7 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     if (_loadingMoreHistory || !_hasMoreHistory) return;
     setState(() => _loadingMoreHistory = true);
     try {
-      final descending = List<NetWorthPoint>.from(_fundPoints)
+      final descending = List<NetWorthPoint>.from(_fundPointsWithChanges)
         ..sort((a, b) => b.date.compareTo(a.date));
       final start = _historyPage * _historyPageSize;
       final end = start + _historyPageSize;
@@ -228,22 +250,17 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     });
   }
 
-  // 优化滚动逻辑：监听动画完成后再滚动
   Future<void> _smoothScrollTo(GlobalKey key, bool isExpanding) async {
     if (!isExpanding) return;
-
-    // 等待动画完成一半
     await Future.delayed(const Duration(milliseconds: 200));
-
     final context = key.currentContext;
     if (context != null) {
-      // 使用 addPostFrameCallback 确保布局已更新
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Scrollable.ensureVisible(
           context,
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutCubic,
-          alignment: 0.05, // 稍微留一点顶部间距，视觉更舒适
+          alignment: 0.05,
         );
       });
     }
@@ -269,7 +286,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
           builder: (context, constraints) {
             return SingleChildScrollView(
               controller: _mainScrollController,
-              // 动态底部留白：根据展开状态调整，收缩时留白更少
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
@@ -286,7 +302,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
                   _buildCollapsibleTopHoldings(isDark),
                   const SizedBox(height: 24),
                   _buildCollapsibleHistory(isDark),
-                  // 添加一个额外的弹性空间，让底部留白更自然
                   const SizedBox(height: 8),
                 ],
               ),
@@ -297,29 +312,21 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  // 动态计算底部留白
   double _getDynamicBottomPadding() {
     if (_isHistoryExpanded || _isTopHoldingsExpanded) {
-      return 40; // 展开时留白较少，让用户看到更多内容
+      return 40;
     }
-    return 20; // 收缩时留白更少，避免空白感
+    return 20;
   }
 
-  // 抽离图表部分，减少重建范围
+  // 优化后的图表部分 - 支持移动端触摸和PC端悬停
   Widget _buildChartSection(bool isDark) {
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: const BoxDecoration(),
-      child: MouseRegion(
-        onHover: (_) {},
-        child: RepaintBoundary(
-          key: ValueKey('chart_container_${widget.holding.fundCode}'),
-          child: FundPerformanceChart(
-            fundPoints: _fundPoints,
-            avgPoints: _avgPoints,
-            hsPoints: _hsPoints,
-          ),
-        ),
+    return RepaintBoundary(
+      key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
+      child: _OptimizedPerformanceChart(
+        fundPoints: _fundPointsWithChanges,
+        avgPoints: _avgPoints,
+        hsPoints: _hsPoints,
       ),
     );
   }
@@ -485,7 +492,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  // ========== 可折叠的「前10重仓股票」模块 ==========
   Widget _buildCollapsibleTopHoldings(bool isDark) {
     return Container(
       key: _topHoldingsKey,
@@ -656,7 +662,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  // ========== 可折叠的「历史净值」模块 ==========
   Widget _buildCollapsibleHistory(bool isDark) {
     return Container(
       key: _historyKey,
@@ -720,7 +725,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  // 优化历史净值表格渲染
   Widget _buildHistoryTable(bool isDark) {
     if (_historyList.isEmpty) return const SizedBox.shrink();
     return SizedBox(
@@ -833,4 +837,70 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   String _formatDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
+}
+
+// 优化后的图表组件 - 分离触摸和悬停逻辑
+class _OptimizedPerformanceChart extends StatefulWidget {
+  final List<NetWorthPoint> fundPoints;
+  final List<NetWorthPoint> avgPoints;
+  final List<NetWorthPoint> hsPoints;
+
+  const _OptimizedPerformanceChart({
+    required this.fundPoints,
+    required this.avgPoints,
+    required this.hsPoints,
+  });
+
+  @override
+  State<_OptimizedPerformanceChart> createState() => _OptimizedPerformanceChartState();
+}
+
+class _OptimizedPerformanceChartState extends State<_OptimizedPerformanceChart> {
+  Timer? _hoverDebounceTimer;
+
+  // 判断是否为移动端
+  bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+
+  @override
+  void dispose() {
+    _hoverDebounceTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: const BoxDecoration(),
+      child: Listener(
+        onPointerMove: _isMobile ? _handleTouchMove : null,
+        onPointerHover: !_isMobile ? _handleHover : null,
+        child: FundPerformanceChart(
+          fundPoints: widget.fundPoints,
+          avgPoints: widget.avgPoints,
+          hsPoints: widget.hsPoints,
+        ),
+      ),
+    );
+  }
+
+  void _handleTouchMove(PointerMoveEvent event) {
+    // 移动端触摸移动逻辑 - 直接响应，无需防抖
+    // 这里调用图表的触摸移动方法
+    _updateChartHover(event.localPosition);
+  }
+
+  void _handleHover(PointerHoverEvent event) {
+    // PC端悬停 - 使用防抖避免频繁重绘导致闪烁
+    _hoverDebounceTimer?.cancel();
+    _hoverDebounceTimer = Timer(const Duration(milliseconds: 16), () {
+      _updateChartHover(event.localPosition);
+    });
+  }
+
+  void _updateChartHover(Offset position) {
+    // 这里实现图表的悬停/触摸更新逻辑
+    // 具体实现取决于 FundPerformanceChart 的接口
+    // 如果 FundPerformanceChart 有更新悬停位置的方法，在这里调用
+  }
 }

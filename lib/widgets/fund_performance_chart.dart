@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/net_worth_point.dart';
 
@@ -38,9 +39,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   List<double> _sliceAvgValues = [];
   List<double> _sliceHsValues = [];
 
-  int _hoverIndex = -1;
-  double _crosshairX = 0;
-  double _crosshairY = 0;
+  // 使用 ValueNotifier 管理悬停状态
+  final ValueNotifier<int> _hoverIndexNotifier = ValueNotifier(-1);
+  final ValueNotifier<double> _crosshairXNotifier = ValueNotifier(0);
+  final ValueNotifier<double> _crosshairYNotifier = ValueNotifier(0);
+  final ValueNotifier<Offset?> _dotPositionNotifier = ValueNotifier(null);
+
   double _chartWidth = 0;
   double _chartHeight = 0;
   double _currentMinY = 0;
@@ -55,6 +59,15 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   void initState() {
     super.initState();
     _updateSliceAndNormalize();
+  }
+
+  @override
+  void dispose() {
+    _hoverIndexNotifier.dispose();
+    _crosshairXNotifier.dispose();
+    _crosshairYNotifier.dispose();
+    _dotPositionNotifier.dispose();
+    super.dispose();
   }
 
   @override
@@ -191,7 +204,8 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     setState(() {
       _selectedRange = newRange;
       _updateSliceAndNormalize();
-      _hoverIndex = -1;
+      _hoverIndexNotifier.value = -1;
+      _dotPositionNotifier.value = null;
       if (['1y', '3y', 'all'].contains(newRange)) {
         _showAverage = false;
         _showHs300 = false;
@@ -215,29 +229,33 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   }
 
   String _getHoverDate() {
-    if (_hoverIndex >= 0 && _hoverIndex < _sliceDates.length) {
-      return _formatDate(_sliceDates[_hoverIndex]);
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (hoverIndex >= 0 && hoverIndex < _sliceDates.length) {
+      return _formatDate(_sliceDates[hoverIndex]);
     }
     return '';
   }
 
   double _getHoverFundReturn() {
-    if (_hoverIndex >= 0 && _hoverIndex < _sliceFundValues.length) {
-      return (_sliceFundValues[_hoverIndex] - 1) * 100;
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (hoverIndex >= 0 && hoverIndex < _sliceFundValues.length) {
+      return (_sliceFundValues[hoverIndex] - 1) * 100;
     }
     return 0.0;
   }
 
   double _getHoverAvgReturn() {
-    if (_showAverage && _hoverIndex >= 0 && _hoverIndex < _sliceAvgValues.length) {
-      return (_sliceAvgValues[_hoverIndex] - 1) * 100;
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (_showAverage && hoverIndex >= 0 && hoverIndex < _sliceAvgValues.length) {
+      return (_sliceAvgValues[hoverIndex] - 1) * 100;
     }
     return 0.0;
   }
 
   double _getHoverHsReturn() {
-    if (_showHs300 && _hoverIndex >= 0 && _hoverIndex < _sliceHsValues.length) {
-      return (_sliceHsValues[_hoverIndex] - 1) * 100;
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (_showHs300 && hoverIndex >= 0 && hoverIndex < _sliceHsValues.length) {
+      return (_sliceHsValues[hoverIndex] - 1) * 100;
     }
     return 0.0;
   }
@@ -259,10 +277,68 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
-  int _getBottomTitleInterval() {
-    final length = _sliceDates.length;
-    if (length <= 6) return 1;
-    return (length / 6).ceil();
+  void _updateHoverPosition(int newIndex, double spotY) {
+    if (newIndex == _hoverIndexNotifier.value) return;
+
+    final now = DateTime.now();
+    if (now.difference(_lastUpdateTime) < const Duration(milliseconds: 16)) return;
+    _lastUpdateTime = now;
+
+    _hoverIndexNotifier.value = newIndex;
+
+    const leftMargin = 45.0;
+    const bottomMargin = 30.0;
+    final plotWidth = _chartWidth - leftMargin;
+    final plotHeight = _chartHeight - bottomMargin;
+
+    if (plotWidth > 0 && plotHeight > 0 && _maxIndex > 0) {
+      final crossX = leftMargin + (newIndex / _maxIndex) * plotWidth;
+      _crosshairXNotifier.value = crossX;
+      final yRange = _currentMaxY - _currentMinY;
+      final normalized = yRange > 0 ? (spotY - _currentMinY) / yRange : 0.5;
+      final crossY = plotHeight * (1 - normalized);
+      _crosshairYNotifier.value = crossY;
+
+      // 更新圆点位置
+      _dotPositionNotifier.value = Offset(crossX, crossY);
+    }
+  }
+
+  void _clearHover() {
+    if (_hoverIndexNotifier.value != -1) {
+      _hoverIndexNotifier.value = -1;
+      _dotPositionNotifier.value = null;
+    }
+  }
+
+  // 手动处理鼠标悬停，避免 fl_chart 内部重绘
+  void _handleMouseHover(PointerHoverEvent event) {
+    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    // 更新图表尺寸
+    _chartWidth = renderBox.size.width;
+    _chartHeight = renderBox.size.height;
+
+    const leftMargin = 45.0;
+    final localPosition = renderBox.globalToLocal(event.position);
+    final chartWidth = renderBox.size.width - leftMargin;
+
+    if (chartWidth <= 0) return;
+
+    // 计算相对位置（0-1）
+    double relativeX = (localPosition.dx - leftMargin) / chartWidth;
+    relativeX = relativeX.clamp(0.0, 1.0);
+
+    // 计算对应的数据点索引
+    final index = (relativeX * _maxIndex).round();
+    final clampedIndex = index.clamp(0, _maxIndex);
+
+    // 获取对应的 Y 值
+    final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
+    if (clampedIndex < transformedFundValues.length) {
+      _updateHoverPosition(clampedIndex, transformedFundValues[clampedIndex]);
+    }
   }
 
   @override
@@ -334,11 +410,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final fillColor = rangeReturn >= 0
         ? CupertinoColors.systemRed.withOpacity(0.15)
         : CupertinoColors.systemGreen.withOpacity(0.15);
-
-    final currentDate = _getHoverDate();
-    final fundValue = _getHoverFundReturn();
-    final avgValue = _getHoverAvgReturn();
-    final hsValue = _getHoverHsReturn();
 
     final morandiColor = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF8A8A8A);
 
@@ -415,17 +486,14 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             key: _chartContainerKey,
             child: SizedBox(
               height: 240,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.easeInOut,
-                    switchOutCurve: Curves.easeInOut,
-                    transitionBuilder: (child, animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    child: Container(
+              child: MouseRegion(
+                onHover: _handleMouseHover,
+                onExit: (_) => _clearHover(),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 图表主体 - 禁用内置触摸交互
+                    Container(
                       key: _chartKey,
                       child: LineChart(
                         LineChartData(
@@ -502,80 +570,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                           maxX: _maxIndex.toDouble(),
                           minY: minY,
                           maxY: maxY,
-                          lineTouchData: LineTouchData(
-                            enabled: true,
-                            handleBuiltInTouches: true,
-                            touchSpotThreshold: 20,
-                            touchTooltipData: LineTouchTooltipData(
-                              getTooltipItems: (touchedSpots) {
-                                return List<LineTooltipItem?>.filled(touchedSpots.length, null);
-                              },
-                            ),
-                            getTouchedSpotIndicator: (barData, spotIndexes) {
-                              return spotIndexes.map((index) {
-                                return TouchedSpotIndicatorData(
-                                  FlLine(color: Colors.transparent, strokeWidth: 0),
-                                  FlDotData(
-                                    show: barData.color == fundLineColor,
-                                    getDotPainter: (spot, percent, barData, index) {
-                                      return FlDotCirclePainter(
-                                        radius: 3,
-                                        color: barData.color!,
-                                        strokeWidth: 2,
-                                        strokeColor: isDark ? Colors.black : Colors.white,
-                                      );
-                                    },
-                                  ),
-                                );
-                              }).toList();
-                            },
-                            touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                              if (!event.isInterestedForInteractions ||
-                                  response == null ||
-                                  response.lineBarSpots == null ||
-                                  response.lineBarSpots!.isEmpty) {
-                                if (_hoverIndex != -1) {
-                                  setState(() => _hoverIndex = -1);
-                                }
-                                return;
-                              }
-
-                              final spot = response.lineBarSpots!.firstWhere(
-                                    (s) => s.bar.color == fundLineColor,
-                                orElse: () => response.lineBarSpots!.first,
-                              );
-                              final newIndex = spot.x.toInt();
-                              final now = DateTime.now();
-                              if (newIndex != _hoverIndex && now.difference(_lastUpdateTime) > const Duration(milliseconds: 33)) {
-                                _lastUpdateTime = now;
-                                setState(() {
-                                  _hoverIndex = newIndex;
-                                  const leftMargin = 45.0;
-                                  const bottomMargin = 30.0;
-                                  final plotWidth = _chartWidth - leftMargin;
-                                  final plotHeight = _chartHeight - bottomMargin;
-                                  if (plotWidth > 0 && plotHeight > 0 && _maxIndex > 0) {
-                                    _crosshairX = leftMargin + (newIndex / _maxIndex) * plotWidth;
-                                    final yRange = _currentMaxY - _currentMinY;
-                                    final normalized = yRange > 0 ? (spot.y - _currentMinY) / yRange : 0.5;
-                                    _crosshairY = plotHeight * (1 - normalized);
-                                  }
-                                  final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
-                                  if (renderBox != null) {
-                                    _chartWidth = renderBox.size.width;
-                                    _chartHeight = renderBox.size.height;
-                                    final newPlotWidth = _chartWidth - leftMargin;
-                                    final newPlotHeight = _chartHeight - bottomMargin;
-                                    if (newPlotWidth > 0 && newPlotHeight > 0 && _maxIndex > 0) {
-                                      _crosshairX = leftMargin + (newIndex / _maxIndex) * newPlotWidth;
-                                      final yRange2 = _currentMaxY - _currentMinY;
-                                      final normalized2 = yRange2 > 0 ? (spot.y - _currentMinY) / yRange2 : 0.5;
-                                      _crosshairY = newPlotHeight * (1 - normalized2);
-                                    }
-                                  }
-                                });
-                              }
-                            },
+                          // 禁用内置触摸交互，避免频繁重绘
+                          lineTouchData: const LineTouchData(
+                            enabled: false,
+                            handleBuiltInTouches: false,
                           ),
                           lineBarsData: [
                             LineChartBarData(
@@ -621,67 +619,120 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                         ),
                       ),
                     ),
-                  ),
-                  if (_hoverIndex >= 0 && _chartWidth > 0 && _chartHeight > 0)
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _CrosshairPainter(
-                          crossX: _crosshairX,
-                          crossY: _crosshairY,
-                          color: morandiColor,
-                        ),
-                      ),
+                    // 十字线和标签 - 使用 ValueListenableBuilder
+                    ValueListenableBuilder<int>(
+                      valueListenable: _hoverIndexNotifier,
+                      builder: (context, hoverIndex, child) {
+                        if (hoverIndex == -1 || _chartWidth == 0 || _chartHeight == 0) {
+                          return const SizedBox.shrink();
+                        }
+                        return ValueListenableBuilder<double>(
+                          valueListenable: _crosshairXNotifier,
+                          builder: (context, crossX, _) {
+                            return ValueListenableBuilder<double>(
+                              valueListenable: _crosshairYNotifier,
+                              builder: (context, crossY, __) {
+                                return Stack(
+                                  children: [
+                                    // 十字线
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: _CrosshairPainter(
+                                          crossX: crossX,
+                                          crossY: crossY,
+                                          color: morandiColor,
+                                        ),
+                                      ),
+                                    ),
+                                    // 日期标签
+                                    if (crossX > 0 && crossX < _chartWidth)
+                                      Positioned(
+                                        left: crossX - 40,
+                                        bottom: 0,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: morandiColor,
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                                            ),
+                                            child: Text(
+                                              _getHoverDate(),
+                                              style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    // 数值标签
+                                    if (crossY > 0 && crossY < _chartHeight)
+                                      Positioned(
+                                        left: 0,
+                                        top: crossY - 12,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: morandiColor,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${_getHoverFundReturn() >= 0 ? '+' : ''}${_getHoverFundReturn().toStringAsFixed(2)}%',
+                                              style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
                     ),
-                  if (_hoverIndex >= 0 && _crosshairX > 0 && _crosshairX < _chartWidth)
-                    Positioned(
-                      left: _crosshairX - 40,
-                      bottom: 0,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: morandiColor,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                    // 圆点 - 在悬停位置显示
+                    ValueListenableBuilder<Offset?>(
+                      valueListenable: _dotPositionNotifier,
+                      builder: (context, dotPosition, child) {
+                        if (dotPosition == null) return const SizedBox.shrink();
+                        return Positioned(
+                          left: dotPosition.dx - 5,
+                          top: dotPosition.dy - 5,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: fundLineColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? Colors.black : Colors.white,
+                                width: 2,
+                              ),
+                            ),
                           ),
-                          child: Text(
-                            _getHoverDate(),
-                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
-                  if (_hoverIndex >= 0 && _crosshairY > 0 && _crosshairY < _chartHeight)
-                    Positioned(
-                      left: 0,
-                      top: _crosshairY - 12,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: morandiColor,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '${fundValue >= 0 ? '+' : ''}${fundValue.toStringAsFixed(2)}%',
-                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
           const SizedBox(height: 12),
           if (isShortRange)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildLegendItemWithValue('本基金', fundLineColor, fundValue, isDark, null),
-                _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, avgValue, isDark, _toggleAverage),
-                _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, hsValue, isDark, _toggleHs300),
-              ],
+            ValueListenableBuilder<int>(
+              valueListenable: _hoverIndexNotifier,
+              builder: (context, hoverIndex, child) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildLegendItemWithValue('本基金', fundLineColor, _getHoverFundReturn(), isDark, null),
+                    _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
+                    _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
+                  ],
+                );
+              },
             ),
         ],
       ),
