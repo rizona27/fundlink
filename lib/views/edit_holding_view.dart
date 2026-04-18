@@ -126,8 +126,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   bool _sharesError = false;
 
   late DateTime _purchaseDate;
-  bool _isLoading = false;
-  bool _isSaving = false;
+  bool _isSaving = false;  // 统一使用 _isSaving
 
   @override
   void initState() {
@@ -240,7 +239,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     if (!_isFormValid) return;
 
     setState(() {
-      _isLoading = true;
       _isSaving = true;
     });
 
@@ -288,7 +286,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
           _isSaving = false;
         });
       }
@@ -310,7 +307,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
-        // 移除返回按钮，设置空白leading，并添加标题
         leading: const SizedBox.shrink(),
         middle: const Text(
           '编辑持仓',
@@ -319,7 +315,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         backgroundColor: Colors.transparent,
       ),
       child: SafeArea(
-        child: _isLoading
+        child: _isSaving
             ? const Center(child: CupertinoActivityIndicator(radius: 20))
             : SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -469,7 +465,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  // 磨玻璃质感区块（带 BackdropFilter）
   Widget _buildFrostedSection({
     required String title,
     required bool isDarkMode,
@@ -517,7 +512,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  // 修复溢出：使用 Flexible 替代固定宽度，让标签自适应
   Widget _buildRowField({
     required String label,
     required bool required,
@@ -552,7 +546,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  // 输入框：极细底边，无实体边框
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,
@@ -680,7 +673,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 }
 
-// 模态日期选择器（复用 GlassButton）
 class _DatePickerModal extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onConfirm;
