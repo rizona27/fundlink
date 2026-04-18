@@ -30,8 +30,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   // 筛选输入框控制器
   final TextEditingController _minAmountController = TextEditingController();
   final TextEditingController _maxAmountController = TextEditingController();
-  final TextEditingController _minProfitController = TextEditingController();   // 新增：收益金额最低
-  final TextEditingController _maxProfitController = TextEditingController();   // 新增：收益金额最高
+  final TextEditingController _minProfitController = TextEditingController();
+  final TextEditingController _maxProfitController = TextEditingController();
   final TextEditingController _minProfitRateController = TextEditingController();
   final TextEditingController _maxProfitRateController = TextEditingController();
   final TextEditingController _minDaysController = TextEditingController();
@@ -40,8 +40,8 @@ class _TopPerformersViewState extends State<TopPerformersView> {
   // 实际筛选值（防抖后应用）
   double? _minAmount;
   double? _maxAmount;
-  double? _minProfit;      // 新增：收益金额最低
-  double? _maxProfit;      // 新增：收益金额最高
+  double? _minProfit;
+  double? _maxProfit;
   double? _minProfitRate;
   double? _maxProfitRate;
   double? _minDays;
@@ -162,15 +162,12 @@ class _TopPerformersViewState extends State<TopPerformersView> {
 
     var filtered = List<FundHolding>.from(validHoldings);
 
-    // 金额筛选
     if (_minAmount != null) {
       filtered = filtered.where((h) => h.purchaseAmount >= _minAmount!).toList();
     }
     if (_maxAmount != null) {
       filtered = filtered.where((h) => h.purchaseAmount <= _maxAmount!).toList();
     }
-
-    // 收益金额筛选
     if (_minProfit != null) {
       filtered = filtered.where((h) {
         final profit = _dataManager.calculateProfit(h);
@@ -183,8 +180,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
         return profit.absolute <= _maxProfit!;
       }).toList();
     }
-
-    // 收益率筛选
     if (_minProfitRate != null) {
       filtered = filtered.where((h) {
         final profit = _dataManager.calculateProfit(h);
@@ -197,8 +192,6 @@ class _TopPerformersViewState extends State<TopPerformersView> {
         return profit.annualized <= _maxProfitRate!;
       }).toList();
     }
-
-    // 持有天数筛选
     if (_minDays != null) {
       filtered = filtered.where((h) {
         final days = DateTime.now().difference(h.purchaseDate).inDays;
@@ -301,6 +294,11 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       }
     });
     _updateCachedItems();
+    // 添加排序切换 Toast
+    String sortType = key.displayName;
+    String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
+    context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
+    _dataManager.addLog('排序方式切换为: ${key.displayName}${_sortOrder == SortOrder.ascending ? "(升序)" : "(降序)"}', type: LogType.info);
   }
 
   void _onSortOrderChanged(SortOrder order) {
@@ -308,6 +306,11 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       _sortOrder = order;
     });
     _updateCachedItems();
+    // 添加排序顺序切换 Toast
+    String sortType = _sortKey.displayName;
+    String orderText = order == SortOrder.ascending ? '升序' : '降序';
+    context.showToast('${sortType} $orderText');
+    _dataManager.addLog('排序顺序切换为: ${order == SortOrder.ascending ? "升序" : "降序"}', type: LogType.info);
   }
 
   void _toggleFilter() {
@@ -337,7 +340,14 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     final nextProfit = _sortKey == SortKey.profitRate
         ? _cachedItems[index + 1].profit.annualized
         : _cachedItems[index + 1].profit.absolute;
-    return currentProfit >= 0 && nextProfit < 0;
+
+    if (_sortOrder == SortOrder.descending) {
+      // 降序：正收益和负收益的交界处显示分割线（正→负）
+      return currentProfit >= 0 && nextProfit < 0;
+    } else {
+      // 升序：负收益和正收益的交界处显示分割线（负→正）
+      return currentProfit < 0 && nextProfit >= 0;
+    }
   }
 
   @override
@@ -483,92 +493,52 @@ class _TopPerformersViewState extends State<TopPerformersView> {
       ),
       child: Column(
         children: [
-          // 第一行：金额筛选
+          // 第一行：金额 和 收益
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '金额(万) 最低',
-                  controller: _minAmountController,
-                  onChanged: (_) => _scheduleFilterApply(),
+                child: _buildFilterGroup(
+                  title: '金额',
+                  minController: _minAmountController,
+                  maxController: _maxAmountController,
+                  unit: '万',
                   isDarkMode: isDarkMode,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '金额(万) 最高',
-                  controller: _maxAmountController,
-                  onChanged: (_) => _scheduleFilterApply(),
+                child: _buildFilterGroup(
+                  title: '收益',
+                  minController: _minProfitController,
+                  maxController: _maxProfitController,
+                  unit: '万',
                   isDarkMode: isDarkMode,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // 第二行：收益金额筛选
+          // 第二行：收益率 和 持有天数
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '收益(万) 最低',
-                  controller: _minProfitController,
-                  onChanged: (_) => _scheduleFilterApply(),
+                child: _buildFilterGroup(
+                  title: '收益率',
+                  minController: _minProfitRateController,
+                  maxController: _maxProfitRateController,
+                  unit: '%',
                   isDarkMode: isDarkMode,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '收益(万) 最高',
-                  controller: _maxProfitController,
-                  onChanged: (_) => _scheduleFilterApply(),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // 第三行：收益率筛选
-          Row(
-            children: [
-              Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '收益率(%) 最低',
-                  controller: _minProfitRateController,
-                  onChanged: (_) => _scheduleFilterApply(),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '收益率(%) 最高',
-                  controller: _maxProfitRateController,
-                  onChanged: (_) => _scheduleFilterApply(),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // 第四行：持有天数筛选
-          Row(
-            children: [
-              Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '持有天数 最低',
-                  controller: _minDaysController,
-                  onChanged: (_) => _scheduleFilterApply(),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildFilterTextField(
-                  placeholder: '持有天数 最高',
-                  controller: _maxDaysController,
-                  onChanged: (_) => _scheduleFilterApply(),
+                child: _buildFilterGroup(
+                  title: '持有天数',
+                  minController: _minDaysController,
+                  maxController: _maxDaysController,
+                  unit: '天',
                   isDarkMode: isDarkMode,
                 ),
               ),
@@ -579,33 +549,96 @@ class _TopPerformersViewState extends State<TopPerformersView> {
     );
   }
 
-  Widget _buildFilterTextField({
-    required String placeholder,
-    required TextEditingController controller,
-    required Function(String) onChanged,
+  Widget _buildFilterGroup({
+    required String title,
+    required TextEditingController minController,
+    required TextEditingController maxController,
+    required String unit,
     required bool isDarkMode,
   }) {
-    return CupertinoTextField(
-      controller: controller,
-      placeholder: placeholder,
-      placeholderStyle: TextStyle(
-        fontSize: 13,
-        color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+          ),
         ),
-      ),
-      style: TextStyle(
-        fontSize: 14,
-        color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
-      ),
-      keyboardType: TextInputType.number,
-      onChanged: onChanged,
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: CupertinoTextField(
+                controller: minController,
+                placeholder: '下限',
+                placeholderStyle: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? CupertinoColors.white.withOpacity(0.4) : CupertinoColors.systemGrey,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                  ),
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _scheduleFilterApply(),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '-',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+                ),
+              ),
+            ),
+            Expanded(
+              child: CupertinoTextField(
+                controller: maxController,
+                placeholder: '上限',
+                placeholderStyle: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? CupertinoColors.white.withOpacity(0.4) : CupertinoColors.systemGrey,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                  ),
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _scheduleFilterApply(),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              unit,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
