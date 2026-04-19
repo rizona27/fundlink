@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors; // 导入 Colors
+import 'package:flutter/services.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';
@@ -6,8 +8,16 @@ import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
+import 'views/splash_view.dart'; // ✅ 正确路径：lib/views/splash_view.dart
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+
   debugPrint('==================== 应用启动 ====================');
   runApp(const MyApp());
 }
@@ -85,13 +95,14 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        home: const MainTabView(),
+        home: const SplashView(), // ✅ 启动页
         debugShowCheckedModeBanner: false,
       ),
     );
   }
 }
 
+// 主界面（含底部 Tab 栏）
 class MainTabView extends StatefulWidget {
   const MainTabView({super.key});
 
@@ -103,11 +114,11 @@ class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
   final GlobalKey<FloatingTabBarState> _tabBarKey = GlobalKey<FloatingTabBarState>();
 
-  final List<Widget> _pages = [
-    const SummaryView(),
-    const ClientView(),
-    const TopPerformersView(),
-    const ConfigView(),
+  final List<Widget> _pages = const [
+    SummaryView(),
+    ClientView(),
+    TopPerformersView(),
+    ConfigView(),
   ];
 
   final List<BottomNavigationBarItem> _tabItems = const [
@@ -129,10 +140,6 @@ class _MainTabViewState extends State<MainTabView> {
     const Color(0xFF00F2FE),
     const Color(0xFF38F9D7),
   ];
-
-  void _handleScroll() {
-    _tabBarKey.currentState?.onScroll();
-  }
 
   void _onTabTap(int index) {
     setState(() {
