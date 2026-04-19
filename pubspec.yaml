@@ -16,6 +16,7 @@ dependencies:
   fast_gbk: ^1.0.0
   fl_chart: ^0.70.0
   html: ^0.15.4
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
