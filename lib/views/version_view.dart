@@ -167,7 +167,7 @@ class VersionView extends StatelessWidget {
                         // 版权信息
                         Center(
                           child: Text(
-                            '© 2026 Rizona',
+                            '© 2026 Developed by Rizona.',
                             style: TextStyle(
                               fontSize: 11,
                               color: isDarkMode
