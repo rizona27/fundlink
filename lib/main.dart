@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';
@@ -19,7 +20,39 @@ void main() {
   ));
 
   debugPrint('==================== 应用启动 ====================');
+
+  // 在应用启动前请求权限
+  _requestPermissionsOnStart();
+
   runApp(const MyApp());
+}
+
+// 启动时请求权限的方法
+Future<void> _requestPermissionsOnStart() async {
+  debugPrint('开始请求存储权限...');
+
+  try {
+    PermissionStatus status;
+
+    // 根据 Android 版本选择不同的权限
+    if (await Permission.storage.isDenied) {
+      // Android 12 及以下：请求存储权限
+      status = await Permission.storage.request();
+    } else {
+      // Android 13+：请求相册权限
+      status = await Permission.photos.request();
+    }
+
+    if (status.isGranted) {
+      debugPrint('✅ 存储权限已授予');
+    } else if (status.isPermanentlyDenied) {
+      debugPrint('⚠️ 存储权限被永久拒绝，请前往设置中开启');
+    } else {
+      debugPrint('❌ 存储权限被拒绝');
+    }
+  } catch (e) {
+    debugPrint('请求权限时出错: $e');
+  }
 }
 
 class MyApp extends StatefulWidget {
