@@ -253,16 +253,31 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
             children: [
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
-                showRefresh: true,
-                showExpandCollapse: enableButtons,
-                showSearch: enableButtons,
+                showBack: false,
+                showRefresh: true,        // 放入菜单
+                showExpandCollapse: true,  // 放入菜单
+                showSearch: true,          // 放入菜单
                 showReset: false,
                 showFilter: false,
-                showSort: false,
+                showSort: false,           // 客户视图无排序
                 isAllExpanded: _areAnyCardsExpanded,
                 searchText: _searchText,
                 dataManager: _dataManager,
                 fundService: _fundService,
+                onRefresh: () async {
+                  await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                  if (mounted) {
+                    setState(() {});
+                    context.showToast('刷新完成');
+                  }
+                },
+                onLongPressRefresh: () async {
+                  await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                  if (mounted) {
+                    setState(() {});
+                    context.showToast('强制刷新完成');
+                  }
+                },
                 onToggleExpandAll: enableButtons
                     ? () {
                   setState(() {
@@ -293,6 +308,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                 iconSize: 24,
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                useMenuStyle: true,  // 启用菜单模式
               ),
               Expanded(
                 child: !hasData

@@ -1,3 +1,4 @@
+// fund_performance_chart.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -277,6 +278,43 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
+  /// 核心：根据坐标更新悬停位置（鼠标或触摸）
+  void _updateHoverFromPosition(Offset globalPosition) {
+    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    // 检查全局坐标是否在图表区域内
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    if (localPosition.dx < 0 || localPosition.dx > renderBox.size.width ||
+        localPosition.dy < 0 || localPosition.dy > renderBox.size.height) {
+      _clearHover();
+      return;
+    }
+
+    // 更新图表尺寸（供十字线定位用）
+    _chartWidth = renderBox.size.width;
+    _chartHeight = renderBox.size.height;
+
+    const leftMargin = 45.0;
+    final chartWidth = renderBox.size.width - leftMargin;
+
+    if (chartWidth <= 0) return;
+
+    // 计算相对位置（0-1）
+    double relativeX = (localPosition.dx - leftMargin) / chartWidth;
+    relativeX = relativeX.clamp(0.0, 1.0);
+
+    // 计算对应的数据点索引
+    final index = (relativeX * _maxIndex).round();
+    final clampedIndex = index.clamp(0, _maxIndex);
+
+    // 获取对应的 Y 值（基金净值收益率）
+    final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
+    if (clampedIndex < transformedFundValues.length) {
+      _updateHoverPosition(clampedIndex, transformedFundValues[clampedIndex]);
+    }
+  }
+
   void _updateHoverPosition(int newIndex, double spotY) {
     if (newIndex == _hoverIndexNotifier.value) return;
 
@@ -299,7 +337,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       final crossY = plotHeight * (1 - normalized);
       _crosshairYNotifier.value = crossY;
 
-      // 更新圆点位置
       _dotPositionNotifier.value = Offset(crossX, crossY);
     }
   }
@@ -311,34 +348,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
-  // 手动处理鼠标悬停，避免 fl_chart 内部重绘
-  void _handleMouseHover(PointerHoverEvent event) {
-    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    // 更新图表尺寸
-    _chartWidth = renderBox.size.width;
-    _chartHeight = renderBox.size.height;
-
-    const leftMargin = 45.0;
-    final localPosition = renderBox.globalToLocal(event.position);
-    final chartWidth = renderBox.size.width - leftMargin;
-
-    if (chartWidth <= 0) return;
-
-    // 计算相对位置（0-1）
-    double relativeX = (localPosition.dx - leftMargin) / chartWidth;
-    relativeX = relativeX.clamp(0.0, 1.0);
-
-    // 计算对应的数据点索引
-    final index = (relativeX * _maxIndex).round();
-    final clampedIndex = index.clamp(0, _maxIndex);
-
-    // 获取对应的 Y 值
-    final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
-    if (clampedIndex < transformedFundValues.length) {
-      _updateHoverPosition(clampedIndex, transformedFundValues[clampedIndex]);
-    }
+  // 统一处理 PointerEvent（用于移动/点击/悬停）
+  void _handlePointerEvent(PointerEvent event) {
+    _updateHoverFromPosition(event.position);
   }
 
   @override
@@ -486,13 +498,14 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             key: _chartContainerKey,
             child: SizedBox(
               height: 240,
-              child: MouseRegion(
-                onHover: _handleMouseHover,
-                onExit: (_) => _clearHover(),
+              child: Listener(
+                onPointerDown: _handlePointerEvent,
+                onPointerMove: _handlePointerEvent,
+                onPointerHover: _handlePointerEvent,
+                onPointerUp: (_) => _clearHover(),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // 图表主体 - 禁用内置触摸交互
                     Container(
                       key: _chartKey,
                       child: LineChart(
@@ -570,7 +583,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                           maxX: _maxIndex.toDouble(),
                           minY: minY,
                           maxY: maxY,
-                          // 禁用内置触摸交互，避免频繁重绘
                           lineTouchData: const LineTouchData(
                             enabled: false,
                             handleBuiltInTouches: false,
@@ -619,7 +631,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                         ),
                       ),
                     ),
-                    // 十字线和标签 - 使用 ValueListenableBuilder
                     ValueListenableBuilder<int>(
                       valueListenable: _hoverIndexNotifier,
                       builder: (context, hoverIndex, child) {
@@ -634,7 +645,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               builder: (context, crossY, __) {
                                 return Stack(
                                   children: [
-                                    // 十字线
                                     Positioned.fill(
                                       child: CustomPaint(
                                         painter: _CrosshairPainter(
@@ -644,7 +654,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                         ),
                                       ),
                                     ),
-                                    // 日期标签
                                     if (crossX > 0 && crossX < _chartWidth)
                                       Positioned(
                                         left: crossX - 40,
@@ -664,7 +673,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                           ),
                                         ),
                                       ),
-                                    // 数值标签
                                     if (crossY > 0 && crossY < _chartHeight)
                                       Positioned(
                                         left: 0,
@@ -691,7 +699,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                         );
                       },
                     ),
-                    // 圆点 - 在悬停位置显示
                     ValueListenableBuilder<Offset?>(
                       valueListenable: _dotPositionNotifier,
                       builder: (context, dotPosition, child) {

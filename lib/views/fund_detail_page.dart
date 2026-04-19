@@ -443,12 +443,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
                       color: isDark
                           ? CupertinoColors.white.withOpacity(0.5)
                           : CupertinoColors.systemGrey)),
-              Text('净值日期: ${jzrq.isNotEmpty ? jzrq : '--'}',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? CupertinoColors.white.withOpacity(0.5)
-                          : CupertinoColors.systemGrey)),
               _buildRefreshButton(isDark),
             ],
           ),

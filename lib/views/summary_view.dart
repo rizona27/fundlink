@@ -560,12 +560,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           children: [
             AdaptiveTopBar(
               scrollOffset: 0,
-              showRefresh: true,
-              showExpandCollapse: enableButtons,
-              showSearch: enableButtons,
+              showBack: false,
+              showRefresh: true,       // 放入菜单
+              showExpandCollapse: true, // 放入菜单
+              showSearch: true,         // 放入菜单
               showReset: false,
               showFilter: false,
-              showSort: enableButtons,
+              showSort: true,           // 排序按钮单独放在左上角
               isAllExpanded: _hasAnyExpanded,
               searchText: _searchText,
               sortKey: _sortKey,
@@ -604,6 +605,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               iconSize: 24,
               buttonSpacing: 12,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              useMenuStyle: true,  // 启用菜单模式
             ),
             Expanded(
               child: !hasData

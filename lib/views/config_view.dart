@@ -523,7 +523,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           ),
           // 核心修复：通过 SizedBox 的宽高比来强制“压短”药丸
           SizedBox(
-            width: 200,  // 1. 强制缩短横向长度，你可以根据需要调整这个数值（如 80 或 100）
+            width: 160,  // 1. 强制缩短横向长度，你可以根据需要调整这个数值（如 80 或 100）
             height: 28, // 2. 保持精致的高度
             child: FittedBox(
               fit: BoxFit.fill,

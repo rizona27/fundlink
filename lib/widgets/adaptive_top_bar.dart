@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
 import 'search.dart';
 import 'countdown_refresh_button.dart';
+import 'glass_button.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -232,6 +233,9 @@ class AdaptiveTopBar extends StatefulWidget {
   final Duration animationDuration;
   final Curve animationCurve;
 
+  // 是否使用右上角菜单模式（将刷新、搜索、折叠/展开收纳到三点菜单中）
+  final bool useMenuStyle;
+
   const AdaptiveTopBar({
     super.key,
     required this.scrollOffset,
@@ -274,6 +278,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.minHeight = 0,
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOutCubic,
+    this.useMenuStyle = false,
   });
 
   @override
@@ -387,10 +392,18 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
-  // 基金净值刷新（普通点击）
+  // 基金净值普通刷新（如果所有基金净值都已存在则跳过）
   Future<void> _onRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
+
+    // 检查是否有需要刷新的基金（currentNav <= 0 表示未获取到净值）
+    final holdings = widget.dataManager!.holdings;
+    final needRefresh = holdings.any((h) => h.currentNav <= 0);
+    if (!needRefresh) {
+      context.showToast('数据已是最新，跳过刷新', duration: const Duration(seconds: 1));
+      return;
+    }
 
     setState(() => _isRefreshing = true);
     context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
@@ -445,7 +458,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     setState(() => _isValuationRefreshing = true);
     try {
       widget.onValuationRefresh?.call();
-      // 给刷新操作一点时间
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
           setState(() => _isValuationRefreshing = false);
@@ -472,7 +484,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 磨玻璃容器包装
+  // 磨玻璃容器包装（用于按钮）
   Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
     if (!enabled) return child;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -499,6 +511,116 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
 
+  // ==================== 估值刷新控件（圆形按钮+时间） ====================
+  Widget _buildValuationWidget() {
+    if (!widget.showValuationRefresh || widget.valuationRefreshIntervalSeconds == null) {
+      return const SizedBox.shrink();
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CountdownRefreshButton(
+          onRefresh: _onValuationRefresh,
+          refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
+          isRefreshing: _isValuationRefreshing,
+          size: 32,
+          onIntervalChanged: widget.onValuationRefreshIntervalChanged,
+        ),
+        if (widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) ...[
+          const SizedBox(width: 4),
+          Text(
+            widget.valuationUpdateTime!,
+            style: TextStyle(
+              fontSize: 10,
+              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                  ? CupertinoColors.white.withOpacity(0.5)
+                  : CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ==================== 菜单模式专用 ====================
+  Widget _buildLeftForMenuStyle() {
+    final children = <Widget>[];
+    if (widget.showBack) {
+      children.add(_wrapWithGlass(
+        CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          onPressed: widget.onBack,
+          child: Icon(
+            CupertinoIcons.back,
+            size: widget.iconSize,
+            color: widget.iconColor,
+          ),
+        ),
+        disabled: false,
+      ));
+    }
+    if (widget.showSort && widget.onSortKeyChanged != null) {
+      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
+      children.add(_buildSortButton(disabled: !_hasData));
+    }
+    // 当排序为最新估值时，将估值刷新控件吸附在排序按钮后面
+    if (widget.showValuationRefresh && widget.sortKey == SortKey.latestNav) {
+      if (children.isNotEmpty) children.add(const SizedBox(width: 8));
+      children.add(_buildValuationWidget());
+    }
+    return children.isEmpty ? const SizedBox.shrink() : Row(children: children);
+  }
+
+  Widget _buildRightForMenuStyle() {
+    final children = <Widget>[];
+    // 只有当排序不是最新估值时，估值刷新控件才显示在右侧
+    if (widget.showValuationRefresh && widget.sortKey != SortKey.latestNav) {
+      children.add(_buildValuationWidget());
+      children.add(const SizedBox(width: 8));
+    }
+
+    // 更多菜单按钮（磨玻璃风格弹出菜单）
+    final menuItems = <_MenuItem>[];
+    if (widget.showRefresh) {
+      menuItems.add(_MenuItem(
+        icon: CupertinoIcons.arrow_clockwise,
+        label: '刷新',
+        onTap: () => _onRefresh(),
+        onLongPress: () => _onLongPressRefresh(),
+      ));
+    }
+    if (widget.showSearch) {
+      menuItems.add(_MenuItem(
+        icon: CupertinoIcons.search,
+        label: '搜索',
+        onTap: () => _setSearchVisible(!_currentSearchVisible),
+      ));
+    }
+    if (widget.showExpandCollapse) {
+      menuItems.add(_MenuItem(
+        icon: widget.isAllExpanded ? CupertinoIcons.arrow_up_doc : CupertinoIcons.arrow_down_doc,
+        label: widget.isAllExpanded ? '折叠' : '展开',
+        onTap: () => widget.onToggleExpandAll?.call(),
+      ));
+    }
+
+    if (menuItems.isNotEmpty) {
+      children.add(_GlassPopupMenuButton(
+        items: menuItems,
+        icon: Icon(
+          CupertinoIcons.ellipsis,
+          size: widget.iconSize,
+          color: widget.iconColor,
+        ),
+        disabled: !_hasData,
+      ));
+    }
+
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
+  }
+
+  // ==================== 传统模式 ====================
   List<Widget> _buildLeftChildren() {
     final children = <Widget>[];
     if (widget.showBack) {
@@ -528,8 +650,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRightGroup() {
     final children = <Widget>[];
-
-    // 估值更新时间显示（在圆环按钮左边，右对齐）
     if (widget.showValuationRefresh && widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) {
       children.add(
         Padding(
@@ -546,8 +666,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       );
     }
-
-    // 估值定时刷新按钮
     if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
       children.add(CountdownRefreshButton(
         onRefresh: _onValuationRefresh,
@@ -560,8 +678,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         children.add(const SizedBox(width: 4));
       }
     }
-
-    // 重置按钮 - 淡入淡出动画
     if (widget.showReset) {
       children.add(
         AnimatedOpacity(
@@ -572,8 +688,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       );
     }
-
-    // 筛选按钮 - 淡入淡出动画
     if (widget.showFilter) {
       if (children.isNotEmpty && !widget.showReset) {
         children.add(const SizedBox(width: 4));
@@ -587,8 +701,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       );
     }
-
-    // 搜索按钮 - 淡入淡出动画
     if (widget.showSearch) {
       if (children.isNotEmpty && !widget.showReset && !widget.showFilter) {
         children.add(const SizedBox(width: 4));
@@ -602,8 +714,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       );
     }
-
-    // 展开/折叠按钮 - 淡入淡出动画
     if (widget.showExpandCollapse) {
       if (children.isNotEmpty && !widget.showReset && !widget.showFilter && !widget.showSearch) {
         children.add(const SizedBox(width: 4));
@@ -617,7 +727,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       );
     }
-
     if (children.isEmpty) return const SizedBox.shrink();
     return _wrapWithGlass(Row(mainAxisSize: MainAxisSize.min, children: children), disabled: !_hasData);
   }
@@ -628,19 +737,17 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return children;
   }
 
+  // 以下为各种按钮构建方法（保持原有）
   Widget _buildRefreshButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
     return GestureDetector(
       onTap: hasData ? _onRefresh : null,
       onLongPress: hasData ? _onLongPressRefresh : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -651,16 +758,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           ],
         ),
         child: _isRefreshing
-            ? SizedBox(
-          width: widget.iconSize,
-          height: widget.iconSize,
-          child: const CupertinoActivityIndicator(),
-        )
-            : Icon(
-          CupertinoIcons.arrow_clockwise,
-          size: widget.iconSize,
-          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
-        ),
+            ? SizedBox(width: widget.iconSize, height: widget.iconSize, child: const CupertinoActivityIndicator())
+            : Icon(CupertinoIcons.arrow_clockwise, size: widget.iconSize, color: hasData ? widget.iconColor : CupertinoColors.systemGrey3),
       ),
     );
   }
@@ -668,15 +767,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Widget _buildResetButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
     return GestureDetector(
       onTap: hasData ? widget.onReset : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -686,11 +782,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             ),
           ],
         ),
-        child: Icon(
-          CupertinoIcons.delete,
-          size: widget.iconSize,
-          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
-        ),
+        child: Icon(CupertinoIcons.delete, size: widget.iconSize, color: hasData ? widget.iconColor : CupertinoColors.systemGrey3),
       ),
     );
   }
@@ -698,15 +790,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Widget _buildFilterButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
     return GestureDetector(
       onTap: hasData ? widget.onFilter : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -716,11 +805,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             ),
           ],
         ),
-        child: Icon(
-          CupertinoIcons.slider_horizontal_3,
-          size: widget.iconSize,
-          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
-        ),
+        child: Icon(CupertinoIcons.slider_horizontal_3, size: widget.iconSize, color: hasData ? widget.iconColor : CupertinoColors.systemGrey3),
       ),
     );
   }
@@ -728,15 +813,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Widget _buildSearchButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
     return GestureDetector(
       onTap: hasData ? () => _setSearchVisible(!_currentSearchVisible) : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -758,15 +840,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Widget _buildExpandCollapseButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
     return GestureDetector(
       onTap: hasData ? widget.onToggleExpandAll : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -787,13 +866,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildSortButton({bool disabled = false}) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withOpacity(0.85)
-        : CupertinoColors.white.withOpacity(0.85);
+    final bgColor = isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85);
     final textColor = widget.sortKey == SortKey.none
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label)
         : widget.sortKey.color;
-
     return Opacity(
       opacity: disabled ? 0.5 : 1.0,
       child: Container(
@@ -813,26 +889,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           children: [
             CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(
-                  widget.sortKey.next(cycleType: widget.sortCycleType)
-              ),
+              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(widget.sortKey.next(cycleType: widget.sortCycleType)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    widget.sortKey.icon,
-                    size: 16,
-                    color: textColor,
-                  ),
+                  Icon(widget.sortKey.icon, size: 16, color: textColor),
                   const SizedBox(width: 6),
-                  Text(
-                    widget.sortKey.displayName,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                    ),
-                  ),
+                  Text(widget.sortKey.displayName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),
             ),
@@ -894,15 +957,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                       padding: widget.padding,
                       decoration: BoxDecoration(
                         color: bgColor,
-                        borderRadius: BorderRadius.vertical(
-                          bottom: Radius.circular(16 * progress),
-                        ),
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(16 * progress)),
                       ),
                       child: Row(
                         children: [
-                          ..._buildLeftChildren(),
+                          widget.useMenuStyle ? _buildLeftForMenuStyle() : Row(children: _buildLeftChildren()),
                           const Spacer(),
-                          ..._buildRightChildren(),
+                          widget.useMenuStyle ? _buildRightForMenuStyle() : Row(children: _buildRightChildren()),
                         ],
                       ),
                     ),
@@ -937,5 +998,213 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         );
       },
     );
+  }
+}
+
+// 菜单项数据结构
+class _MenuItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  _MenuItem({required this.icon, required this.label, required this.onTap, this.onLongPress});
+}
+
+// 磨玻璃风格的弹出按钮组（点击三点后显示三个独立按钮，带淡入淡出动画）
+class _GlassPopupMenuButton extends StatefulWidget {
+  final List<_MenuItem> items;
+  final Widget icon;
+  final bool disabled;
+  const _GlassPopupMenuButton({required this.items, required this.icon, this.disabled = false});
+
+  @override
+  State<_GlassPopupMenuButton> createState() => _GlassPopupMenuButtonState();
+}
+
+class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with SingleTickerProviderStateMixin {
+  final GlobalKey _buttonKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+  bool _isShowing = false;
+
+  void _showMenu() {
+    if (widget.disabled || _isShowing) return;
+    _isShowing = true;
+    final RenderBox renderBox = _buttonKey.currentContext!.findRenderObject() as RenderBox;
+    final Offset offset = renderBox.localToGlobal(Offset.zero);
+    final Size size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => _buildButtonGroupOverlay(offset, size),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _hideMenu() {
+    if (!_isShowing) return;
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    _isShowing = false;
+  }
+
+  Widget _buildButtonGroupOverlay(Offset buttonOffset, Size buttonSize) {
+    final menuTop = buttonOffset.dy + buttonSize.height + 8;
+    final menuRight = MediaQuery.of(context).size.width - (buttonOffset.dx + buttonSize.width);
+
+    return GestureDetector(
+      onTap: _hideMenu,
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        children: [
+          Positioned.fill(child: Container(color: Colors.transparent)),
+          Positioned(
+            top: menuTop,
+            right: menuRight,
+            child: _AnimatedButtonGroup(
+              items: widget.items,
+              onHide: _hideMenu,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 三点按钮本身也做成磨玻璃风格
+    return GestureDetector(
+      key: _buttonKey,
+      onTap: _showMenu,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              : CupertinoColors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(CupertinoTheme.brightnessOf(context) == Brightness.dark ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: widget.icon,
+      ),
+    );
+  }
+}
+
+// 带动画的按钮组（淡入淡出 + 位移）
+class _AnimatedButtonGroup extends StatefulWidget {
+  final List<_MenuItem> items;
+  final VoidCallback onHide;
+  const _AnimatedButtonGroup({required this.items, required this.onHide});
+
+  @override
+  State<_AnimatedButtonGroup> createState() => _AnimatedButtonGroupState();
+}
+
+class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _opacityAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, -0.1), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _close() async {
+    await _controller.reverse();
+    if (mounted) {
+      widget.onHide();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: widget.items.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final isLast = index == widget.items.length - 1;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMenuItemButton(item),
+                    if (!isLast) const SizedBox(height: 8),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItemButton(_MenuItem item) {
+    // 如果有长按回调，则用 GestureDetector 包装 GlassButton
+    if (item.onLongPress != null) {
+      return GestureDetector(
+        onLongPress: () {
+          _close();
+          item.onLongPress!();
+        },
+        child: GlassButton(
+          label: item.label,
+          icon: item.icon,
+          onPressed: () {
+            _close();
+            item.onTap();
+          },
+          isPrimary: false,
+          height: 40,
+          borderRadius: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          expand: false,
+          minWidth: 80,
+        ),
+      );
+    } else {
+      return GlassButton(
+        label: item.label,
+        icon: item.icon,
+        onPressed: () {
+          _close();
+          item.onTap();
+        },
+        isPrimary: false,
+        height: 40,
+        borderRadius: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        expand: false,
+        minWidth: 80,
+      );
+    }
   }
 }
