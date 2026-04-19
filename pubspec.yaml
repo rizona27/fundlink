@@ -21,7 +21,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1  # 添加图标生成工具
+  flutter_launcher_icons: ^0.14.4  # 添加图标生成工具
 
 flutter:
   uses-material-design: true
