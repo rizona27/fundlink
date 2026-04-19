@@ -477,6 +477,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
+          // 左侧图标
           Container(
             width: 32,
             height: 32,
@@ -486,9 +487,14 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                   : CupertinoColors.systemGrey6,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(CupertinoIcons.paintbrush_fill, size: 16, color: Color(0xFF6366F1)),
+            child: const Icon(
+              CupertinoIcons.paintbrush_fill,
+              size: 16,
+              color: Color(0xFF6366F1),
+            ),
           ),
           const SizedBox(width: 12),
+          // 中间文字
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,11 +521,19 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          Container(
-            height: 32,
-            child: ThemeSwitch(
-              initialMode: _dataManager.themeMode,
-              onChanged: (mode) => _dataManager.setThemeMode(mode),
+          // 核心修复：通过 SizedBox 的宽高比来强制“压短”药丸
+          SizedBox(
+            width: 200,  // 1. 强制缩短横向长度，你可以根据需要调整这个数值（如 80 或 100）
+            height: 28, // 2. 保持精致的高度
+            child: FittedBox(
+              fit: BoxFit.fill,
+              child: ThemeSwitch(
+                initialMode: _dataManager.themeMode,
+                onChanged: (mode) {
+                  _dataManager.setThemeMode(mode);
+                  setState(() {});
+                },
+              ),
             ),
           ),
         ],
