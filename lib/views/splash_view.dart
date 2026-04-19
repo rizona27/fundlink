@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../main.dart'; // ✅ 正确引用主界面的 MainTabView
+import '../main.dart';
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
@@ -39,20 +39,32 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
     _contentController.forward();
 
-    // 5秒后淡入淡出跳转到主界面
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) => const MainTabView(),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.94, end: 1.0).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                  ),
+                  child: child,
+                ),
+              );
             },
-            transitionDuration: const Duration(milliseconds: 800),
+            transitionDuration: const Duration(milliseconds: 1200),
           ),
         );
       }
     });
+  }
+
+  // 获取当前路由（用于后续移除）
+  Route? get _currentRoute {
+    return ModalRoute.of(context);
   }
 
   @override
@@ -69,7 +81,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     return Scaffold(
       body: Stack(
         children: [
-          // 背景渐变（深色/浅色适配）
+          // 背景渐变
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -81,7 +93,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // 动态光圈（深色模式颜色调整）
+          // 动态光圈
           AnimatedBuilder(
             animation: _glowController,
             builder: (context, child) {
@@ -144,8 +156,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   Widget _buildGlowCircle({required int index, required double rotation}) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final glowColor = isDarkMode
-        ? const Color(0xFF6C63FF).withOpacity(0.2)  // 深色模式用紫色光晕
-        : const Color(0xFFE8D5C4).withOpacity(0.3); // 浅色模式用暖色光晕
+        ? const Color(0xFF6C63FF).withOpacity(0.2)
+        : const Color(0xFFE8D5C4).withOpacity(0.3);
 
     return Positioned(
       top: 100,

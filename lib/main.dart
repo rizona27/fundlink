@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors; // 导入 Colors
+import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
@@ -8,7 +8,7 @@ import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
-import 'views/splash_view.dart'; // ✅ 正确路径：lib/views/splash_view.dart
+import 'views/splash_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,14 +95,13 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        home: const SplashView(), // ✅ 启动页
+        home: const SplashView(),
         debugShowCheckedModeBanner: false,
       ),
     );
   }
 }
 
-// 主界面（含底部 Tab 栏）
 class MainTabView extends StatefulWidget {
   const MainTabView({super.key});
 
