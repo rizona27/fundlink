@@ -45,8 +45,8 @@ required String format,
 required List<String> selectedFields,
 }) async {
 final timestamp = DateTime.now();
-final dateStr = '${timestamp.year}${timestamp.month}${timestamp.day}_${timestamp.hour}${timestamp.minute}${timestamp.second}';
-final fileName = 'fundlink_export_$dateStr.${format == 'csv' ? 'csv' : 'xlsx'}';
+final dateStr = '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+final fileName = 'Fundlink_$dateStr.${format == 'csv' ? 'csv' : 'xlsx'}';
 final mimeType = format == 'csv'
 ? 'text/csv'
     : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

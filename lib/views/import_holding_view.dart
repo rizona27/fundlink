@@ -30,7 +30,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     FieldConfig(id: 'clientName', label: '客户姓名', required: true, mappedIndex: -1, hint: '客户姓名/客户名/姓名'),
     FieldConfig(id: 'clientId', label: '客户号', required: true, mappedIndex: -1, hint: '客户号/客户编号/核心客户号'),
     FieldConfig(id: 'fundCode', label: '基金代码', required: true, mappedIndex: -1, hint: '基金代码/产品代码'),
-    FieldConfig(id: 'purchaseAmount', label: '购买金额', required: true, mappedIndex: -1, hint: '购买成本/持仓成本/成本'),
+    FieldConfig(id: 'purchaseAmount', label: '购买金额', required: true, mappedIndex: -1, hint: '购买金额/金额/申购金额/成本'),
     FieldConfig(id: 'purchaseShares', label: '购买份额', required: true, mappedIndex: -1, hint: '份额/当前份额/持仓份额'),
     FieldConfig(id: 'purchaseDate', label: '购买日期', required: true, mappedIndex: -1, hint: '购买日期/申购日期/成交日期'),
   ];
@@ -483,14 +483,22 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           }
         }
         else if (config.id == 'purchaseAmount') {
-          if (header.contains('购买成本') || header.contains('持仓成本') ||
+          if (header.contains('购买金额') ||
+              header == '金额' ||
+              header.contains('申购金额') ||
+              header.contains('成交金额') ||
+              header.contains('购买成本') ||
+              header.contains('持仓成本') ||
               (header.contains('成本') && !header.contains('成本价'))) {
             config.mappedIndex = i;
             break;
           }
         }
         else if (config.id == 'purchaseShares') {
-          if (header.contains('份额') || header.contains('当前份额') || header.contains('持仓份额')) {
+          if (header.contains('份额') ||
+              header.contains('当前份额') ||
+              header.contains('持仓份额') ||
+              header == '份数') {
             config.mappedIndex = i;
             break;
           }
@@ -509,6 +517,19 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     if (clientNameConfig.mappedIndex == -1 && clientIdConfig.mappedIndex != -1) {
       clientNameConfig.mappedIndex = clientIdConfig.mappedIndex;
     }
+  }
+
+  /// 将基金代码补足到6位（移除所有非数字字符后前面补零）
+  String _normalizeFundCode(String code) {
+    String trimmed = code.trim();
+    // 只保留数字字符
+    final numericOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    if (numericOnly.isEmpty) return trimmed; // 全非数字，原样返回，后续校验会报错
+    // 不足6位则前面补零
+    if (numericOnly.length < 6) {
+      return numericOnly.padLeft(6, '0');
+    }
+    return numericOnly;
   }
 
   void _buildPreviewAndValidate() {
@@ -541,11 +562,16 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         errors.add('客户号为空');
       }
 
-      final fundCode = row['fundCode']?.toString().trim();
-      if (fundCode == null || fundCode.isEmpty) {
+      String? rawFundCode = row['fundCode']?.toString().trim();
+      String? fundCode;
+      if (rawFundCode == null || rawFundCode.isEmpty) {
         errors.add('基金代码为空');
-      } else if (!RegExp(r'^\d{6}$').hasMatch(fundCode)) {
-        errors.add('基金代码格式错误(需6位数字)');
+      } else {
+        fundCode = _normalizeFundCode(rawFundCode);
+        // 验证是否为6位数字
+        if (!RegExp(r'^\d{6}$').hasMatch(fundCode)) {
+          errors.add('基金代码格式错误(需6位数字)');
+        }
       }
 
       String? amountStr = row['purchaseAmount']?.toString().trim();
@@ -586,7 +612,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           ...row,
           'clientName': clientName,
           'clientId': clientId,
-          'fundCode': fundCode?.toUpperCase(),
+          'fundCode': fundCode?.toUpperCase(), // 存储补零后的大写形式
           'purchaseAmount': purchaseAmount,
           'purchaseShares': purchaseShares,
           'purchaseDate': purchaseDate,
