@@ -6,7 +6,7 @@ import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'dart:html' as html if (dart.library.html) 'dart:html';
+import 'package:universal_html/html.dart' as html;
 import '../models/fund_holding.dart';
 
 /// 文件导出服务，支持 CSV 和 Excel 格式生成，并处理各平台的文件保存/分享
