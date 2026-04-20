@@ -20,7 +20,7 @@ dependencies:
   excel: ^4.0.0
   csv: ^5.1.1
   share_plus: ^7.2.2
-  path_provider: ^2.1.1
+  path_provider: ^2.1.5
   file_picker: ^8.0.0
 
 dev_dependencies:
