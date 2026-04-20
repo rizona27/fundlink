@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show Colors, Divider;
 import 'package:share_plus/share_plus.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as excel;
@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
 import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';
 
 class ExportHoldingView extends StatefulWidget {
   const ExportHoldingView({super.key});
@@ -44,7 +45,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   ];
 
   bool _isExporting = false;
-  double _exportProgress = 0;
   List<ExportHistoryItem> _exportHistory = [];
 
   List<FundHolding> _getFilteredHoldings(DataManager dataManager) {
@@ -90,10 +90,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-      _exportProgress = 0;
-    });
+    setState(() => _isExporting = true);
 
     try {
       final selectedFields = _fields.where((f) => f.selected).toList();
@@ -144,10 +141,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     } catch (e) {
       context.showToast('导出失败: $e');
     } finally {
-      setState(() {
-        _isExporting = false;
-        _exportProgress = 0;
-      });
+      setState(() => _isExporting = false);
     }
   }
 
@@ -172,29 +166,183 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     if (_exportHistory.length > 20) _exportHistory.removeLast();
   }
 
-  Widget _buildCard({required List<Color> gradientColors, required bool isDark, required Widget child}) {
+  Widget _buildSection({
+    required String title,
+    required IconData icon,
+    required bool isDarkMode,
+    required List<Widget> children,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: gradientColors, begin: Alignment.centerLeft, end: Alignment.centerRight),
-        borderRadius: BorderRadius.circular(12),
+        color: isDarkMode
+            ? CupertinoColors.systemGrey6.withOpacity(0.4)
+            : CupertinoColors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: gradientColors[0].withOpacity(0.25), blurRadius: 6, offset: const Offset(3, 3)),
-          BoxShadow(color: isDark ? Colors.black.withOpacity(0.15) : Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(1, 1)),
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.2)
+                : Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
-      child: child,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? CupertinoColors.systemGrey5.withOpacity(0.3)
+                        : CupertinoColors.systemGrey6,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 16, color: const Color(0xFF8B9DC3)),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (children.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.08)
+                        : CupertinoColors.systemGrey4.withOpacity(0.5),
+                  ),
+                ),
+              ),
+              child: Column(children: children),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool isDarkMode,
+    VoidCallback? onTap,
+    bool isSelected = false,
+    Widget? trailing,
+  }) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      borderRadius: BorderRadius.zero,
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFF8B9DC3).withOpacity(0.15)
+                  : (isDarkMode
+                  ? CupertinoColors.systemGrey5.withOpacity(0.3)
+                  : CupertinoColors.systemGrey6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: isSelected ? const Color(0xFF8B9DC3) : const Color(0xFF9BABB8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode
+                          ? CupertinoColors.white.withOpacity(0.6)
+                          : CupertinoColors.systemGrey,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null)
+            trailing
+          else if (onTap != null)
+            Icon(
+              CupertinoIcons.chevron_forward,
+              size: 14,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.4)
+                  : CupertinoColors.systemGrey.withOpacity(0.6),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterTextField(String label, String key, {bool isDate = false, bool isNumber = false}) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+      child: CupertinoTextField(
+        placeholder: label,
+        placeholderStyle: TextStyle(
+          color: isDarkMode
+              ? CupertinoColors.white.withOpacity(0.5)
+              : CupertinoColors.systemGrey,
+        ),
+        keyboardType: isDate ? TextInputType.datetime : (isNumber ? TextInputType.number : TextInputType.text),
+        onChanged: (v) => setState(() => _filters[key] = v),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? CupertinoColors.systemGrey6.withOpacity(0.3)
+              : CupertinoColors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     return CupertinoPageScaffold(
-      backgroundColor: bgColor,
+      backgroundColor: backgroundColor,
       navigationBar: CupertinoNavigationBar(
         middle: const Text('导出持仓数据'),
         previousPageTitle: '设置',
@@ -204,175 +352,271 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              _buildCard(
-                gradientColors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
-                isDark: isDark,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('导出格式', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Row(
+              // 导出格式
+              _buildSection(
+                title: '导出格式',
+                icon: CupertinoIcons.doc_on_doc,
+                isDarkMode: isDarkMode,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
                       children: [
-                        _formatOption('csv', 'CSV', '标准CSV格式'),
-                        const SizedBox(width: 16),
-                        _formatOption('excel', 'Excel', 'Excel格式'),
+                        Expanded(
+                          child: _buildFormatOption('csv', 'CSV', isDarkMode, _format == 'csv'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildFormatOption('excel', 'Excel', isDarkMode, _format == 'excel'),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              _buildCard(
-                gradientColors: [const Color(0xFF10B981), const Color(0xFF34D399)],
-                isDark: isDark,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('导出范围', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    _scopeOption('all', '全部持仓'),
-                    const SizedBox(height: 8),
-                    _scopeOption('filtered', '筛选结果'),
-                  ],
-                ),
-              ),
-              if (_scope == 'filtered')
-                _buildCard(
-                  gradientColors: [const Color(0xFFF59E0B), const Color(0xFFFBBF24)],
-                  isDark: isDark,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('筛选条件', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      _filterTextField('客户姓名', 'clientName'),
-                      _filterTextField('客户号', 'clientId'),
-                      _filterTextField('基金代码', 'fundCode'),
-                      _filterTextField('基金名称', 'fundName'),
-                      Row(
-                        children: [
-                          Expanded(child: _filterTextField('开始日期', 'startDate', isDate: true)),
-                          const SizedBox(width: 8),
-                          Expanded(child: _filterTextField('结束日期', 'endDate', isDate: true)),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Expanded(child: _filterTextField('最小金额', 'minAmount', isNumber: true)),
-                          const SizedBox(width: 8),
-                          Expanded(child: _filterTextField('最大金额', 'maxAmount', isNumber: true)),
-                        ],
-                      ),
-                    ],
                   ),
-                ),
-              _buildCard(
-                gradientColors: [const Color(0xFFEC4899), const Color(0xFFF472B6)],
-                isDark: isDark,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 8),
+                ],
+              ),
+
+              // 导出范围
+              _buildSection(
+                title: '导出范围',
+                icon: CupertinoIcons.slider_horizontal_3,
+                isDarkMode: isDarkMode,
+                children: [
+                  _buildMenuItem(
+                    icon: CupertinoIcons.globe,
+                    title: '全部持仓',
+                    subtitle: '导出所有持仓数据',
+                    isDarkMode: isDarkMode,
+                    onTap: () => setState(() => _scope = 'all'),
+                    isSelected: _scope == 'all',
+                  ),
+                  _buildMenuItem(
+                    icon: CupertinoIcons.slider_horizontal_3,
+                    title: '筛选结果',
+                    subtitle: '仅导出符合筛选条件的数据',
+                    isDarkMode: isDarkMode,
+                    onTap: () => setState(() => _scope = 'filtered'),
+                    isSelected: _scope == 'filtered',
+                  ),
+                ],
+              ),
+
+              // 筛选条件（条件显示）
+              if (_scope == 'filtered')
+                _buildSection(
+                  title: '筛选条件',
+                  icon: CupertinoIcons.search,
+                  isDarkMode: isDarkMode,
                   children: [
-                    const Text('选择导出字段', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Wrap(
+                    _buildFilterTextField('客户姓名', 'clientName'),
+                    _buildFilterTextField('客户号', 'clientId'),
+                    _buildFilterTextField('基金代码', 'fundCode'),
+                    _buildFilterTextField('基金名称', 'fundName'),
+                    Row(
+                      children: [
+                        Expanded(child: _buildFilterTextField('开始日期', 'startDate', isDate: true)),
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildFilterTextField('结束日期', 'endDate', isDate: true)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(child: _buildFilterTextField('最小金额', 'minAmount', isNumber: true)),
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildFilterTextField('最大金额', 'maxAmount', isNumber: true)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+
+              // 导出字段
+              _buildSection(
+                title: '导出字段',
+                icon: CupertinoIcons.checkmark_square,
+                isDarkMode: isDarkMode,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _fields.map((field) {
-                        return Material(
-                          color: Colors.transparent,
-                          child: FilterChip(
-                            label: Text(field.label),
-                            selected: field.selected,
-                            onSelected: field.required ? null : (v) => setState(() => field.selected = v),
-                            backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-                            selectedColor: CupertinoColors.activeBlue.withOpacity(0.3),
-                          ),
-                        );
-                      }).toList(),
+                      children: _fields.map((field) => _buildFieldChip(field, isDarkMode)).toList(),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+
+              // 导出按钮
+              const SizedBox(height: 8),
+              Center(
+                child: GlassButton(
+                  label: _isExporting ? '导出中...' : '开始导出',
+                  onPressed: _isExporting ? null : _export,
+                  isPrimary: true,
+                  width: 200,
+                  height: 48,
                 ),
               ),
-              const SizedBox(height: 24),
-              CupertinoButton(
-                onPressed: _isExporting ? null : _export,
-                color: CupertinoColors.activeBlue,
-                child: _isExporting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('开始导出'),
-              ),
+
+              // 导出历史
               if (_exportHistory.isNotEmpty)
-                _buildCard(
-                  gradientColors: [const Color(0xFF6B7280), const Color(0xFF9CA3AF)],
-                  isDark: isDark,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('导出历史', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      ..._exportHistory.map((item) => ListTile(
-                        title: Text(item.filename),
-                        subtitle: Text('${item.records}条记录 · ${item.date.toLocal().toString().substring(0, 16)}'),
-                        trailing: IconButton(
-                          icon: const Icon(CupertinoIcons.share),
-                          onPressed: () => context.showToast('重新分享功能暂未实现'),
-                        ),
-                      )),
-                    ],
+                const SizedBox(height: 16),
+              if (_exportHistory.isNotEmpty)
+                _buildSection(
+                  title: '导出历史',
+                  icon: CupertinoIcons.time,
+                  isDarkMode: isDarkMode,
+                  children: _exportHistory.map((item) => _buildHistoryItem(item, isDarkMode)).toList(),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormatOption(String value, String label, bool isDarkMode, bool isSelected) {
+    return GestureDetector(
+      onTap: () => setState(() => _format = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF8B9DC3).withOpacity(0.15)
+              : (isDarkMode
+              ? CupertinoColors.systemGrey6.withOpacity(0.3)
+              : CupertinoColors.white),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF8B9DC3)
+                : (isDarkMode
+                ? CupertinoColors.white.withOpacity(0.1)
+                : CupertinoColors.systemGrey4.withOpacity(0.5)),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected
+                  ? const Color(0xFF8B9DC3)
+                  : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldChip(ExportField field, bool isDarkMode) {
+    return GestureDetector(
+      onTap: field.required ? null : () => setState(() => field.selected = !field.selected),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: field.selected
+              ? const Color(0xFF8B9DC3).withOpacity(0.15)
+              : (isDarkMode
+              ? CupertinoColors.systemGrey6.withOpacity(0.3)
+              : CupertinoColors.systemGrey6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: field.selected
+                ? const Color(0xFF8B9DC3)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (field.required)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(CupertinoIcons.lock_fill, size: 10, color: const Color(0xFF9BABB8)),
+              ),
+            Text(
+              field.label,
+              style: TextStyle(
+                fontSize: 13,
+                color: field.selected
+                    ? const Color(0xFF8B9DC3)
+                    : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label),
+                fontWeight: field.selected ? FontWeight.w500 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryItem(ExportHistoryItem item, bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? CupertinoColors.systemGrey5.withOpacity(0.3)
+                  : CupertinoColors.systemGrey6,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              item.format == 'csv' ? CupertinoIcons.doc_text : CupertinoIcons.table,
+              size: 18,
+              color: const Color(0xFF9BABB8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.filename,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
                   ),
                 ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  '${item.records}条记录 · ${_formatDate(item.date)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.5)
+                        : CupertinoColors.systemGrey,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => context.showToast('重新分享功能暂未实现'),
+            child: Icon(
+              CupertinoIcons.share,
+              size: 18,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.6)
+                  : CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _formatOption(String value, String name, String desc) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _format = value),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: _format == value ? CupertinoColors.activeBlue : CupertinoColors.systemGrey4),
-            borderRadius: BorderRadius.circular(8),
-            color: _format == value ? CupertinoColors.activeBlue.withOpacity(0.1) : null,
-          ),
-          child: Column(
-            children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text(desc, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _scopeOption(String value, String label) {
-    return Row(
-      children: [
-        CupertinoRadio(
-          value: value,
-          groupValue: _scope,
-          onChanged: (v) => setState(() => _scope = v!),
-        ),
-        const SizedBox(width: 8),
-        Text(label),
-      ],
-    );
-  }
-
-  Widget _filterTextField(String label, String key, {bool isDate = false, bool isNumber = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: CupertinoTextField(
-        placeholder: label,
-        keyboardType: isDate ? TextInputType.datetime : (isNumber ? TextInputType.number : TextInputType.text),
-        onChanged: (v) => setState(() => _filters[key] = v),
-      ),
-    );
+  String _formatDate(DateTime date) {
+    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
 
