@@ -8,6 +8,8 @@ import 'manage_holdings_view.dart';
 import 'log_view.dart';
 import 'version_view.dart';
 import 'license_view.dart';
+import 'import_holding_view.dart';      // 新增
+import 'export_holding_view.dart';      // 新增
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -155,7 +157,12 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           title: '导入数据',
           subtitle: '从文件导入持仓数据',
           isDarkMode: isDarkMode,
-          onTap: () => _navigateToPlaceholder('导入功能'),
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const ImportHoldingView()),
+            );
+          },
         ),
         _buildDivider(isDarkMode),
         _buildMenuItem(
@@ -163,7 +170,12 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           title: '导出数据',
           subtitle: '导出持仓数据到文件',
           isDarkMode: isDarkMode,
-          onTap: () => _navigateToPlaceholder('导出功能'),
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const ExportHoldingView()),
+            );
+          },
         ),
       ],
     );
@@ -646,22 +658,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             },
             isDestructiveAction: true,
             child: const Text('确认清空'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _navigateToPlaceholder(String feature) {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('$feature开发中'),
-        content: const Text('该功能将在后续版本中提供。'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('好的'),
           ),
         ],
       ),

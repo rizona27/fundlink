@@ -4,6 +4,8 @@ lib/
 │
 ├── services/
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、日志记录、隐私模式、收益计算、持久化
+│   ├── file_export_service.dart           # 支持导出组件，解析格式类型CSV/Excel
+│   ├── file_import_service.dart           # 支持导入组件，解析格式类型CSV/Excel
 │   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
 │
 ├── models/
@@ -18,7 +20,9 @@ lib/
 │   ├── client_view.dart                   # 客户视图页，分组展示持仓
 │   ├── config_view.dart                   # 程序设置相关页面，隐私/主题切换/日志查询/持仓管理及其他
 │   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息
+│   ├── export_holding_view.dart           # 导出文件页面，支持CSV/Excel
 │   ├── fund_detail_page.dart              # 基金详情页，包含估值/净值趋势/十大重仓
+│   ├── inport_holding_view.dart           # 导入文件页面，支持CSV/Excel
 │   ├── license_view.dart                  # 本程序应用的开源协议AGPL v3
 │   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
 │   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息
