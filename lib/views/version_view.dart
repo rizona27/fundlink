@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../widgets/adaptive_top_bar.dart';
@@ -6,13 +7,21 @@ class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
   // 版本号统一在这里定义，ConfigView 会通过此常量获取
-  static const String appVersion = 'v0.9.9';
+  static const String appVersion = 'v1.0.0';
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     double scrollOffset = 0;
+
+    // 生成随机邮箱颜色（饱和0.7，亮度0.6，保证可见性）
+    final randomEmailColor = HSLColor.fromAHSL(
+      1,
+      Random().nextDouble() * 360,
+      0.7,
+      0.6,
+    ).toColor();
 
     return CupertinoPageScaffold(
       backgroundColor: Colors.transparent,
@@ -132,7 +141,7 @@ class VersionView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // 主要功能列表（紧凑分行）
+                        // 主要功能列表（包含数据导入及导出）
                         Wrap(
                           spacing: 16,
                           runSpacing: 10,
@@ -143,12 +152,13 @@ class VersionView extends StatelessWidget {
                             _buildFeatureItem(CupertinoIcons.arrow_clockwise, '基金详情回溯', isDarkMode),
                             _buildFeatureItem(CupertinoIcons.moon_stars, '主题模式', isDarkMode),
                             _buildFeatureItem(CupertinoIcons.lock_fill, '用户隐私模式', isDarkMode),
+                            _buildFeatureItem(CupertinoIcons.cloud_upload, '数据导入及导出', isDarkMode),
                           ],
                         ),
-                        const SizedBox(height: 20),
-                        // 功能待开发标题
+                        const SizedBox(height: 24),
+                        // 程序说明区块
                         Text(
-                          '功能待开发',
+                          '程序说明',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -156,12 +166,58 @@ class VersionView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 10,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildFeatureItem(CupertinoIcons.cloud_upload, '数据导入及导出', isDarkMode),
+                            _buildInstructionItem('1. 持仓数据可通过主界面/设置-新增持仓/导入添加。', isDarkMode),
+                            _buildInstructionItem('2. 实时估值倒计时可长按修改默认间隔', isDarkMode),
+                            _buildInstructionItem('3. 主功能页刷新可轻触单独刷新/长按全量刷新', isDarkMode),
+                            _buildInstructionItem('4. 筛选及搜索功能支持各字段、维度，添加防抖', isDarkMode),
+                            _buildInstructionItem('5. 未公布持仓基金无法获取十大重仓及实时估值。', isDarkMode),
+                            _buildInstructionItem('6. 实时估值可能存在偏离度，季报末尤甚，仅供参考。', isDarkMode),
                           ],
+                        ),
+                        const SizedBox(height: 24),
+                        // 联系作者（固定蓝色 + 随机颜色邮箱）
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Mail:',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  fontStyle: FontStyle.italic,
+                                  color: CupertinoColors.activeBlue,
+                                ),
+                              ),
+                              Text(
+                                'rizona.cn@gmail.com',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  fontStyle: FontStyle.italic,
+                                  color: randomEmailColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 27),
+                        // 说明文字（淡灰色，居中）
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            '仅供个人学习交流使用，数据仅供参考，投资需谨慎。',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDarkMode
+                                  ? CupertinoColors.white.withOpacity(0.5)
+                                  : CupertinoColors.systemGrey.withOpacity(0.7),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 32),
                         // 版权信息
@@ -246,6 +302,23 @@ class VersionView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  // 程序说明项（纯文本，带序号，淡灰色）
+  Widget _buildInstructionItem(String text, bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          color: isDarkMode
+              ? CupertinoColors.white.withOpacity(0.7)
+              : CupertinoColors.systemGrey.withOpacity(0.8),
+          height: 1.4,
+        ),
+      ),
     );
   }
 }

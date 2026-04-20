@@ -252,6 +252,8 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
         holdings: _filteredHoldings,
         format: _format,
         selectedFields: selectedFieldIds,
+        context: context,          // 必须传入
+        shareAfterSave: false,     // 仅保存，不分享
       );
 
       // 生成文件名用于显示（与服务内部一致）

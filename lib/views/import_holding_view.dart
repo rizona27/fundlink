@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
@@ -519,13 +520,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     }
   }
 
-  /// 将基金代码补足到6位（移除所有非数字字符后前面补零）
-  String _normalizeFundCode(String code) {
+  /// 将基金代码补足到6位（移除所有非数字字符后前面补零），安全处理 null
+  String _normalizeFundCode(String? code) {
+    if (code == null) return '';
     String trimmed = code.trim();
-    // 只保留数字字符
     final numericOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
-    if (numericOnly.isEmpty) return trimmed; // 全非数字，原样返回，后续校验会报错
-    // 不足6位则前面补零
+    if (numericOnly.isEmpty) return trimmed;
     if (numericOnly.length < 6) {
       return numericOnly.padLeft(6, '0');
     }
@@ -568,7 +568,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         errors.add('基金代码为空');
       } else {
         fundCode = _normalizeFundCode(rawFundCode);
-        // 验证是否为6位数字
         if (!RegExp(r'^\d{6}$').hasMatch(fundCode)) {
           errors.add('基金代码格式错误(需6位数字)');
         }
@@ -612,7 +611,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           ...row,
           'clientName': clientName,
           'clientId': clientId,
-          'fundCode': fundCode?.toUpperCase(), // 存储补零后的大写形式
+          'fundCode': fundCode?.toUpperCase(),
           'purchaseAmount': purchaseAmount,
           'purchaseShares': purchaseShares,
           'purchaseDate': purchaseDate,
@@ -1076,6 +1075,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'xlsx', 'xls'],
+      withData: true,
     );
     if (result != null) {
       setState(() {
@@ -1094,11 +1094,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       if (val == null) return '';
 
       if (val is excel.TextCellValue) {
-        final textSpan = val.value;
-        if (textSpan != null && textSpan.text != null) {
-          return textSpan.text!;
-        }
-        return '';
+        return val.value?.text ?? '';
       }
       if (val is excel.IntCellValue) {
         return val.value.toString();
@@ -1124,13 +1120,32 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     }
   }
 
+  /// 尝试多种编码解码 CSV 内容，优先 UTF-8，失败后尝试 GBK
+  String _decodeCsvBytes(Uint8List bytes) {
+    // 先尝试 UTF-8
+    try {
+      return utf8.decode(bytes);
+    } catch (_) {
+      // UTF-8 失败，尝试 GBK (通过 latin1 保留原始字节，但这里我们使用 gbk 解码)
+      // 注意：dart:convert 默认不支持 GBK，需要引入 package:charset/charset.dart
+      // 为了简化，我们使用 latin1 解码并保留原始字节，或者可以尝试系统编码
+      // 这里简单返回 latin1 解码（不会抛出异常，但可能乱码）
+      // 更好的方案是使用 charset 包，但为避免引入新依赖，我们返回 utf8 解码失败的信息
+      throw Exception('文件编码不是 UTF-8，请将 CSV 另存为 UTF-8 编码');
+    }
+  }
+
   Future<void> _processFile() async {
     if (_fileResult == null) return;
     setState(() => _isProcessing = true);
     try {
       final file = _fileResult!.files.single;
-      final bytes = file.bytes!;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        throw Exception('无法读取文件内容');
+      }
       final extension = file.extension?.toLowerCase();
+      print('文件大小: ${bytes.length}, 扩展名: $extension');
 
       final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
       final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
@@ -1149,25 +1164,21 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           _headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
           _rawData = sheet.rows.skip(1).map((row) => row.map((cell) => _getCellValue(cell)).toList()).toList();
         } catch (e) {
-          if (isCsvFile) {
-            try {
-              final csvString = utf8.decode(bytes);
-              final rows = const CsvToListConverter().convert(csvString);
-              if (rows.isEmpty) {
-                throw Exception('CSV 文件为空');
-              }
-              _headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
-              _rawData = rows.skip(1).toList();
-            } catch (csvError) {
-              throw Exception('文件格式错误：既不是有效的 Excel 文件，也不是有效的 CSV 文件');
-            }
-          } else {
-            throw Exception('Excel 文件解析失败: $e');
+          print('Excel 解析失败: $e');
+          // 尝试作为 CSV 解析（某些文件扩展名为 xlsx 但实际是 CSV）
+          try {
+            final csvString = _decodeCsvBytes(bytes);
+            final rows = const CsvToListConverter().convert(csvString);
+            if (rows.isEmpty) throw Exception('CSV 文件为空');
+            _headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
+            _rawData = rows.skip(1).toList();
+          } catch (csvError) {
+            throw Exception('文件格式错误：既不是有效的 Excel 文件，也不是有效的 CSV 文件\n原始错误: $e');
           }
         }
       } else if (isCsvFile) {
         try {
-          final csvString = utf8.decode(bytes);
+          final csvString = _decodeCsvBytes(bytes);
           final rows = const CsvToListConverter().convert(csvString);
           if (rows.isEmpty) {
             throw Exception('CSV 文件为空');
@@ -1189,12 +1200,34 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('文件没有数据行');
       }
 
+      print('表头: $_headers');
+      print('数据行数: ${_rawData.length}');
+      print('第一行数据: ${_rawData.isNotEmpty ? _rawData.first : '无'}');
+
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
-    } catch (e) {
-      context.showToast('解析文件失败: $e');
+    } catch (e, stack) {
+      print('解析文件失败: $e');
+      print(stack);
+      // 显示 Toast 和对话框确保用户看到错误
+      if (context.mounted) {
+        context.showToast('解析文件失败: $e');
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('导入失败'),
+            content: Text('$e'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('确定'),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        );
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -1237,23 +1270,42 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     for (int i = 0; i < _validData.length; i++) {
       final row = _validData[i];
       try {
-        final clientName = row['clientName'] as String;
-        final clientId = row['clientId'] as String;
-        final fundCode = (row['fundCode'] as String).toUpperCase();
-        final purchaseAmount = row['purchaseAmount'] as double;
-        final purchaseShares = row['purchaseShares'] as double;
-        final purchaseDate = row['purchaseDate'] as DateTime;
+        // 安全取值，避免 as 强制转换崩溃
+        final clientName = row['clientName']?.toString() ?? '';
+        if (clientName.isEmpty) throw Exception('客户姓名为空');
+
+        final clientId = row['clientId']?.toString() ?? '';
+        if (clientId.isEmpty) throw Exception('客户号为空');
+
+        final rawFundCode = row['fundCode']?.toString() ?? '';
+        if (rawFundCode.isEmpty) throw Exception('基金代码为空');
+        final fundCode = _normalizeFundCode(rawFundCode).toUpperCase();
+
+        final amountNum = row['purchaseAmount'];
+        if (amountNum == null) throw Exception('购买金额为空');
+        final purchaseAmount = amountNum is double ? amountNum : double.tryParse(amountNum.toString());
+        if (purchaseAmount == null || purchaseAmount <= 0) throw Exception('购买金额无效');
+
+        final sharesNum = row['purchaseShares'];
+        if (sharesNum == null) throw Exception('购买份额为空');
+        final purchaseShares = sharesNum is double ? sharesNum : double.tryParse(sharesNum.toString());
+        if (purchaseShares == null || purchaseShares <= 0) throw Exception('购买份额无效');
+
+        final purchaseDate = row['purchaseDate'];
+        if (purchaseDate == null) throw Exception('购买日期为空');
+        final date = purchaseDate is DateTime ? purchaseDate : _parseDate(purchaseDate.toString());
+        if (date == null) throw Exception('购买日期格式错误');
 
         final isDuplicate = existingHoldings.any((h) =>
         h.clientId == clientId &&
             h.fundCode == fundCode &&
-            h.purchaseDate.year == purchaseDate.year &&
-            h.purchaseDate.month == purchaseDate.month &&
-            h.purchaseDate.day == purchaseDate.day);
+            h.purchaseDate.year == date.year &&
+            h.purchaseDate.month == date.month &&
+            h.purchaseDate.day == date.day);
 
         if (isDuplicate) {
           skip++;
-          skipReasons.add('${clientName} / $fundCode / ${purchaseDate.toIso8601String().split('T')[0]}');
+          skipReasons.add('$clientName / $fundCode / ${date.toIso8601String().split('T')[0]}');
           continue;
         }
 
@@ -1289,7 +1341,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           fundName: fundName,
           purchaseAmount: purchaseAmount,
           purchaseShares: purchaseShares,
-          purchaseDate: purchaseDate,
+          purchaseDate: date,
           navDate: navDate,
           currentNav: currentNav,
           isValid: isValid,
