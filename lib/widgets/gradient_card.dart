@@ -45,18 +45,17 @@ class GradientCard extends StatelessWidget {
     return CupertinoColors.white;
   }
 
+  // 深色模式白色文字，浅色模式黑色文字
   Color _getTextColor() {
-    if (isDarkMode) {
-      return CupertinoColors.white;
-    }
-    return CupertinoColors.label;
+    return isDarkMode ? CupertinoColors.white : CupertinoColors.black;
   }
 
+  // 副文字颜色：深色模式半透明白色，浅色模式半透明黑色
   Color _getSubTextColor() {
     if (isDarkMode) {
       return CupertinoColors.white.withOpacity(0.5);
     }
-    return CupertinoColors.label.withOpacity(0.5);
+    return CupertinoColors.black.withOpacity(0.5);
   }
 
   Color _getShadowColor() {
@@ -118,20 +117,21 @@ class GradientCard extends StatelessWidget {
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                       height: 1.2,
+                      color: textColor,
                     ),
                     children: [
                       TextSpan(text: title),
                       if (clientId != null && clientId!.isNotEmpty)
                         TextSpan(
                           text: ' ($clientId)',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.normal,
-                            color: CupertinoColors.systemGrey,
+                            color: subTextColor,
                             height: 1.2,
                           ),
                         ),

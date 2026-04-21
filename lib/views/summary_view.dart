@@ -397,7 +397,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
       const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
     ];
-    return [softColors[hash % softColors.length], CupertinoColors.white];
+    final mainColor = softColors[hash % softColors.length];
+    return [mainColor, mainColor.withOpacity(0.3)];
   }
 
   Color _colorForHoldingCount(int count) {
