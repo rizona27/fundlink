@@ -3,7 +3,7 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
-import '../views/fund_detail_page.dart';
+import '../views/fund_detail_view.dart';
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;

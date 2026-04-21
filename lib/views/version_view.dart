@@ -6,7 +6,7 @@ import '../widgets/adaptive_top_bar.dart';
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
-  static const String appVersion = 'v1.0.2';
+  static const String appVersion = 'v1.0.3';
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +199,7 @@ class VersionView extends StatelessWidget {
                         Align(
                           alignment: Alignment.center,
                           child: Text(
-                            '仅供个人学习交流使用，数据仅供参考，投资需谨慎。',
+                            '本项目仅供个人学习与技术交流使用\n数据仅供参考，不构成任何投资建议',
                             style: TextStyle(
                               fontSize: 11,
                               color: isDarkMode
@@ -208,7 +208,7 @@ class VersionView extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 27),
                         Center(
                           child: Text(
                             '© 2026 Developed by Rizona.',

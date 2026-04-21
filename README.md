@@ -71,7 +71,7 @@ lib/
 │   ├── config_view.dart                   # 程序设置相关页面，隐私/主题切换/日志查询/持仓管理及其他
 │   ├── edit_holding_view.dart             # 编辑持仓页，修改已有持仓信息
 │   ├── export_holding_view.dart           # 导出文件页面，支持CSV/Excel
-│   ├── fund_detail_page.dart              # 基金详情页，包含估值/净值趋势/十大重仓
+│   ├── fund_detail_view.dart              # 基金详情页，包含估值/净值趋势/十大重仓
 │   ├── history_view.dart                  # 历史净值弹窗页
 │   ├── inport_holding_view.dart           # 导入文件页面，支持CSV/Excel
 │   ├── license_view.dart                  # 本程序应用的开源协议AGPL v3
