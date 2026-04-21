@@ -6,7 +6,6 @@ import '../widgets/adaptive_top_bar.dart';
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
-  // 版本号统一在这里定义，ConfigView 会通过此常量获取
   static const String appVersion = 'v1.0.2';
 
   @override
@@ -15,7 +14,6 @@ class VersionView extends StatelessWidget {
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     double scrollOffset = 0;
 
-    // 生成随机邮箱颜色（饱和0.7，亮度0.6，保证可见性）
     final randomEmailColor = HSLColor.fromAHSL(
       1,
       Random().nextDouble() * 360,
@@ -31,7 +29,6 @@ class VersionView extends StatelessWidget {
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is ScrollUpdateNotification) {
-                // 不需要更新状态
               }
               return false;
             },
@@ -60,14 +57,11 @@ class VersionView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 头部区域：图标 + 标题 + 副标题 + 标签 + 版本信息（紧凑一行）
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // 使用生成的应用图标
                             _buildAppIcon(isDarkMode),
                             const SizedBox(width: 12),
-                            // 标题区域
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,7 +125,6 @@ class VersionView extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        // 主要功能标题
                         Text(
                           '主要功能',
                           style: TextStyle(
@@ -141,7 +134,6 @@ class VersionView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // 主要功能列表（包含数据导入及导出）
                         Wrap(
                           spacing: 16,
                           runSpacing: 10,
@@ -156,7 +148,6 @@ class VersionView extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        // 程序说明区块
                         Text(
                           '程序说明',
                           style: TextStyle(
@@ -178,7 +169,6 @@ class VersionView extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        // 联系作者（固定蓝色 + 随机颜色邮箱）
                         Align(
                           alignment: Alignment.centerRight,
                           child: Row(
@@ -206,7 +196,6 @@ class VersionView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 27),
-                        // 说明文字（淡灰色，居中）
                         Align(
                           alignment: Alignment.center,
                           child: Text(
@@ -220,7 +209,6 @@ class VersionView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        // 版权信息
                         Center(
                           child: Text(
                             '© 2026 Developed by Rizona.',
@@ -244,7 +232,6 @@ class VersionView extends StatelessWidget {
     );
   }
 
-  // 构建应用图标（使用生成的应用图标）
   Widget _buildAppIcon(bool isDarkMode) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -254,7 +241,6 @@ class VersionView extends StatelessWidget {
         height: 48,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
-          // 如果图标加载失败，显示渐变占位符
           return Container(
             width: 48,
             height: 48,
@@ -305,7 +291,6 @@ class VersionView extends StatelessWidget {
     );
   }
 
-  // 程序说明项（纯文本，带序号，淡灰色）
   Widget _buildInstructionItem(String text, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),

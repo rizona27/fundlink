@@ -14,7 +14,7 @@ class GradientCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
   final String? debugSource;
-  final int? maxTitleLength; // 新增：最大标题长度（汉字/字符数）
+  final int? maxTitleLength;
 
   const GradientCard({
     super.key,
@@ -47,12 +47,10 @@ class GradientCard extends StatelessWidget {
     return CupertinoColors.white;
   }
 
-  // 深色模式白色文字，浅色模式黑色文字
   Color _getTextColor() {
     return isDarkMode ? CupertinoColors.white : CupertinoColors.black;
   }
 
-  // 副文字颜色：深色模式半透明白色，浅色模式半透明黑色
   Color _getSubTextColor() {
     if (isDarkMode) {
       return CupertinoColors.white.withOpacity(0.5);
@@ -79,7 +77,6 @@ class GradientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 处理标题截断
     String displayTitle = title;
     if (maxTitleLength != null && title.length > maxTitleLength!) {
       displayTitle = title.substring(0, maxTitleLength!) + '…';
@@ -132,7 +129,7 @@ class GradientCard extends StatelessWidget {
                       color: textColor,
                     ),
                     children: [
-                      TextSpan(text: displayTitle), // 使用处理后的标题
+                      TextSpan(text: displayTitle),
                       if (clientId != null && clientId!.isNotEmpty)
                         TextSpan(
                           text: ' ($clientId)',

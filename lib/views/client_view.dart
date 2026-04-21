@@ -13,7 +13,6 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import 'add_holding_view.dart';
 
-// 将 _ClientGroup 移到类外部
 class _ClientGroup {
   final String key;
   final String displayName;
@@ -138,7 +137,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     return _filteredHoldings.where((h) => h.isPinned).toList();
   }
 
-  // 修复：使用 clientId 作为分组 key，而不是模糊后的名称
   List<_ClientGroup> get _clientGroups {
     final map = <String, _ClientGroup>{};
     for (final holding in _filteredHoldings) {
@@ -255,12 +253,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
                 showBack: false,
-                showRefresh: true,        // 放入菜单
-                showExpandCollapse: true,  // 放入菜单
-                showSearch: true,          // 放入菜单
+                showRefresh: true,
+                showExpandCollapse: true,
+                showSearch: true,
                 showReset: false,
                 showFilter: false,
-                showSort: false,           // 客户视图无排序
+                showSort: false,
                 isAllExpanded: _areAnyCardsExpanded,
                 searchText: _searchText,
                 dataManager: _dataManager,
@@ -309,7 +307,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                 iconSize: 24,
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                useMenuStyle: true,  // 启用菜单模式
+                useMenuStyle: true,
               ),
               Expanded(
                 child: !hasData

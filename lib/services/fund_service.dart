@@ -75,7 +75,6 @@ class FundService {
     }
   }
 
-  // 使用天天基金 pingzhongdata 接口（UTF-8 编码）
   Future<Map<String, dynamic>> _fetchFromPingzhongdata(String code) async {
     debugPrint('┌──────────────────────────────────────────────────────────────────┐');
     debugPrint('│ [天天基金数据接口] 开始请求                                        │');
@@ -105,7 +104,6 @@ class FundService {
       final jsString = utf8.decode(response.bodyBytes);
       debugPrint('✅ 响应解码成功，长度: ${jsString.length}');
 
-      // 1. 提取基金名称
       String fundName = '未知基金';
       final namePatterns = [
         RegExp(r'fS_name\s*=\s*"([^"]+)"'),
@@ -123,7 +121,6 @@ class FundService {
       }
       debugPrint('📈 基金名称: $fundName');
 
-      // 2. 提取净值趋势 Data_netWorthTrend
       double currentNav = 0.0;
       DateTime navDate = DateTime.now();
       final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
@@ -146,7 +143,6 @@ class FundService {
         debugPrint('⚠️ 未找到 Data_netWorthTrend');
       }
 
-      // 3. 提取收益率
       double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
 
       final ret1mPatterns = [
@@ -266,9 +262,7 @@ class FundService {
     }
   }
 
-  // ==================== 净值走势 & 十大重仓 ====================
 
-  /// 获取基金净值走势（Data_netWorthTrend）
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
@@ -282,7 +276,6 @@ class FundService {
     return trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
   }
 
-  /// 获取基金的业绩比较基准数据（同类平均和沪深300）
   Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
@@ -349,7 +342,6 @@ class FundService {
     return {'average': averagePoints, 'hs300': hs300Points};
   }
 
-  /// 获取基金十大重仓股（使用 HTML 解析，支持动态列定位）
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
     debugPrint('🔍 开始获取基金 $code 的十大重仓股...');
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
@@ -370,7 +362,6 @@ class FundService {
       return [];
     }
 
-    // 获取表头 th，确定各列索引
     final thead = document.querySelector('thead');
     List<String> headers = [];
     if (thead != null) {
@@ -379,7 +370,6 @@ class FundService {
       debugPrint('📋 表头: $headers');
     }
 
-    // 根据表头定位“占净值比例”列索引
     int ratioIndex = -1;
     for (int i = 0; i < headers.length; i++) {
       if (headers[i].contains('占净值比例') || headers[i].contains('占比')) {
@@ -387,7 +377,6 @@ class FundService {
         break;
       }
     }
-    // 默认回退到第6列（0-indexed 5）
     if (ratioIndex == -1) ratioIndex = 5;
 
     final rows = tbody.querySelectorAll('tr');
@@ -396,20 +385,16 @@ class FundService {
       final cells = row.querySelectorAll('td');
       if (cells.length < 3) continue;
 
-      // 股票代码通常在第二列（索引1）
       final codeRaw = cells[1].text.trim();
       final codeMatch = RegExp(r'(\d{6})').firstMatch(codeRaw);
       final stockCode = codeMatch?.group(1) ?? codeRaw;
 
-      // 股票名称通常在第三列（索引2）
       final stockName = cells[2].text.trim();
 
-      // 占净值比例列
       String ratioRaw = '';
       if (cells.length > ratioIndex) {
         ratioRaw = cells[ratioIndex].text.trim().replaceAll('%', '');
       } else {
-        // 尝试从最后几列寻找百分比数字
         for (int i = cells.length - 1; i >= 0; i--) {
           final text = cells[i].text.trim();
           if (text.contains('%')) {
@@ -430,11 +415,9 @@ class FundService {
     return holdings.take(10).toList();
   }
 
-  /// 批量获取股票实时涨跌幅（腾讯接口，增强解析）
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
     if (stockCodes.isEmpty) return {};
     final codesParam = stockCodes.map((code) {
-      // 港股：5位数字
       if (code.length == 5 && RegExp(r'^\d{5}$').hasMatch(code)) {
         return 'hk$code';
       }
@@ -473,9 +456,7 @@ class FundService {
     return quoteMap;
   }
 
-  // ==================== 实时估值接口（增强健壮性和日志） ====================
   Future<Map<String, dynamic>?> fetchRealtimeValuation(String code) async {
-    // 验证基金代码格式
     if (code.isEmpty || code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
       debugPrint('❌ [估值请求] 无效的基金代码格式: $code');
       return null;
@@ -492,19 +473,16 @@ class FundService {
         return null;
       }
 
-      // 检查响应体是否为空
       final bodyBytes = response.bodyBytes;
       if (bodyBytes.isEmpty) {
         debugPrint('❌ [估值请求] 基金 $code 返回空内容');
         return null;
       }
 
-      // 尝试解码为字符串
       String jsString;
       try {
         jsString = utf8.decode(bodyBytes);
       } catch (e) {
-        // 如果 UTF-8 解码失败，尝试其他编码
         try {
           jsString = String.fromCharCodes(bodyBytes);
         } catch (e2) {
@@ -513,21 +491,18 @@ class FundService {
         }
       }
 
-      // 检查是否为空字符串或 "null" 或封闭期返回的 "jsonpgz();"
       final trimmed = jsString.trim();
       if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') {
         debugPrint('⚠️ [估值请求] 基金 $code 处于封闭期或无实时估值数据');
         return null;
       }
 
-      // 检查是否包含有效的JSON数据（至少要有 {}）
       if (!trimmed.contains('{') || !trimmed.contains('}')) {
         debugPrint('❌ [估值请求] 基金 $code 返回内容不是有效的JSON格式');
         debugPrint('   返回内容: ${trimmed.length > 100 ? trimmed.substring(0, 100) : trimmed}');
         return null;
       }
 
-      // 去掉 jsonp 包裹
       String jsonStr = trimmed;
       if (trimmed.contains('(') && trimmed.contains(')')) {
         final startIdx = trimmed.indexOf('(');
@@ -537,19 +512,16 @@ class FundService {
         }
       }
 
-      // 清理可能的尾部分号
       jsonStr = jsonStr.trim();
       if (jsonStr.endsWith(';')) {
         jsonStr = jsonStr.substring(0, jsonStr.length - 1);
       }
 
-      // 验证 JSON 字符串不为空
       if (jsonStr.isEmpty) {
         debugPrint('❌ [估值请求] 基金 $code 提取的JSON字符串为空');
         return null;
       }
 
-      // 尝试解析 JSON
       Map<String, dynamic> data;
       try {
         data = jsonDecode(jsonStr);
@@ -562,7 +534,6 @@ class FundService {
         return null;
       }
 
-      // 检查数据是否有效 - 有些基金可能不存在，返回的数据中 name 为空或 fundcode 不匹配
       final returnedFundCode = data['fundcode']?.toString() ?? '';
       if (returnedFundCode.isNotEmpty && returnedFundCode != code) {
         debugPrint('⚠️ [估值请求] 基金 $code 返回的代码不匹配: $returnedFundCode');
@@ -574,14 +545,12 @@ class FundService {
         return null;
       }
 
-      // 检查 gsz 字段
       String gszStr = data['gsz']?.toString() ?? '';
       if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') {
         debugPrint('❌ [估值请求] 基金 $code 缺少估值数据');
         return null;
       }
 
-      // 解析 gsz 和 gszzl
       double gsz;
       double gszzl;
       try {
@@ -592,7 +561,6 @@ class FundService {
         return null;
       }
 
-      // 对于 gsz 为 0 的情况，可能是非交易时间，仍然返回数据
       if (gsz <= 0 && gszzl == 0) {
         debugPrint('⚠️ [估值请求] 基金 $code 当前估值为0，可能非交易时间');
       }

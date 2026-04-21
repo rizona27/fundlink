@@ -28,7 +28,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   List<NetWorthPoint> _avgPoints = [];
   List<NetWorthPoint> _hsPoints = [];
 
-  // 缓存计算结果
   List<NetWorthPoint>? _cachedFundPointsWithChanges;
   String? _lastFundCodeForCache;
 
@@ -90,7 +89,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     }
   }
 
-  // 获取带涨跌幅的净值数据（带缓存）
   List<NetWorthPoint> get _fundPointsWithChanges {
     if (_cachedFundPointsWithChanges != null &&
         _lastFundCodeForCache == widget.holding.fundCode &&
@@ -118,7 +116,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
       final rawTrend = await _fundService.fetchNetWorthTrend(widget.holding.fundCode);
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
         ..sort((a, b) => a.date.compareTo(b.date));
-      // 清除缓存，下次访问时会重新计算
       _cachedFundPointsWithChanges = null;
 
       final benchmark = await _fundService.fetchBenchmarkData(widget.holding.fundCode);
@@ -319,7 +316,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     return 20;
   }
 
-  // 优化后的图表部分 - 支持移动端触摸和PC端悬停
   Widget _buildChartSection(bool isDark) {
     return RepaintBoundary(
       key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
@@ -833,7 +829,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
 }
 
-// 优化后的图表组件 - 分离触摸和悬停逻辑
 class _OptimizedPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
   final List<NetWorthPoint> avgPoints;
@@ -852,7 +847,6 @@ class _OptimizedPerformanceChart extends StatefulWidget {
 class _OptimizedPerformanceChartState extends State<_OptimizedPerformanceChart> {
   Timer? _hoverDebounceTimer;
 
-  // 判断是否为移动端
   bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
   @override
@@ -879,13 +873,10 @@ class _OptimizedPerformanceChartState extends State<_OptimizedPerformanceChart> 
   }
 
   void _handleTouchMove(PointerMoveEvent event) {
-    // 移动端触摸移动逻辑 - 直接响应，无需防抖
-    // 这里调用图表的触摸移动方法
     _updateChartHover(event.localPosition);
   }
 
   void _handleHover(PointerHoverEvent event) {
-    // PC端悬停 - 使用防抖避免频繁重绘导致闪烁
     _hoverDebounceTimer?.cancel();
     _hoverDebounceTimer = Timer(const Duration(milliseconds: 16), () {
       _updateChartHover(event.localPosition);
@@ -893,8 +884,5 @@ class _OptimizedPerformanceChartState extends State<_OptimizedPerformanceChart> 
   }
 
   void _updateChartHover(Offset position) {
-    // 这里实现图表的悬停/触摸更新逻辑
-    // 具体实现取决于 FundPerformanceChart 的接口
-    // 如果 FundPerformanceChart 有更新悬停位置的方法，在这里调用
   }
 }

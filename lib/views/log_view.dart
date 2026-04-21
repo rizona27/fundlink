@@ -18,24 +18,19 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
   double _scrollOffset = 0;
 
-  // 分页加载相关 - 默认显示10条
   static const int _pageSize = 10;
   int _displayCount = 10;
   bool _isLoadingMore = false;
   bool _hasMore = true;
 
-  // 滚动控制器
   final ScrollController _scrollController = ScrollController();
 
-  // 存储每个日志项的动画控制器
   final Map<String, AnimationController> _fadeControllers = {};
   final Map<String, AnimationController> _sizeControllers = {};
 
-  // 动画队列管理
   bool _isAnimating = false;
   List<LogEntry> _targetLogs = [];
 
-  // 动画持续时间
   static const Duration _fadeDuration = Duration(milliseconds: 200);
   static const Duration _sizeDuration = Duration(milliseconds: 250);
 

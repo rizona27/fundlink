@@ -111,17 +111,15 @@ class FileExportService {
       html.Url.revokeObjectUrl(url);
       context.showToast('文件已开始下载');
     } else {
-      // 分离文件名和扩展名
       final nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
       final extension = fileName.split('.').last;
 
       try {
-        // 使用 saveAs 方法，fileExtension 是必需参数
         final savedPath = await FileSaver.instance.saveAs(
-          name: nameWithoutExt,           // 文件名（不含扩展名）
+          name: nameWithoutExt,
           bytes: bytes,
-          fileExtension: extension,       // 扩展名，例如 "csv" 或 "xlsx"
-          mimeType: MimeType.other,      // MIME 类型
+          fileExtension: extension,
+          mimeType: MimeType.other,
         );
 
         if (savedPath != null && savedPath.isNotEmpty) {
@@ -135,7 +133,6 @@ class FileExportService {
         context.showToast('保存文件失败: $e');
       }
 
-      // 如果需要分享，则写入临时文件并调用 share_plus
       if (shareAfterSave) {
         try {
           final directory = await getTemporaryDirectory();

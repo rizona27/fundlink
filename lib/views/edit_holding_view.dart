@@ -9,7 +9,6 @@ import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
-/// 金额/份额输入格式化器：支持小数点输入，整数最多9位，小数最多2位，只能一个小数点
 class AmountInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -53,7 +52,6 @@ class AmountInputFormatter extends TextInputFormatter {
   }
 }
 
-/// 客户姓名输入格式化器：只允许中文、英文、数字、最多一个空格
 class ClientNameInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -83,7 +81,6 @@ class ClientNameInputFormatter extends TextInputFormatter {
   }
 }
 
-/// 客户号输入格式化器：只允许数字，最多12位
 class ClientIdInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -126,7 +123,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   bool _sharesError = false;
 
   late DateTime _purchaseDate;
-  bool _isSaving = false;  // 统一使用 _isSaving
+  bool _isSaving = false;
 
   @override
   void initState() {

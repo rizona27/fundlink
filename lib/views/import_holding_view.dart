@@ -520,7 +520,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     }
   }
 
-  /// 将基金代码补足到6位（移除所有非数字字符后前面补零），安全处理 null
   String _normalizeFundCode(String? code) {
     if (code == null) return '';
     String trimmed = code.trim();
@@ -1120,17 +1119,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     }
   }
 
-  /// 尝试多种编码解码 CSV 内容，优先 UTF-8，失败后尝试 GBK
   String _decodeCsvBytes(Uint8List bytes) {
-    // 先尝试 UTF-8
     try {
       return utf8.decode(bytes);
     } catch (_) {
-      // UTF-8 失败，尝试 GBK (通过 latin1 保留原始字节，但这里我们使用 gbk 解码)
-      // 注意：dart:convert 默认不支持 GBK，需要引入 package:charset/charset.dart
-      // 为了简化，我们使用 latin1 解码并保留原始字节，或者可以尝试系统编码
-      // 这里简单返回 latin1 解码（不会抛出异常，但可能乱码）
-      // 更好的方案是使用 charset 包，但为避免引入新依赖，我们返回 utf8 解码失败的信息
       throw Exception('文件编码不是 UTF-8，请将 CSV 另存为 UTF-8 编码');
     }
   }
@@ -1165,7 +1157,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           _rawData = sheet.rows.skip(1).map((row) => row.map((cell) => _getCellValue(cell)).toList()).toList();
         } catch (e) {
           print('Excel 解析失败: $e');
-          // 尝试作为 CSV 解析（某些文件扩展名为 xlsx 但实际是 CSV）
           try {
             final csvString = _decodeCsvBytes(bytes);
             final rows = const CsvToListConverter().convert(csvString);
@@ -1209,7 +1200,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     } catch (e, stack) {
       print('解析文件失败: $e');
       print(stack);
-      // 显示 Toast 和对话框确保用户看到错误
       if (context.mounted) {
         context.showToast('解析文件失败: $e');
         showCupertinoDialog(
@@ -1270,7 +1260,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     for (int i = 0; i < _validData.length; i++) {
       final row = _validData[i];
       try {
-        // 安全取值，避免 as 强制转换崩溃
         final clientName = row['clientName']?.toString() ?? '';
         if (clientName.isEmpty) throw Exception('客户姓名为空');
 

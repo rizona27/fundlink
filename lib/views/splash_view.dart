@@ -62,7 +62,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     });
   }
 
-  // 获取当前路由（用于后续移除）
   Route? get _currentRoute {
     return ModalRoute.of(context);
   }
@@ -81,7 +80,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     return Scaffold(
       body: Stack(
         children: [
-          // 背景渐变
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -93,7 +91,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // 动态光圈
           AnimatedBuilder(
             animation: _glowController,
             builder: (context, child) {
@@ -105,7 +102,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
               );
             },
           ),
-          // 文字内容
           SafeArea(
             child: Center(
               child: FadeTransition(

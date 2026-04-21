@@ -32,7 +32,6 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   AnimationController? _fadeController;
   double _overlayOpacity = 0.0;
 
-  /// 判断基金是否缺失所有收益率字段（近1/3/6月、近1年全为 null）
   bool _hasNoReturnData(FundHolding holding) {
     return holding.navReturn1m == null &&
         holding.navReturn3m == null &&
@@ -221,7 +220,6 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
       type: LogType.success,
     );
 
-    // 保持遮罩至少显示 500ms，避免闪烁
     final overlayStartTime = DateTime.now();
     _hideLoadingOverlay();
     final elapsed = DateTime.now().difference(overlayStartTime);

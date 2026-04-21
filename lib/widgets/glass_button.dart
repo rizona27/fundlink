@@ -47,7 +47,6 @@ class GlassButton extends StatelessWidget {
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label).withValues(alpha: 0.5)
         : (isPrimary ? CupertinoColors.activeBlue : (isDarkMode ? CupertinoColors.white : CupertinoColors.label));
 
-    // 构建按钮内容
     Widget buttonContent;
     if (icon != null && label.isEmpty) {
       buttonContent = Icon(

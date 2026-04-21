@@ -111,16 +111,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
       _restartValuationTimer();
-      // 页面恢复时，如果正在刷新则更新 UI 状态（刷新已经在后台进行中）
       if (_dataManager.isValuationRefreshInProgress) {
-        setState(() {}); // 刷新 UI 以显示进度
+        setState(() {});
       } else {
         _checkAndRefreshStaleValuation();
       }
     } else if (state == AppLifecycleState.paused) {
       _isPageVisible = false;
       _stopValuationTimer();
-      // 注意：不停止刷新，让刷新在后台继续进行
     }
   }
 
@@ -426,7 +424,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   Widget? _buildHoldersListInline(List<FundHolding> holdings, bool isDarkMode) {
-    if (_dataManager.isPrivacyMode && _searchText.isEmpty) return null;
+    if (!_dataManager.showHoldersOnSummaryCard) return null;
 
     final sorted = List<FundHolding>.from(holdings);
     sorted.sort((a, b) {

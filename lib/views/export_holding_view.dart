@@ -14,10 +14,8 @@ class ExportHoldingView extends StatefulWidget {
 }
 
 class _ExportHoldingViewState extends State<ExportHoldingView> {
-  // 步骤控制
-  int _currentStep = 0; // 0: 格式与范围, 1: 选择字段, 2: 导出结果
+  int _currentStep = 0;
 
-  // 导出参数
   String _format = 'csv';
   String _scope = 'all';
   final Map<String, String> _filters = {
@@ -28,11 +26,9 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     'profitMax': '',
   };
 
-  // 验证错误信息
   String _amountError = '';
   String _profitError = '';
 
-  // 导出字段（必选在前，可选在后，可选默认不勾选）
   final List<ExportField> _fields = [
     ExportField(id: 'clientName', label: '客户姓名', required: true, selected: true),
     ExportField(id: 'clientId', label: '客户号', required: true, selected: true),
@@ -46,7 +42,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     ExportField(id: 'remarks', label: '备注', required: false, selected: false),
   ];
 
-  // 数据与状态
   List<FundHolding> _filteredHoldings = [];
   int _previewCount = 0;
   bool _isExporting = false;
@@ -55,7 +50,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   bool _exportSuccess = false;
   String _exportedFileName = '';
 
-  // 历史记录
   List<ExportHistoryItem> _exportHistory = [];
 
   @override
@@ -66,7 +60,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     });
   }
 
-  // 验证金额范围
   bool _validateAmountRange() {
     final minStr = _filters['minAmount']!.trim();
     final maxStr = _filters['maxAmount']!.trim();
@@ -134,7 +127,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     return true;
   }
 
-  // 验证收益率范围
   bool _validateProfitRange() {
     final minStr = _filters['profitMin']!.trim();
     final maxStr = _filters['profitMax']!.trim();
@@ -247,16 +239,14 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     try {
       final selectedFieldIds = _fields.where((f) => f.selected).map((f) => f.id).toList();
 
-      // 调用统一导出服务
       await FileExportService.exportAndDownload(
         holdings: _filteredHoldings,
         format: _format,
         selectedFields: selectedFieldIds,
-        context: context,          // 必须传入
-        shareAfterSave: false,     // 仅保存，不分享
+        context: context,
+        shareAfterSave: false,
       );
 
-      // 生成文件名用于显示（与服务内部一致）
       final dateStr = DateTime.now().toIso8601String().split('T')[0];
       final fileName = 'fundlink_$dateStr.${_format == 'csv' ? 'csv' : 'xlsx'}';
 
@@ -284,8 +274,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     _exportHistory.insert(0, item);
     if (_exportHistory.length > 20) _exportHistory.removeLast();
   }
-
-  // ==================== UI 组件 ====================
 
   Widget _buildStepIndicator() {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -672,7 +660,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     );
   }
 
-  // ==================== 辅助组件 ====================
 
   Widget _buildCard({required String title, required IconData icon, required bool isDarkMode, required List<Widget> children}) {
     return Container(

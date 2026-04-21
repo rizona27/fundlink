@@ -9,7 +9,6 @@ import '../models/profit_result.dart';
 import '../services/fund_service.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
 
-// 扩展 ThemeMode 显示名称
 extension ThemeModeDisplayName on ThemeMode {
   String get displayName {
     switch (this) {
@@ -29,24 +28,23 @@ class DataManager extends ChangeNotifier {
   static const String _privacyModeKey = 'privacy_mode';
   static const String _themeModeKey = 'theme_mode';
   static const String _valuationCacheKey = 'valuation_cache';
-  static const int _valuationCacheValidSeconds = 180; // 3分钟
+  static const String _showHoldersOnSummaryCardKey = 'show_holders_on_summary_card';
+  static const int _valuationCacheValidSeconds = 180;
 
   List<FundHolding> _holdings = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
   Map<String, Map<String, dynamic>> _valuationCache = {};
+  bool _showHoldersOnSummaryCard = true;
 
-  // ========== 全局估值刷新状态 ==========
   bool _isValuationRefreshing = false;
   double _valuationRefreshProgress = 0.0;
   String _lastValuationUpdateTime = '';
 
-  // ========== 后台刷新状态管理 ==========
   bool _isValuationRefreshInProgress = false;
   Completer<void>? _currentValuationRefreshCompleter;
 
-  // ========== Getters ==========
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
@@ -55,6 +53,7 @@ class DataManager extends ChangeNotifier {
   double get valuationRefreshProgress => _valuationRefreshProgress;
   String get lastValuationUpdateTime => _lastValuationUpdateTime;
   bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
+  bool get showHoldersOnSummaryCard => _showHoldersOnSummaryCard;
 
   List<FundHolding> get pinnedHoldings {
     return _holdings.where((h) => h.isPinned).toList();
@@ -97,6 +96,8 @@ class DataManager extends ChangeNotifier {
     } else {
       _themeMode = ThemeMode.system;
     }
+
+    _showHoldersOnSummaryCard = prefs.getBool(_showHoldersOnSummaryCardKey) ?? true;
 
     await loadValuationCache();
 
@@ -141,11 +142,11 @@ class DataManager extends ChangeNotifier {
 
     await prefs.setBool(_privacyModeKey, _isPrivacyMode);
     await prefs.setString(_themeModeKey, _themeModeToString(_themeMode));
+    await prefs.setBool(_showHoldersOnSummaryCardKey, _showHoldersOnSummaryCard);
 
     debugPrint('DataManager: 所有数据保存成功');
   }
 
-  // ========== 估值缓存相关方法 ==========
   Future<void> loadValuationCache() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_valuationCacheKey);
@@ -166,7 +167,6 @@ class DataManager extends ChangeNotifier {
     debugPrint('DataManager: 估值缓存已保存');
   }
 
-  /// 获取单个基金的估值（带缓存有效期检查）
   Map<String, dynamic>? getValuation(String fundCode) {
     final cached = _valuationCache[fundCode];
     if (cached == null) return null;
@@ -182,7 +182,6 @@ class DataManager extends ChangeNotifier {
     };
   }
 
-  /// 更新单个基金的估值缓存
   Future<void> updateValuationCache(String fundCode, Map<String, dynamic> valuation) async {
     _valuationCache[fundCode] = {
       'gsz': valuation['gsz'],
@@ -194,7 +193,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ========== 全局估值刷新状态管理 ==========
   void startValuationRefresh() {
     if (_isValuationRefreshing) return;
     _isValuationRefreshing = true;
@@ -222,7 +220,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ========== 后台估值刷新核心逻辑 ==========
   String _formatGzTime(String gztime) {
     if (gztime.isEmpty) return '--';
     try {
@@ -239,9 +236,7 @@ class DataManager extends ChangeNotifier {
     return gztime;
   }
 
-  /// 刷新所有基金的估值（后台运行，不依赖页面生命周期）
   Future<void> refreshAllValuations(FundService fundService, {bool silent = false}) async {
-    // 如果已经在刷新中，等待当前刷新完成
     if (_isValuationRefreshInProgress && _currentValuationRefreshCompleter != null) {
       if (!silent) {
         await addLog('估值刷新正在进行中，请稍后', type: LogType.info);
@@ -252,7 +247,6 @@ class DataManager extends ChangeNotifier {
     _isValuationRefreshInProgress = true;
     _currentValuationRefreshCompleter = Completer<void>();
 
-    // 启动刷新状态
     startValuationRefresh();
 
     try {
@@ -319,7 +313,6 @@ class DataManager extends ChangeNotifier {
     }
   }
 
-  // ========== 原有持仓管理方法 ==========
   Future<void> addHolding(FundHolding holding) async {
     if (!holding.isValidHolding) {
       await addLog('添加持仓失败: 数据无效', type: LogType.error);
@@ -456,6 +449,15 @@ class DataManager extends ChangeNotifier {
     }
   }
 
+  Future<void> setShowHoldersOnSummaryCard(bool value) async {
+    if (_showHoldersOnSummaryCard != value) {
+      _showHoldersOnSummaryCard = value;
+      await saveData();
+      await addLog('一览卡片持有人显示: ${value ? "开启" : "关闭"}', type: LogType.info);
+      notifyListeners();
+    }
+  }
+
   String obscuredName(String name) {
     if (!_isPrivacyMode || name.isEmpty) return name;
 
@@ -500,7 +502,6 @@ class DataManager extends ChangeNotifier {
   }
 }
 
-// ==================== DataManagerProvider ====================
 class DataManagerProvider extends InheritedWidget {
   final DataManager dataManager;
 

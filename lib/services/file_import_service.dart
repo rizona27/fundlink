@@ -5,9 +5,7 @@ import 'package:csv/csv.dart';
 import '../models/fund_holding.dart';
 import 'package:uuid/uuid.dart';
 
-/// 文件导入服务，支持 CSV 和 Excel 格式解析
 class FileImportService {
-  /// 解析文件内容，返回 (表头列表, 数据行列表)
   static Future<({List<String> headers, List<List<dynamic>> rows})> parseFile({
     required Uint8List bytes,
     required String extension,
@@ -33,13 +31,11 @@ class FileImportService {
     return (headers: headers, rows: dataRows);
   }
 
-  /// 辅助函数：从 Excel 单元格提取纯文本（适配 excel 4.x）
   static String _getCellValue(dynamic cell) {
     if (cell == null) return '';
     final val = cell.value;
     if (val == null) return '';
     if (val is excel.TextCellValue) {
-      // TextCellValue.value 是 TextSpan，取 text 属性，可能为 null，提供空字符串兜底
       return val.value.text ?? '';
     }
     if (val is excel.IntCellValue) return val.value.toString();
@@ -64,7 +60,6 @@ class FileImportService {
     return (headers: headers, rows: dataRows);
   }
 
-  /// 将解析后的行数据转换为 FundHolding 对象
   static FundHolding rowToHolding(
       List<dynamic> row,
       Map<String, int> fieldMapping, {
@@ -136,7 +131,6 @@ class FileImportService {
     );
   }
 
-  /// 灵活解析日期字符串，支持常见格式：yyyy-MM-dd, yyyy/MM/dd, dd/MM/yyyy, MM/dd/yyyy
   static DateTime _parseFlexibleDate(String dateStr) {
     String normalized = dateStr.replaceAll('/', '-').replaceAll('.', '-');
     final parts = normalized.split('-');

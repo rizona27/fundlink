@@ -19,7 +19,6 @@ class LicenseView extends StatelessWidget {
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is ScrollUpdateNotification) {
-                // 不需要更新状态
               }
               return false;
             },

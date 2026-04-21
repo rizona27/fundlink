@@ -1,11 +1,9 @@
-// fund_performance_chart.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/net_worth_point.dart';
 
-/// 业绩走势图表组件（基金净值、同类平均、沪深300）
 class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
   final List<NetWorthPoint> avgPoints;
@@ -40,7 +38,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   List<double> _sliceAvgValues = [];
   List<double> _sliceHsValues = [];
 
-  // 使用 ValueNotifier 管理悬停状态
   final ValueNotifier<int> _hoverIndexNotifier = ValueNotifier(-1);
   final ValueNotifier<double> _crosshairXNotifier = ValueNotifier(0);
   final ValueNotifier<double> _crosshairYNotifier = ValueNotifier(0);
@@ -278,12 +275,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
-  /// 核心：根据坐标更新悬停位置（鼠标或触摸）
   void _updateHoverFromPosition(Offset globalPosition) {
     final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
-    // 检查全局坐标是否在图表区域内
     final localPosition = renderBox.globalToLocal(globalPosition);
     if (localPosition.dx < 0 || localPosition.dx > renderBox.size.width ||
         localPosition.dy < 0 || localPosition.dy > renderBox.size.height) {
@@ -291,7 +286,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       return;
     }
 
-    // 更新图表尺寸（供十字线定位用）
     _chartWidth = renderBox.size.width;
     _chartHeight = renderBox.size.height;
 
@@ -300,15 +294,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
     if (chartWidth <= 0) return;
 
-    // 计算相对位置（0-1）
     double relativeX = (localPosition.dx - leftMargin) / chartWidth;
     relativeX = relativeX.clamp(0.0, 1.0);
 
-    // 计算对应的数据点索引
     final index = (relativeX * _maxIndex).round();
     final clampedIndex = index.clamp(0, _maxIndex);
 
-    // 获取对应的 Y 值（基金净值收益率）
     final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
     if (clampedIndex < transformedFundValues.length) {
       _updateHoverPosition(clampedIndex, transformedFundValues[clampedIndex]);
@@ -348,7 +339,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
   }
 
-  // 统一处理 PointerEvent（用于移动/点击/悬停）
   void _handlePointerEvent(PointerEvent event) {
     _updateHoverFromPosition(event.position);
   }

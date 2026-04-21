@@ -8,8 +8,8 @@ import 'manage_holdings_view.dart';
 import 'log_view.dart';
 import 'version_view.dart';
 import 'license_view.dart';
-import 'import_holding_view.dart';      // 新增
-import 'export_holding_view.dart';      // 新增
+import 'import_holding_view.dart';
+import 'export_holding_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -93,6 +93,18 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.togglePrivacyMode();
+            setState(() {});
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildSwitchItem(
+          icon: CupertinoIcons.person_fill,
+          title: '一览卡片',
+          subtitle: '客户显示',
+          value: _dataManager.showHoldersOnSummaryCard,
+          isDarkMode: isDarkMode,
+          onChanged: (value) async {
+            await _dataManager.setShowHoldersOnSummaryCard(value);
             setState(() {});
           },
         ),
@@ -489,7 +501,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          // 左侧图标
           Container(
             width: 32,
             height: 32,
@@ -506,7 +517,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 12),
-          // 中间文字
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,10 +543,9 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          // 核心修复：通过 SizedBox 的宽高比来强制“压短”药丸
           SizedBox(
-            width: 160,  // 1. 强制缩短横向长度，你可以根据需要调整这个数值（如 80 或 100）
-            height: 28, // 2. 保持精致的高度
+            width: 160,  // 强制缩短横向长度（如 80 或 100）
+            height: 28,
             child: FittedBox(
               fit: BoxFit.fill,
               child: ThemeSwitch(

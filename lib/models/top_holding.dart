@@ -2,7 +2,7 @@
 class TopHolding {
   final String stockCode;
   final String stockName;
-  final double ratio; // 占净值比例（百分比）
+  final double ratio;
 
   TopHolding({required this.stockCode, required this.stockName, required this.ratio});
 

@@ -129,7 +129,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // 深色模式背景：使用系统深灰色 (#2C2C2E)，接近黑色但柔和
     final Color backgroundColor = isDarkMode
         ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.95)
         : CupertinoColors.white.withValues(alpha: 0.92);
@@ -225,7 +224,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                               double t = _rotateControllers[index].value;
                               double angle = 270 * (1 - (2 * t - 1).abs()) * 3.14159 / 180;
 
-                              // 图标颜色处理
                               Color iconColor;
                               if (isSelected) {
                                 double scaleValue = _scaleAnimations[index].value;

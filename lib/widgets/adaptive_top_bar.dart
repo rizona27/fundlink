@@ -11,13 +11,11 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
 
-// 排序循环类型枚举
 enum SortCycleType {
   fundReturns,
   holdings,
 }
 
-// 排序字段枚举
 enum SortKey {
   none,
   latestNav,
@@ -210,14 +208,13 @@ class AdaptiveTopBar extends StatefulWidget {
   final VoidCallback? onRefresh;
   final VoidCallback? onLongPressRefresh;
 
-  // 估值定时刷新相关（独立于基金刷新）
   final bool showValuationRefresh;
   final int? valuationRefreshIntervalSeconds;
   final VoidCallback? onValuationRefresh;
   final VoidCallback? onValuationRefreshIntervalChanged;
   final String? valuationUpdateTime;
-  final double valuationRefreshProgress;   // 刷新进度 0~1
-  final bool isValuationRefreshing;        // 是否正在刷新（外部控制）
+  final double valuationRefreshProgress;
+  final bool isValuationRefreshing;
 
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
@@ -235,7 +232,6 @@ class AdaptiveTopBar extends StatefulWidget {
   final Duration animationDuration;
   final Curve animationCurve;
 
-  // 是否使用右上角菜单模式
   final bool useMenuStyle;
 
   const AdaptiveTopBar({
@@ -395,7 +391,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
-  // 基金净值普通刷新
   Future<void> _onRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
@@ -428,7 +423,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 基金净值强制刷新（长按）
   Future<void> _onLongPressRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
@@ -454,7 +448,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 估值刷新（直接调用外部回调，不维护内部状态）
   void _onValuationRefresh() {
     if (widget.isValuationRefreshing) return;
     widget.onValuationRefresh?.call();
@@ -474,7 +467,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 磨玻璃容器包装
   Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
     if (!enabled) return child;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -501,7 +493,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
 
-  // ==================== 估值刷新控件（圆形按钮+时间） ====================
   Widget _buildValuationWidget() {
     if (!widget.showValuationRefresh || widget.valuationRefreshIntervalSeconds == null) {
       return const SizedBox.shrink();
@@ -533,7 +524,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
 
-  // ==================== 菜单模式专用 ====================
   Widget _buildLeftForMenuStyle() {
     final children = <Widget>[];
     if (widget.showBack) {
@@ -554,7 +544,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
       children.add(_buildSortButton(disabled: !_hasData));
     }
-    // 当排序为最新估值时，将估值刷新控件吸附在排序按钮后面
     if (widget.showValuationRefresh && widget.sortKey == SortKey.latestNav) {
       if (children.isNotEmpty) children.add(const SizedBox(width: 8));
       children.add(_buildValuationWidget());
@@ -564,13 +553,11 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRightForMenuStyle() {
     final children = <Widget>[];
-    // 只有当排序不是最新估值时，估值刷新控件才显示在右侧
     if (widget.showValuationRefresh && widget.sortKey != SortKey.latestNav) {
       children.add(_buildValuationWidget());
       children.add(const SizedBox(width: 8));
     }
 
-    // 更多菜单按钮
     final menuItems = <_MenuItem>[];
     if (widget.showRefresh) {
       menuItems.add(_MenuItem(
@@ -611,7 +598,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 
-  // ==================== 传统模式 ====================
   List<Widget> _buildLeftChildren() {
     final children = <Widget>[];
     if (widget.showBack) {
@@ -729,7 +715,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return children;
   }
 
-  // 按钮构建方法
   Widget _buildRefreshButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -993,7 +978,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 }
 
-// 菜单项数据结构
 class _MenuItem {
   final IconData icon;
   final String label;
@@ -1002,7 +986,6 @@ class _MenuItem {
   _MenuItem({required this.icon, required this.label, required this.onTap, this.onLongPress});
 }
 
-// 磨玻璃风格的弹出按钮组
 class _GlassPopupMenuButton extends StatefulWidget {
   final List<_MenuItem> items;
   final Widget icon;
@@ -1087,7 +1070,6 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
   }
 }
 
-// 带动画的按钮组
 class _AnimatedButtonGroup extends StatefulWidget {
   final List<_MenuItem> items;
   final VoidCallback onHide;

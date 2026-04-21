@@ -6,7 +6,7 @@ class CountdownRefreshButton extends StatefulWidget {
   final VoidCallback onRefresh;
   final int refreshIntervalSeconds;
   final bool isRefreshing;
-  final double refreshProgress;     // 刷新进度 0.0 ~ 1.0
+  final double refreshProgress;
   final double size;
   final VoidCallback? onIntervalChanged;
 
@@ -44,7 +44,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   void _startTimer() {
     if (_isDisposed) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (widget.isRefreshing) return; // 刷新期间不更新倒计时
+      if (widget.isRefreshing) return;
 
       final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;
       final remaining = widget.refreshIntervalSeconds - elapsed;
@@ -153,7 +153,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   void didUpdateWidget(CountdownRefreshButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isRefreshing != widget.isRefreshing && !widget.isRefreshing) {
-      // 刷新完成，重置倒计时起点
       _lastRefreshTime = DateTime.now();
       setState(() {
         _remainingSeconds = widget.refreshIntervalSeconds;
@@ -178,7 +177,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final interval = widget.refreshIntervalSeconds > 0 ? widget.refreshIntervalSeconds : 60;
 
-    // 计算显示的进度（刷新模式或倒计时模式）
     double displayProgress;
     if (widget.isRefreshing) {
       displayProgress = widget.refreshProgress.clamp(0.0, 1.0);
@@ -209,7 +207,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 圆形进度条（始终显示）
             SizedBox(
               width: widget.size - 6,
               height: widget.size - 6,
@@ -223,7 +220,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
                 ),
               ),
             ),
-            // 中心内容
             if (widget.isRefreshing)
               SizedBox(
                 width: widget.size - 8,

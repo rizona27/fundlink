@@ -21,25 +21,20 @@ void main() {
 
   debugPrint('==================== 应用启动 ====================');
 
-  // 在应用启动前请求权限
   _requestPermissionsOnStart();
 
   runApp(const MyApp());
 }
 
-// 启动时请求权限的方法
 Future<void> _requestPermissionsOnStart() async {
   debugPrint('开始请求存储权限...');
 
   try {
     PermissionStatus status;
 
-    // 根据 Android 版本选择不同的权限
     if (await Permission.storage.isDenied) {
-      // Android 12 及以下：请求存储权限
       status = await Permission.storage.request();
     } else {
-      // Android 13+：请求相册权限
       status = await Permission.photos.request();
     }
 
