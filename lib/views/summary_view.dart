@@ -748,6 +748,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                           isDarkMode: isDark,
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                           trailing: trailing,
+                          maxTitleLength: 6,
                         ),
                         AnimatedSize(
                           duration: const Duration(milliseconds: 300),

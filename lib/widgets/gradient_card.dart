@@ -14,6 +14,7 @@ class GradientCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
   final String? debugSource;
+  final int? maxTitleLength; // 新增：最大标题长度（汉字/字符数）
 
   const GradientCard({
     super.key,
@@ -29,6 +30,7 @@ class GradientCard extends StatelessWidget {
     this.padding,
     this.borderRadius = 10,
     this.debugSource,
+    this.maxTitleLength,
   });
 
   Color _getCountColor(int? count) {
@@ -77,6 +79,12 @@ class GradientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 处理标题截断
+    String displayTitle = title;
+    if (maxTitleLength != null && title.length > maxTitleLength!) {
+      displayTitle = title.substring(0, maxTitleLength!) + '…';
+    }
+
     final endColor = _getEndColor();
     final gradientColors = gradient.isNotEmpty ? [gradient[0], endColor] : [endColor, endColor];
     final countColor = _getCountColor(countValue);
@@ -124,7 +132,7 @@ class GradientCard extends StatelessWidget {
                       color: textColor,
                     ),
                     children: [
-                      TextSpan(text: title),
+                      TextSpan(text: displayTitle), // 使用处理后的标题
                       if (clientId != null && clientId!.isNotEmpty)
                         TextSpan(
                           text: ' ($clientId)',
