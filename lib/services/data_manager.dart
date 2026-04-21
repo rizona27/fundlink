@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
@@ -41,6 +42,10 @@ class DataManager extends ChangeNotifier {
   double _valuationRefreshProgress = 0.0;
   String _lastValuationUpdateTime = '';
 
+  // ========== 后台刷新状态管理 ==========
+  bool _isValuationRefreshInProgress = false;
+  Completer<void>? _currentValuationRefreshCompleter;
+
   // ========== Getters ==========
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<LogEntry> get logs => List.unmodifiable(_logs);
@@ -49,6 +54,7 @@ class DataManager extends ChangeNotifier {
   bool get isValuationRefreshing => _isValuationRefreshing;
   double get valuationRefreshProgress => _valuationRefreshProgress;
   String get lastValuationUpdateTime => _lastValuationUpdateTime;
+  bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
 
   List<FundHolding> get pinnedHoldings {
     return _holdings.where((h) => h.isPinned).toList();
@@ -214,6 +220,103 @@ class DataManager extends ChangeNotifier {
   void setValuationUpdateTime(String time) {
     _lastValuationUpdateTime = time;
     notifyListeners();
+  }
+
+  // ========== 后台估值刷新核心逻辑 ==========
+  String _formatGzTime(String gztime) {
+    if (gztime.isEmpty) return '--';
+    try {
+      final parts = gztime.split(' ');
+      if (parts.length >= 2) {
+        final dateParts = parts[0].split('-');
+        if (dateParts.length >= 3) {
+          return '${dateParts[1]}/${dateParts[2]} ${parts[1].substring(0, 5)}';
+        }
+      }
+    } catch (e) {
+      debugPrint('格式化估值时间失败: $e');
+    }
+    return gztime;
+  }
+
+  /// 刷新所有基金的估值（后台运行，不依赖页面生命周期）
+  Future<void> refreshAllValuations(FundService fundService, {bool silent = false}) async {
+    // 如果已经在刷新中，等待当前刷新完成
+    if (_isValuationRefreshInProgress && _currentValuationRefreshCompleter != null) {
+      if (!silent) {
+        await addLog('估值刷新正在进行中，请稍后', type: LogType.info);
+      }
+      return _currentValuationRefreshCompleter!.future;
+    }
+
+    _isValuationRefreshInProgress = true;
+    _currentValuationRefreshCompleter = Completer<void>();
+
+    // 启动刷新状态
+    startValuationRefresh();
+
+    try {
+      final holdings = _holdings;
+      if (holdings.isEmpty) {
+        finishValuationRefresh();
+        _currentValuationRefreshCompleter!.complete();
+        _isValuationRefreshInProgress = false;
+        _currentValuationRefreshCompleter = null;
+        return;
+      }
+
+      int successCount = 0;
+      int failCount = 0;
+      final total = holdings.length;
+      String latestUpdateTime = _lastValuationUpdateTime;
+
+      for (int i = 0; i < total; i++) {
+        final holding = holdings[i];
+        try {
+          final valuation = await fundService.fetchRealtimeValuation(holding.fundCode);
+          if (valuation != null && valuation['gsz'] != null && valuation['gsz'] > 0) {
+            await updateValuationCache(holding.fundCode, {
+              'gsz': valuation['gsz'],
+              'gszzl': valuation['gszzl'] ?? 0.0,
+              'gztime': valuation['gztime'] ?? '',
+            });
+            successCount++;
+            if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
+              latestUpdateTime = _formatGzTime(valuation['gztime']);
+            }
+          } else {
+            failCount++;
+            await addLog('基金 ${holding.fundCode} 估值获取失败: 数据无效', type: LogType.error);
+          }
+        } catch (e) {
+          failCount++;
+          await addLog('基金 ${holding.fundCode} 估值获取异常: $e', type: LogType.error);
+        }
+
+        updateValuationRefreshProgress((i + 1) / total);
+      }
+
+      if (latestUpdateTime.isNotEmpty) {
+        setValuationUpdateTime(latestUpdateTime);
+      }
+
+      if (!silent) {
+        await addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+      }
+      if (failCount > 0) {
+        debugPrint('估值刷新部分失败: 成功$successCount, 失败$failCount');
+      }
+
+      _currentValuationRefreshCompleter!.complete();
+    } catch (e) {
+      debugPrint('估值刷新过程异常: $e');
+      await addLog('估值刷新异常: $e', type: LogType.error);
+      _currentValuationRefreshCompleter!.completeError(e);
+    } finally {
+      finishValuationRefresh();
+      _isValuationRefreshInProgress = false;
+      _currentValuationRefreshCompleter = null;
+    }
   }
 
   // ========== 原有持仓管理方法 ==========

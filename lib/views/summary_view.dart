@@ -111,13 +111,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
       _restartValuationTimer();
-      // 页面恢复时，如果正在刷新则无需检查缓存（避免干扰）
-      if (!_dataManager.isValuationRefreshing) {
+      // 页面恢复时，如果正在刷新则更新 UI 状态（刷新已经在后台进行中）
+      if (_dataManager.isValuationRefreshInProgress) {
+        setState(() {}); // 刷新 UI 以显示进度
+      } else {
         _checkAndRefreshStaleValuation();
       }
     } else if (state == AppLifecycleState.paused) {
       _isPageVisible = false;
       _stopValuationTimer();
+      // 注意：不停止刷新，让刷新在后台继续进行
     }
   }
 
@@ -128,7 +131,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        if (_isPageVisible && mounted && _showValuationRefresh && !_dataManager.isValuationRefreshing) {
+        if (_isPageVisible && mounted && _showValuationRefresh && !_dataManager.isValuationRefreshing && !_dataManager.isValuationRefreshInProgress) {
           _onValuationRefresh();
         }
       },
@@ -213,7 +216,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   Future<void> _checkAndRefreshStaleValuation() async {
-    if (!_showValuationRefresh || _dataManager.isValuationRefreshing) return;
+    if (!_showValuationRefresh || _dataManager.isValuationRefreshInProgress) return;
     if (_lastValuationRefreshTime != null &&
         DateTime.now().difference(_lastValuationRefreshTime!).inSeconds < 5) {
       return;
@@ -227,84 +230,35 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
     }
     if (needRefresh) {
-      await _onValuationRefresh(silent: false);
+      await _onValuationRefresh(silent: true);
     }
   }
 
   Future<void> _onValuationRefresh({bool silent = false}) async {
-    if (_dataManager.isValuationRefreshing) return;
-    final holdings = _dataManager.holdings;
-    if (holdings.isEmpty) return;
+    if (_dataManager.isValuationRefreshInProgress) {
+      if (!silent && mounted) {
+        context.showToast('估值刷新正在进行中...');
+      }
+      return;
+    }
 
     _lastValuationRefreshTime = DateTime.now();
-
-    _dataManager.startValuationRefresh();
     _stopValuationTimer();
 
     try {
-      int successCount = 0;
-      int failCount = 0;
-      final total = holdings.length;
-      String latestUpdateTime = _dataManager.lastValuationUpdateTime;
-
-      for (int i = 0; i < total; i++) {
-        final holding = holdings[i];
-        final valuation = await _fetchSingleValuation(holding.fundCode);
-        if (valuation != null) {
-          await _dataManager.updateValuationCache(holding.fundCode, valuation);
-          successCount++;
-          if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
-            latestUpdateTime = _formatGzTime(valuation['gztime']);
-          }
-        } else {
-          failCount++;
-        }
-
-        _dataManager.updateValuationRefreshProgress((i + 1) / total);
-        if (!mounted) break;
-      }
-
-      if (latestUpdateTime.isNotEmpty) {
-        _dataManager.setValuationUpdateTime(latestUpdateTime);
-      }
-
+      await _dataManager.refreshAllValuations(_fundService, silent: silent);
       if (mounted && !silent) {
-        context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
-        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
-      } else if (!silent) {
-        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
-      }
-      if (failCount > 0) {
-        debugPrint('估值刷新部分失败: 成功$successCount, 失败$failCount');
+        context.showToast('估值刷新完成');
       }
     } catch (e) {
-      debugPrint('估值刷新过程异常: $e');
-      await _dataManager.addLog('估值刷新异常: $e', type: LogType.error);
       if (mounted && !silent) {
         context.showToast('估值刷新失败: $e');
       }
     } finally {
-      _dataManager.finishValuationRefresh();
       if (mounted) {
         _restartValuationTimer();
       }
     }
-  }
-
-  String _formatGzTime(String gztime) {
-    if (gztime.isEmpty) return '--';
-    try {
-      final parts = gztime.split(' ');
-      if (parts.length >= 2) {
-        final dateParts = parts[0].split('-');
-        if (dateParts.length >= 3) {
-          return '${dateParts[1]}/${dateParts[2]} ${parts[1].substring(0, 5)}';
-        }
-      }
-    } catch (e) {
-      debugPrint('格式化估值时间失败: $e');
-    }
-    return gztime;
   }
 
   Future<void> _onFundRefresh() async {
@@ -629,7 +583,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                 setState(() => _sortKey = key);
                 await _saveSortState();
                 _showSortToast();
-                // 注意：这里不取消估值刷新，让刷新继续在后台进行
               }
                   : null,
               onSortOrderChanged: enableButtons
@@ -637,7 +590,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                 setState(() => _sortOrder = order);
                 await _saveSortState();
                 _showSortToast();
-                // 同样不取消估值刷新
               }
                   : null,
               dataManager: _dataManager,

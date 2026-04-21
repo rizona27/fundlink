@@ -475,47 +475,138 @@ class FundService {
 
   // ==================== 实时估值接口（增强健壮性和日志） ====================
   Future<Map<String, dynamic>?> fetchRealtimeValuation(String code) async {
+    // 验证基金代码格式
+    if (code.isEmpty || code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
+      debugPrint('❌ [估值请求] 无效的基金代码格式: $code');
+      return null;
+    }
+
     final url = Uri.parse('https://fundgz.1234567.com.cn/js/$code.js?rt=${DateTime.now().millisecondsSinceEpoch}');
     debugPrint('📊 [估值请求] 开始获取基金 $code 的实时估值');
+
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
+
       if (response.statusCode != 200) {
         debugPrint('❌ [估值请求] 基金 $code 返回HTTP ${response.statusCode}');
         return null;
       }
 
-      final jsString = utf8.decode(response.bodyBytes);
-      if (jsString.isEmpty || jsString.trim() == 'null') {
-        debugPrint('❌ [估值请求] 基金 $code 返回空内容或null');
+      // 检查响应体是否为空
+      final bodyBytes = response.bodyBytes;
+      if (bodyBytes.isEmpty) {
+        debugPrint('❌ [估值请求] 基金 $code 返回空内容');
+        return null;
+      }
+
+      // 尝试解码为字符串
+      String jsString;
+      try {
+        jsString = utf8.decode(bodyBytes);
+      } catch (e) {
+        // 如果 UTF-8 解码失败，尝试其他编码
+        try {
+          jsString = String.fromCharCodes(bodyBytes);
+        } catch (e2) {
+          debugPrint('❌ [估值请求] 基金 $code 解码失败: $e2');
+          return null;
+        }
+      }
+
+      // 检查是否为空字符串或 "null" 或封闭期返回的 "jsonpgz();"
+      final trimmed = jsString.trim();
+      if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') {
+        debugPrint('⚠️ [估值请求] 基金 $code 处于封闭期或无实时估值数据');
+        return null;
+      }
+
+      // 检查是否包含有效的JSON数据（至少要有 {}）
+      if (!trimmed.contains('{') || !trimmed.contains('}')) {
+        debugPrint('❌ [估值请求] 基金 $code 返回内容不是有效的JSON格式');
+        debugPrint('   返回内容: ${trimmed.length > 100 ? trimmed.substring(0, 100) : trimmed}');
         return null;
       }
 
       // 去掉 jsonp 包裹
-      String jsonStr = jsString;
-      if (jsString.contains('(') && jsString.contains(')')) {
-        jsonStr = jsString.replaceFirst(RegExp(r'^\w+\('), '').replaceFirst(RegExp(r'\);$'), '');
+      String jsonStr = trimmed;
+      if (trimmed.contains('(') && trimmed.contains(')')) {
+        final startIdx = trimmed.indexOf('(');
+        final endIdx = trimmed.lastIndexOf(')');
+        if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
+          jsonStr = trimmed.substring(startIdx + 1, endIdx);
+        }
       }
 
-      final Map<String, dynamic> data = jsonDecode(jsonStr);
-      // 校验必要字段
-      if (data['gsz'] == null || data['gszzl'] == null) {
-        debugPrint('❌ [估值请求] 基金 $code 返回数据缺少gsz或gszzl字段');
+      // 清理可能的尾部分号
+      jsonStr = jsonStr.trim();
+      if (jsonStr.endsWith(';')) {
+        jsonStr = jsonStr.substring(0, jsonStr.length - 1);
+      }
+
+      // 验证 JSON 字符串不为空
+      if (jsonStr.isEmpty) {
+        debugPrint('❌ [估值请求] 基金 $code 提取的JSON字符串为空');
         return null;
       }
 
-      debugPrint('✅ [估值请求] 基金 $code 估值成功: 净值=${data['gsz']}, 涨跌幅=${data['gszzl']}%');
+      // 尝试解析 JSON
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(jsonStr);
+      } on FormatException catch (e) {
+        debugPrint('❌ [估值请求] 基金 $code JSON解析失败: $e');
+        debugPrint('   原始内容: ${trimmed.length > 200 ? trimmed.substring(0, 200) : trimmed}');
+        return null;
+      } catch (e) {
+        debugPrint('❌ [估值请求] 基金 $code JSON解析未知错误: $e');
+        return null;
+      }
+
+      // 检查数据是否有效 - 有些基金可能不存在，返回的数据中 name 为空或 fundcode 不匹配
+      final returnedFundCode = data['fundcode']?.toString() ?? '';
+      if (returnedFundCode.isNotEmpty && returnedFundCode != code) {
+        debugPrint('⚠️ [估值请求] 基金 $code 返回的代码不匹配: $returnedFundCode');
+      }
+
+      final fundName = data['name']?.toString() ?? '';
+      if (fundName.isEmpty || fundName == 'null' || fundName == 'undefined') {
+        debugPrint('❌ [估值请求] 基金 $code 不存在或已退市');
+        return null;
+      }
+
+      // 检查 gsz 字段
+      String gszStr = data['gsz']?.toString() ?? '';
+      if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') {
+        debugPrint('❌ [估值请求] 基金 $code 缺少估值数据');
+        return null;
+      }
+
+      // 解析 gsz 和 gszzl
+      double gsz;
+      double gszzl;
+      try {
+        gsz = double.tryParse(gszStr) ?? 0.0;
+        gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
+      } catch (e) {
+        debugPrint('❌ [估值请求] 基金 $code 解析数值失败: $e');
+        return null;
+      }
+
+      // 对于 gsz 为 0 的情况，可能是非交易时间，仍然返回数据
+      if (gsz <= 0 && gszzl == 0) {
+        debugPrint('⚠️ [估值请求] 基金 $code 当前估值为0，可能非交易时间');
+      }
+
+      debugPrint('✅ [估值请求] 基金 $code 估值成功: $fundName, 净值=$gsz, 涨跌幅=$gszzl%');
       return {
-        'fundCode': data['fundcode'],
-        'name': data['name'],
+        'fundCode': code,
+        'name': fundName,
         'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
-        'gsz': double.tryParse(data['gsz']?.toString() ?? '0') ?? 0.0,
-        'gszzl': double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0,
-        'gztime': data['gztime'] ?? '',
-        'jzrq': data['jzrq'] ?? '',
+        'gsz': gsz,
+        'gszzl': gszzl,
+        'gztime': data['gztime']?.toString() ?? '',
+        'jzrq': data['jzrq']?.toString() ?? '',
       };
-    } on FormatException catch (e) {
-      debugPrint('❌ [估值请求] 基金 $code 数据解析失败(FormatException): $e');
-      return null;
     } on SocketException catch (e) {
       debugPrint('❌ [估值请求] 基金 $code 网络异常: $e');
       return null;
