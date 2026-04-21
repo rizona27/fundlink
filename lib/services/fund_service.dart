@@ -473,23 +473,58 @@ class FundService {
     return quoteMap;
   }
 
-  // ==================== 实时估值接口 ====================
-
-  Future<Map<String, dynamic>> fetchRealtimeValuation(String code) async {
+  // ==================== 实时估值接口（增强健壮性和日志） ====================
+  Future<Map<String, dynamic>?> fetchRealtimeValuation(String code) async {
     final url = Uri.parse('https://fundgz.1234567.com.cn/js/$code.js?rt=${DateTime.now().millisecondsSinceEpoch}');
-    final response = await http.get(url).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
-    final jsString = utf8.decode(response.bodyBytes);
-    final jsonStr = jsString.replaceFirst(RegExp(r'^\w+\('), '').replaceFirst(RegExp(r'\);$'), '');
-    final Map<String, dynamic> data = jsonDecode(jsonStr);
-    return {
-      'fundCode': data['fundcode'],
-      'name': data['name'],
-      'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
-      'gsz': double.tryParse(data['gsz']?.toString() ?? '0') ?? 0.0,
-      'gszzl': double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0,
-      'gztime': data['gztime'],
-      'jzrq': data['jzrq'],
-    };
+    debugPrint('📊 [估值请求] 开始获取基金 $code 的实时估值');
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) {
+        debugPrint('❌ [估值请求] 基金 $code 返回HTTP ${response.statusCode}');
+        return null;
+      }
+
+      final jsString = utf8.decode(response.bodyBytes);
+      if (jsString.isEmpty || jsString.trim() == 'null') {
+        debugPrint('❌ [估值请求] 基金 $code 返回空内容或null');
+        return null;
+      }
+
+      // 去掉 jsonp 包裹
+      String jsonStr = jsString;
+      if (jsString.contains('(') && jsString.contains(')')) {
+        jsonStr = jsString.replaceFirst(RegExp(r'^\w+\('), '').replaceFirst(RegExp(r'\);$'), '');
+      }
+
+      final Map<String, dynamic> data = jsonDecode(jsonStr);
+      // 校验必要字段
+      if (data['gsz'] == null || data['gszzl'] == null) {
+        debugPrint('❌ [估值请求] 基金 $code 返回数据缺少gsz或gszzl字段');
+        return null;
+      }
+
+      debugPrint('✅ [估值请求] 基金 $code 估值成功: 净值=${data['gsz']}, 涨跌幅=${data['gszzl']}%');
+      return {
+        'fundCode': data['fundcode'],
+        'name': data['name'],
+        'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
+        'gsz': double.tryParse(data['gsz']?.toString() ?? '0') ?? 0.0,
+        'gszzl': double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0,
+        'gztime': data['gztime'] ?? '',
+        'jzrq': data['jzrq'] ?? '',
+      };
+    } on FormatException catch (e) {
+      debugPrint('❌ [估值请求] 基金 $code 数据解析失败(FormatException): $e');
+      return null;
+    } on SocketException catch (e) {
+      debugPrint('❌ [估值请求] 基金 $code 网络异常: $e');
+      return null;
+    } on TimeoutException catch (e) {
+      debugPrint('❌ [估值请求] 基金 $code 请求超时: $e');
+      return null;
+    } catch (e) {
+      debugPrint('❌ [估值请求] 基金 $code 未知异常: $e');
+      return null;
+    }
   }
 }

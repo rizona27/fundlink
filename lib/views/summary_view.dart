@@ -32,13 +32,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   SortOrder _sortOrder = SortOrder.descending;
 
   int _valuationRefreshIntervalSeconds = 180;
-  bool _isValuationRefreshing = false;
-
-  final Map<String, Map<String, dynamic>> _valuationCache = {};
-  String _lastValuationUpdateTime = '';
-
   Timer? _valuationTimer;
   bool _isPageVisible = true;
+  DateTime? _lastValuationRefreshTime;
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
@@ -47,6 +43,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   @override
   bool get wantKeepAlive => true;
 
+  static const String _keySortKey = 'summary_sort_key';
+  static const String _keySortOrder = 'summary_sort_order';
+
   @override
   void initState() {
     super.initState();
@@ -54,17 +53,39 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _dataListener = () {
       if (mounted) setState(() {});
     };
+    _loadSortState();
     _loadValuationRefreshInterval();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _isPageVisible = true;
-      _restartValuationTimer();
-    } else if (state == AppLifecycleState.paused) {
-      _isPageVisible = false;
-      _stopValuationTimer();
+  Future<void> _loadSortState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sortKeyStr = prefs.getString(_keySortKey);
+      final sortOrderStr = prefs.getString(_keySortOrder);
+      if (sortKeyStr != null) {
+        _sortKey = SortKey.values.firstWhere(
+              (e) => e.toString() == sortKeyStr,
+          orElse: () => SortKey.none,
+        );
+      }
+      if (sortOrderStr != null) {
+        _sortOrder = SortOrder.values.firstWhere(
+              (e) => e.toString() == sortOrderStr,
+          orElse: () => SortOrder.descending,
+        );
+      }
+    } catch (e) {
+      debugPrint('加载排序状态失败: $e');
+    }
+  }
+
+  Future<void> _saveSortState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySortKey, _sortKey.toString());
+      await prefs.setString(_keySortOrder, _sortOrder.toString());
+    } catch (e) {
+      debugPrint('保存排序状态失败: $e');
     }
   }
 
@@ -86,27 +107,28 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   @override
-  void deactivate() {
-    _stopValuationTimer();
-    super.deactivate();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    if (_showValuationRefresh) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _isPageVisible = true;
       _restartValuationTimer();
+      // 页面恢复时，如果正在刷新则无需检查缓存（避免干扰）
+      if (!_dataManager.isValuationRefreshing) {
+        _checkAndRefreshStaleValuation();
+      }
+    } else if (state == AppLifecycleState.paused) {
+      _isPageVisible = false;
+      _stopValuationTimer();
     }
   }
 
   void _startValuationTimer() {
     _stopValuationTimer();
-    if (!_showValuationRefresh || !_isPageVisible) return;
+    if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing) return;
 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        if (_isPageVisible && mounted && _showValuationRefresh) {
+        if (_isPageVisible && mounted && _showValuationRefresh && !_dataManager.isValuationRefreshing) {
           _onValuationRefresh();
         }
       },
@@ -119,7 +141,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _restartValuationTimer() {
-    if (_showValuationRefresh && _isPageVisible) {
+    if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing) {
       _startValuationTimer();
     }
   }
@@ -129,21 +151,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       final seconds = prefs.getInt('valuationRefreshInterval');
       if (seconds != null && [60, 180, 300].contains(seconds)) {
-        setState(() {
-          _valuationRefreshIntervalSeconds = seconds;
-        });
+        _valuationRefreshIntervalSeconds = seconds;
       } else {
-        setState(() {
-          _valuationRefreshIntervalSeconds = 180;
-        });
+        _valuationRefreshIntervalSeconds = 180;
       }
       _restartValuationTimer();
     } catch (e) {
-      setState(() {
-        _valuationRefreshIntervalSeconds = 180;
-      });
+      _valuationRefreshIntervalSeconds = 180;
       _restartValuationTimer();
     }
+    if (mounted) setState(() {});
   }
 
   Future<void> _saveValuationRefreshInterval(int seconds) async {
@@ -151,6 +168,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('valuationRefreshInterval', seconds);
     } catch (e) {
+      debugPrint('保存刷新间隔失败: $e');
     }
   }
 
@@ -182,61 +200,93 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           'gszzl': valuation['gszzl'] ?? 0.0,
           'gztime': valuation['gztime'] ?? '',
         };
+      } else {
+        debugPrint('⚠️ 基金 $code 估值数据无效: $valuation');
+        await _dataManager.addLog('基金 $code 估值获取失败: 数据无效', type: LogType.error);
+        return null;
       }
     } catch (e) {
+      debugPrint('❌ 基金 $code 估值获取异常: $e');
+      await _dataManager.addLog('基金 $code 估值获取异常: $e', type: LogType.error);
+      return null;
     }
-    return null;
   }
 
-  Future<void> _onValuationRefresh() async {
-    if (_isValuationRefreshing) return;
-    setState(() => _isValuationRefreshing = true);
+  Future<void> _checkAndRefreshStaleValuation() async {
+    if (!_showValuationRefresh || _dataManager.isValuationRefreshing) return;
+    if (_lastValuationRefreshTime != null &&
+        DateTime.now().difference(_lastValuationRefreshTime!).inSeconds < 5) {
+      return;
+    }
+    bool needRefresh = false;
+    for (var holding in _dataManager.holdings) {
+      final cached = _dataManager.getValuation(holding.fundCode);
+      if (cached == null) {
+        needRefresh = true;
+        break;
+      }
+    }
+    if (needRefresh) {
+      await _onValuationRefresh(silent: false);
+    }
+  }
+
+  Future<void> _onValuationRefresh({bool silent = false}) async {
+    if (_dataManager.isValuationRefreshing) return;
+    final holdings = _dataManager.holdings;
+    if (holdings.isEmpty) return;
+
+    _lastValuationRefreshTime = DateTime.now();
+
+    _dataManager.startValuationRefresh();
+    _stopValuationTimer();
 
     try {
-      final codes = _dataManager.holdings.map((h) => h.fundCode).toList();
       int successCount = 0;
       int failCount = 0;
-      final newCache = <String, Map<String, dynamic>>{};
-      String latestTime = '';
+      final total = holdings.length;
+      String latestUpdateTime = _dataManager.lastValuationUpdateTime;
 
-      for (final code in codes) {
-        final valuation = await _fetchSingleValuation(code);
+      for (int i = 0; i < total; i++) {
+        final holding = holdings[i];
+        final valuation = await _fetchSingleValuation(holding.fundCode);
         if (valuation != null) {
-          newCache[code] = valuation;
+          await _dataManager.updateValuationCache(holding.fundCode, valuation);
           successCount++;
           if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
-            latestTime = valuation['gztime'];
+            latestUpdateTime = _formatGzTime(valuation['gztime']);
           }
         } else {
           failCount++;
         }
+
+        _dataManager.updateValuationRefreshProgress((i + 1) / total);
+        if (!mounted) break;
       }
 
-      if (mounted) {
-        setState(() {
-          _valuationCache.clear();
-          _valuationCache.addAll(newCache);
-          if (latestTime.isNotEmpty) {
-            _lastValuationUpdateTime = _formatGzTime(latestTime);
-          }
-        });
+      if (latestUpdateTime.isNotEmpty) {
+        _dataManager.setValuationUpdateTime(latestUpdateTime);
+      }
 
-        if (successCount > 0) {
-          context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
-          await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
-        } else if (failCount > 0) {
-          context.showToast('估值刷新失败: 全部失败');
-          await _dataManager.addLog('估值刷新失败: 全部失败', type: LogType.error);
-        }
+      if (mounted && !silent) {
+        context.showToast('估值刷新完成: 成功 $successCount${failCount > 0 ? ', 失败 $failCount' : ''}');
+        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+      } else if (!silent) {
+        await _dataManager.addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
+      }
+      if (failCount > 0) {
+        debugPrint('估值刷新部分失败: 成功$successCount, 失败$failCount');
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('估值刷新过程异常: $e');
+      await _dataManager.addLog('估值刷新异常: $e', type: LogType.error);
+      if (mounted && !silent) {
         context.showToast('估值刷新失败: $e');
-        await _dataManager.addLog('估值刷新失败: $e', type: LogType.error);
       }
     } finally {
+      _dataManager.finishValuationRefresh();
       if (mounted) {
-        setState(() => _isValuationRefreshing = false);
+        _restartValuationTimer();
       }
     }
   }
@@ -252,6 +302,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         }
       }
     } catch (e) {
+      debugPrint('格式化估值时间失败: $e');
     }
     return gztime;
   }
@@ -291,7 +342,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   String _getValuationDisplayText(FundHolding holding) {
-    final cache = _valuationCache[holding.fundCode];
+    final cache = _dataManager.getValuation(holding.fundCode);
     if (cache != null) {
       final gsz = cache['gsz'] as double;
       final gszzl = cache['gszzl'] as double;
@@ -340,8 +391,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
       double? valueA, valueB;
       if (_sortKey == SortKey.latestNav) {
-        final cacheA = _valuationCache[a];
-        final cacheB = _valuationCache[b];
+        final cacheA = _dataManager.getValuation(a);
+        final cacheB = _dataManager.getValuation(b);
         valueA = cacheA != null ? cacheA['gszzl'] as double : null;
         valueB = cacheB != null ? cacheB['gszzl'] as double : null;
       } else {
@@ -562,27 +613,31 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
             AdaptiveTopBar(
               scrollOffset: 0,
               showBack: false,
-              showRefresh: true,       // 放入菜单
-              showExpandCollapse: true, // 放入菜单
-              showSearch: true,         // 放入菜单
+              showRefresh: true,
+              showExpandCollapse: true,
+              showSearch: true,
               showReset: false,
               showFilter: false,
-              showSort: true,           // 排序按钮单独放在左上角
+              showSort: true,
               isAllExpanded: _hasAnyExpanded,
               searchText: _searchText,
               sortKey: _sortKey,
               sortOrder: _sortOrder,
               sortCycleType: SortCycleType.fundReturns,
               onSortKeyChanged: enableButtons
-                  ? (key) {
+                  ? (key) async {
                 setState(() => _sortKey = key);
+                await _saveSortState();
                 _showSortToast();
+                // 注意：这里不取消估值刷新，让刷新继续在后台进行
               }
                   : null,
               onSortOrderChanged: enableButtons
-                  ? (order) {
+                  ? (order) async {
                 setState(() => _sortOrder = order);
+                await _saveSortState();
                 _showSortToast();
+                // 同样不取消估值刷新
               }
                   : null,
               dataManager: _dataManager,
@@ -593,7 +648,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               valuationRefreshIntervalSeconds: _valuationRefreshIntervalSeconds,
               onValuationRefresh: _onValuationRefresh,
               onValuationRefreshIntervalChanged: _onValuationRefreshIntervalChanged,
-              valuationUpdateTime: _lastValuationUpdateTime,
+              valuationUpdateTime: _dataManager.lastValuationUpdateTime,
+              isValuationRefreshing: _dataManager.isValuationRefreshing,
+              valuationRefreshProgress: _dataManager.valuationRefreshProgress,
               onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
               onSearchChanged: enableButtons
                   ? (text) => setState(() => _searchText = text)
@@ -606,7 +663,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               iconSize: 24,
               buttonSpacing: 12,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              useMenuStyle: true,  // 启用菜单模式
+              useMenuStyle: true,
             ),
             Expanded(
               child: !hasData
@@ -647,7 +704,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                     Widget? trailing;
                     if (_sortKey != SortKey.none) {
                       if (_sortKey == SortKey.latestNav) {
-                        final cache = _valuationCache[fundCode];
+                        final cache = _dataManager.getValuation(fundCode);
                         if (cache != null) {
                           final gsz = cache['gsz'] as double;
                           final gszzl = cache['gszzl'] as double;

@@ -7,7 +7,7 @@ class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
   // 版本号统一在这里定义，ConfigView 会通过此常量获取
-  static const String appVersion = 'v1.0.0';
+  static const String appVersion = 'v1.0.1';
 
   @override
   Widget build(BuildContext context) {

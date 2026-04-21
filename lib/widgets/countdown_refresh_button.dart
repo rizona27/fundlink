@@ -6,6 +6,7 @@ class CountdownRefreshButton extends StatefulWidget {
   final VoidCallback onRefresh;
   final int refreshIntervalSeconds;
   final bool isRefreshing;
+  final double refreshProgress;     // 刷新进度 0.0 ~ 1.0
   final double size;
   final VoidCallback? onIntervalChanged;
 
@@ -14,6 +15,7 @@ class CountdownRefreshButton extends StatefulWidget {
     required this.onRefresh,
     required this.refreshIntervalSeconds,
     this.isRefreshing = false,
+    this.refreshProgress = 0.0,
     this.size = 32,
     this.onIntervalChanged,
   });
@@ -42,7 +44,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   void _startTimer() {
     if (_isDisposed) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (widget.isRefreshing) return;
+      if (widget.isRefreshing) return; // 刷新期间不更新倒计时
 
       final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;
       final remaining = widget.refreshIntervalSeconds - elapsed;
@@ -151,6 +153,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   void didUpdateWidget(CountdownRefreshButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isRefreshing != widget.isRefreshing && !widget.isRefreshing) {
+      // 刷新完成，重置倒计时起点
       _lastRefreshTime = DateTime.now();
       setState(() {
         _remainingSeconds = widget.refreshIntervalSeconds;
@@ -173,9 +176,16 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    // 防止除零错误
     final interval = widget.refreshIntervalSeconds > 0 ? widget.refreshIntervalSeconds : 60;
-    final progress = 1 - (_remainingSeconds / interval);
+
+    // 计算显示的进度（刷新模式或倒计时模式）
+    double displayProgress;
+    if (widget.isRefreshing) {
+      displayProgress = widget.refreshProgress.clamp(0.0, 1.0);
+    } else {
+      final progress = 1 - (_remainingSeconds / interval);
+      displayProgress = progress.clamp(0.0, 1.0);
+    }
 
     return GestureDetector(
       onTap: _manualRefresh,
@@ -199,20 +209,21 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (!widget.isRefreshing)
-              SizedBox(
-                width: widget.size - 6,
-                height: widget.size - 6,
-                child: CustomPaint(
-                  painter: _CircularProgressPainter(
-                    progress: progress.clamp(0.0, 1.0),
-                    backgroundColor: isDarkMode
-                        ? CupertinoColors.white.withOpacity(0.2)
-                        : CupertinoColors.systemGrey.withOpacity(0.2),
-                    progressColor: CupertinoColors.activeBlue,
-                  ),
+            // 圆形进度条（始终显示）
+            SizedBox(
+              width: widget.size - 6,
+              height: widget.size - 6,
+              child: CustomPaint(
+                painter: _CircularProgressPainter(
+                  progress: displayProgress,
+                  backgroundColor: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.2)
+                      : CupertinoColors.systemGrey.withOpacity(0.2),
+                  progressColor: CupertinoColors.activeBlue,
                 ),
               ),
+            ),
+            // 中心内容
             if (widget.isRefreshing)
               SizedBox(
                 width: widget.size - 8,

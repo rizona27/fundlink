@@ -216,6 +216,8 @@ class AdaptiveTopBar extends StatefulWidget {
   final VoidCallback? onValuationRefresh;
   final VoidCallback? onValuationRefreshIntervalChanged;
   final String? valuationUpdateTime;
+  final double valuationRefreshProgress;   // 刷新进度 0~1
+  final bool isValuationRefreshing;        // 是否正在刷新（外部控制）
 
   final VoidCallback? onToggleExpandAll;
   final ValueChanged<String>? onSearchChanged;
@@ -233,7 +235,7 @@ class AdaptiveTopBar extends StatefulWidget {
   final Duration animationDuration;
   final Curve animationCurve;
 
-  // 是否使用右上角菜单模式（将刷新、搜索、折叠/展开收纳到三点菜单中）
+  // 是否使用右上角菜单模式
   final bool useMenuStyle;
 
   const AdaptiveTopBar({
@@ -264,6 +266,8 @@ class AdaptiveTopBar extends StatefulWidget {
     this.onValuationRefresh,
     this.onValuationRefreshIntervalChanged,
     this.valuationUpdateTime,
+    this.valuationRefreshProgress = 0.0,
+    this.isValuationRefreshing = false,
     this.onToggleExpandAll,
     this.onSearchChanged,
     this.onSearchClear,
@@ -294,7 +298,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
   bool _isRefreshing = false;
-  bool _isValuationRefreshing = false;
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
@@ -392,12 +395,11 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     widget.onReset?.call();
   }
 
-  // 基金净值普通刷新（如果所有基金净值都已存在则跳过）
+  // 基金净值普通刷新
   Future<void> _onRefresh() async {
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
-    // 检查是否有需要刷新的基金（currentNav <= 0 表示未获取到净值）
     final holdings = widget.dataManager!.holdings;
     final needRefresh = holdings.any((h) => h.currentNav <= 0);
     if (!needRefresh) {
@@ -452,22 +454,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 估值刷新（定时刷新）
+  // 估值刷新（直接调用外部回调，不维护内部状态）
   void _onValuationRefresh() {
-    if (_isValuationRefreshing) return;
-    setState(() => _isValuationRefreshing = true);
-    try {
-      widget.onValuationRefresh?.call();
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          setState(() => _isValuationRefreshing = false);
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isValuationRefreshing = false);
-      }
-    }
+    if (widget.isValuationRefreshing) return;
+    widget.onValuationRefresh?.call();
   }
 
   Color _getBackgroundColor(double progress, bool isDarkMode) {
@@ -484,7 +474,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
   }
 
-  // 磨玻璃容器包装（用于按钮）
+  // 磨玻璃容器包装
   Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
     if (!enabled) return child;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -522,7 +512,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         CountdownRefreshButton(
           onRefresh: _onValuationRefresh,
           refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
-          isRefreshing: _isValuationRefreshing,
+          isRefreshing: widget.isValuationRefreshing,
+          refreshProgress: widget.valuationRefreshProgress,
           size: 32,
           onIntervalChanged: widget.onValuationRefreshIntervalChanged,
         ),
@@ -579,7 +570,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(const SizedBox(width: 8));
     }
 
-    // 更多菜单按钮（磨玻璃风格弹出菜单）
+    // 更多菜单按钮
     final menuItems = <_MenuItem>[];
     if (widget.showRefresh) {
       menuItems.add(_MenuItem(
@@ -670,7 +661,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(CountdownRefreshButton(
         onRefresh: _onValuationRefresh,
         refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
-        isRefreshing: _isValuationRefreshing,
+        isRefreshing: widget.isValuationRefreshing,
+        refreshProgress: widget.valuationRefreshProgress,
         size: 32,
         onIntervalChanged: widget.onValuationRefreshIntervalChanged,
       ));
@@ -737,7 +729,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     return children;
   }
 
-  // 以下为各种按钮构建方法（保持原有）
+  // 按钮构建方法
   Widget _buildRefreshButton() {
     final hasData = _hasData;
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -1010,7 +1002,7 @@ class _MenuItem {
   _MenuItem({required this.icon, required this.label, required this.onTap, this.onLongPress});
 }
 
-// 磨玻璃风格的弹出按钮组（点击三点后显示三个独立按钮，带淡入淡出动画）
+// 磨玻璃风格的弹出按钮组
 class _GlassPopupMenuButton extends StatefulWidget {
   final List<_MenuItem> items;
   final Widget icon;
@@ -1071,7 +1063,6 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
 
   @override
   Widget build(BuildContext context) {
-    // 三点按钮本身也做成磨玻璃风格
     return GestureDetector(
       key: _buttonKey,
       onTap: _showMenu,
@@ -1096,7 +1087,7 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
   }
 }
 
-// 带动画的按钮组（淡入淡出 + 位移）
+// 带动画的按钮组
 class _AnimatedButtonGroup extends StatefulWidget {
   final List<_MenuItem> items;
   final VoidCallback onHide;
@@ -1168,7 +1159,6 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with SingleT
   }
 
   Widget _buildMenuItemButton(_MenuItem item) {
-    // 如果有长按回调，则用 GestureDetector 包装 GlassButton
     if (item.onLongPress != null) {
       return GestureDetector(
         onLongPress: () {

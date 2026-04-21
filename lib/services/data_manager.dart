@@ -27,16 +27,28 @@ class DataManager extends ChangeNotifier {
   static const String _logsKey = 'logs';
   static const String _privacyModeKey = 'privacy_mode';
   static const String _themeModeKey = 'theme_mode';
+  static const String _valuationCacheKey = 'valuation_cache';
+  static const int _valuationCacheValidSeconds = 180; // 3分钟
 
   List<FundHolding> _holdings = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
+  Map<String, Map<String, dynamic>> _valuationCache = {};
 
+  // ========== 全局估值刷新状态 ==========
+  bool _isValuationRefreshing = false;
+  double _valuationRefreshProgress = 0.0;
+  String _lastValuationUpdateTime = '';
+
+  // ========== Getters ==========
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
   ThemeMode get themeMode => _themeMode;
+  bool get isValuationRefreshing => _isValuationRefreshing;
+  double get valuationRefreshProgress => _valuationRefreshProgress;
+  String get lastValuationUpdateTime => _lastValuationUpdateTime;
 
   List<FundHolding> get pinnedHoldings {
     return _holdings.where((h) => h.isPinned).toList();
@@ -79,6 +91,8 @@ class DataManager extends ChangeNotifier {
     } else {
       _themeMode = ThemeMode.system;
     }
+
+    await loadValuationCache();
 
     notifyListeners();
   }
@@ -125,6 +139,84 @@ class DataManager extends ChangeNotifier {
     debugPrint('DataManager: 所有数据保存成功');
   }
 
+  // ========== 估值缓存相关方法 ==========
+  Future<void> loadValuationCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_valuationCacheKey);
+    if (jsonStr != null) {
+      try {
+        final Map<String, dynamic> raw = jsonDecode(jsonStr);
+        _valuationCache = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+        debugPrint('DataManager: 估值缓存加载成功，共 ${_valuationCache.length} 条');
+      } catch (e) {
+        debugPrint('DataManager: 加载估值缓存失败: $e');
+      }
+    }
+  }
+
+  Future<void> saveValuationCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_valuationCacheKey, jsonEncode(_valuationCache));
+    debugPrint('DataManager: 估值缓存已保存');
+  }
+
+  /// 获取单个基金的估值（带缓存有效期检查）
+  Map<String, dynamic>? getValuation(String fundCode) {
+    final cached = _valuationCache[fundCode];
+    if (cached == null) return null;
+    final cacheTime = DateTime.tryParse(cached['cacheTime'] ?? '');
+    if (cacheTime == null) return null;
+    if (DateTime.now().difference(cacheTime).inSeconds > _valuationCacheValidSeconds) {
+      return null;
+    }
+    return {
+      'gsz': cached['gsz'],
+      'gszzl': cached['gszzl'],
+      'gztime': cached['gztime'],
+    };
+  }
+
+  /// 更新单个基金的估值缓存
+  Future<void> updateValuationCache(String fundCode, Map<String, dynamic> valuation) async {
+    _valuationCache[fundCode] = {
+      'gsz': valuation['gsz'],
+      'gszzl': valuation['gszzl'],
+      'gztime': valuation['gztime'],
+      'cacheTime': DateTime.now().toIso8601String(),
+    };
+    await saveValuationCache();
+    notifyListeners();
+  }
+
+  // ========== 全局估值刷新状态管理 ==========
+  void startValuationRefresh() {
+    if (_isValuationRefreshing) return;
+    _isValuationRefreshing = true;
+    _valuationRefreshProgress = 0.0;
+    notifyListeners();
+  }
+
+  void updateValuationRefreshProgress(double progress) {
+    if (!_isValuationRefreshing) return;
+    _valuationRefreshProgress = progress;
+    notifyListeners();
+  }
+
+  void finishValuationRefresh({String? updateTime}) {
+    _isValuationRefreshing = false;
+    _valuationRefreshProgress = 0.0;
+    if (updateTime != null && updateTime.isNotEmpty) {
+      _lastValuationUpdateTime = updateTime;
+    }
+    notifyListeners();
+  }
+
+  void setValuationUpdateTime(String time) {
+    _lastValuationUpdateTime = time;
+    notifyListeners();
+  }
+
+  // ========== 原有持仓管理方法 ==========
   Future<void> addHolding(FundHolding holding) async {
     if (!holding.isValidHolding) {
       await addLog('添加持仓失败: 数据无效', type: LogType.error);
