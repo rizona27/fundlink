@@ -36,6 +36,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
 
+  double _scrollOffset = 0;
+  Timer? _scrollThrottleTimer;
+
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
   bool get _showValuationRefresh => _sortKey == SortKey.latestNav && _hasData;
@@ -55,6 +58,20 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     };
     _loadSortState();
     _loadValuationRefreshInterval();
+  }
+
+  void _onScrollUpdate(double offset) {
+    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
+      return;
+    }
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+      if (mounted && _scrollOffset != offset) {
+        setState(() {
+          _scrollOffset = offset;
+        });
+      }
+      _scrollThrottleTimer = null;
+    });
   }
 
   Future<void> _loadSortState() async {
@@ -103,6 +120,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     WidgetsBinding.instance.removeObserver(this);
     _stopValuationTimer();
     _dataManager.removeListener(_dataListener);
+    _scrollThrottleTimer?.cancel();
     super.dispose();
   }
 
@@ -563,7 +581,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         child: Column(
           children: [
             AdaptiveTopBar(
-              scrollOffset: 0,
+              scrollOffset: _scrollOffset,
               showBack: false,
               showRefresh: true,
               showExpandCollapse: true,
@@ -639,137 +657,145 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                 duration: const Duration(milliseconds: 300),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
-                child: ListView.builder(
-                  key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  itemCount: sortedCodes.length,
-                  itemBuilder: (context, index) {
-                    final fundCode = sortedCodes[index];
-                    final holdings = groups[fundCode]!;
-                    final first = holdings.first;
-                    final isExpanded = _expandedFundCodes.contains(fundCode);
-                    final gradient = _getGradientForFundCode(fundCode);
-                    final holderCount = holdings.length;
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollUpdateNotification) {
+                      _onScrollUpdate(notification.metrics.pixels);
+                    }
+                    return false;
+                  },
+                  child: ListView.builder(
+                    key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    itemCount: sortedCodes.length,
+                    itemBuilder: (context, index) {
+                      final fundCode = sortedCodes[index];
+                      final holdings = groups[fundCode]!;
+                      final first = holdings.first;
+                      final isExpanded = _expandedFundCodes.contains(fundCode);
+                      final gradient = _getGradientForFundCode(fundCode);
+                      final holderCount = holdings.length;
 
-                    Widget? trailing;
-                    if (_sortKey != SortKey.none) {
-                      if (_sortKey == SortKey.latestNav) {
-                        final cache = _dataManager.getValuation(fundCode);
-                        if (cache != null) {
-                          final gsz = cache['gsz'] as double;
-                          final gszzl = cache['gszzl'] as double;
-                          final changeColor = _getChangeColor(gszzl);
+                      Widget? trailing;
+                      if (_sortKey != SortKey.none) {
+                        if (_sortKey == SortKey.latestNav) {
+                          final cache = _dataManager.getValuation(fundCode);
+                          if (cache != null) {
+                            final gsz = cache['gsz'] as double;
+                            final gszzl = cache['gszzl'] as double;
+                            final changeColor = _getChangeColor(gszzl);
 
-                          trailing = Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.2,
-                                  color: changeColor,
+                            trailing = Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.2,
+                                    color: changeColor,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                ' (${gsz.toStringAsFixed(4)})',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.normal,
-                                  height: 1.2,
-                                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                Text(
+                                  ' (${gsz.toStringAsFixed(4)})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.normal,
+                                    height: 1.2,
+                                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                  ),
                                 ),
+                              ],
+                            );
+                          } else {
+                            trailing = Text(
+                              '--% (--)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                height: 1.2,
+                                color: isDark ? CupertinoColors.white : CupertinoColors.black,
                               ),
-                            ],
-                          );
+                            );
+                          }
                         } else {
+                          final sortValue = _sortKey.getValue(first);
+                          final valueStr = sortValue != null
+                              ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
+                              : '--';
+                          final valueColor = _getReturnColor(sortValue);
                           trailing = Text(
-                            '--% (--)',
+                            valueStr,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               height: 1.2,
-                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                              color: valueColor,
                             ),
                           );
                         }
-                      } else {
-                        final sortValue = _sortKey.getValue(first);
-                        final valueStr = sortValue != null
-                            ? '${sortValue >= 0 ? '+' : ''}${sortValue.toStringAsFixed(2)}%'
-                            : '--';
-                        final valueColor = _getReturnColor(sortValue);
-                        trailing = Text(
-                          valueStr,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                            color: valueColor,
-                          ),
+                      } else if (showHolderCount) {
+                        trailing = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '持有人数: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.2,
+                                color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                            Text(
+                              '$holderCount',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontStyle: FontStyle.italic,
+                                height: 1.2,
+                                color: _colorForHoldingCount(holderCount),
+                              ),
+                            ),
+                            Text(
+                              '人',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.2,
+                                color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                          ],
                         );
                       }
-                    } else if (showHolderCount) {
-                      trailing = Row(
-                        mainAxisSize: MainAxisSize.min,
+
+                      return Column(
                         children: [
-                          Text(
-                            '持有人数: ',
-                            style: TextStyle(
-                              fontSize: 12,
-                              height: 1.2,
-                              color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                            ),
+                          GradientCard(
+                            title: first.fundName,
+                            clientId: fundCode,
+                            gradient: gradient,
+                            isExpanded: isExpanded,
+                            onTap: () => _toggleExpand(fundCode),
+                            isDarkMode: isDark,
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                            trailing: trailing,
+                            maxTitleLength: 6,
                           ),
-                          Text(
-                            '$holderCount',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              fontStyle: FontStyle.italic,
-                              height: 1.2,
-                              color: _colorForHoldingCount(holderCount),
-                            ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                            child: isExpanded
+                                ? ClipRect(
+                              child: _buildExpandedContent(first, holdings, isDark),
+                            )
+                                : const SizedBox.shrink(),
                           ),
-                          Text(
-                            '人',
-                            style: TextStyle(
-                              fontSize: 12,
-                              height: 1.2,
-                              color: isDark ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                            ),
-                          ),
+                          const SizedBox(height: 8),
                         ],
                       );
-                    }
-
-                    return Column(
-                      children: [
-                        GradientCard(
-                          title: first.fundName,
-                          clientId: fundCode,
-                          gradient: gradient,
-                          isExpanded: isExpanded,
-                          onTap: () => _toggleExpand(fundCode),
-                          isDarkMode: isDark,
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                          trailing: trailing,
-                          maxTitleLength: 6,
-                        ),
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOutCubic,
-                          child: isExpanded
-                              ? ClipRect(
-                            child: _buildExpandedContent(first, holdings, isDark),
-                          )
-                              : const SizedBox.shrink(),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    );
-                  },
+                    },
+                  ),
                 ),
               ),
             ),

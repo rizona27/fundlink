@@ -463,6 +463,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   }),
                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                   trailing: trailing,
+                  maxTitleLength: 10,
                 ),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 400),

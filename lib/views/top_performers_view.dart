@@ -49,6 +49,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
   Timer? _filterDebounceTimer;
+  bool _autoCollapseEnabled = true;
 
   List<_RankItem> _cachedItems = [];
   bool _isInitialized = false;
@@ -58,6 +59,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   static const Duration _debounceDelay = Duration(milliseconds: 500);
   static const Duration _animationDuration = Duration(milliseconds: 400);
   static const Curve _animationCurve = Curves.easeOutCubic;
+  static const double _filterAutoCollapseThreshold = 20.0;
 
   @override
   bool get wantKeepAlive => true;
@@ -91,10 +93,19 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       return;
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
-      if (mounted && _scrollOffset != offset) {
+      if (mounted) {
         setState(() {
           _scrollOffset = offset;
         });
+        if (_showFilter && offset > _filterAutoCollapseThreshold && _autoCollapseEnabled) {
+          setState(() {
+            _showFilter = false;
+          });
+          _autoCollapseEnabled = false;
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) _autoCollapseEnabled = true;
+          });
+        }
       }
       _scrollThrottleTimer = null;
     });
@@ -317,6 +328,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     setState(() {
       _showFilter = !_showFilter;
     });
+    if (_showFilter) {
+      _autoCollapseEnabled = true;
+    }
   }
 
   Color _getValueColor(double? value) {

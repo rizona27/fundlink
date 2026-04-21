@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
-import 'dart:io' show Platform;
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
 import '../services/fund_service.dart';
 import '../widgets/fund_performance_chart.dart';
 import '../widgets/toast.dart';
+import 'history_view.dart';
 
 class FundDetailPage extends StatefulWidget {
   final FundHolding holding;
@@ -21,7 +18,7 @@ class FundDetailPage extends StatefulWidget {
   State<FundDetailPage> createState() => _FundDetailPageState();
 }
 
-class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStateMixin {
+class _FundDetailPageState extends State<FundDetailPage> {
   late FundService _fundService;
 
   List<NetWorthPoint> _fundPoints = [];
@@ -40,53 +37,23 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
   bool _isDataCached = false;
   static const Duration _cacheDuration = Duration(minutes: 10);
   DateTime? _lastFetchTime;
-  List<NetWorthPoint> _historyList = [];
-  int _historyPage = 1;
-  final int _historyPageSize = 5;
-  bool _hasMoreHistory = true;
-  bool _loadingMoreHistory = false;
-  final ScrollController _historyScrollController = ScrollController();
-  final ScrollController _mainScrollController = ScrollController();
 
   bool _isRefreshingValuation = false;
   int _refreshCountdown = 0;
 
-  bool _isTopHoldingsExpanded = false;
-  bool _isHistoryExpanded = false;
-
-  final GlobalKey _topHoldingsKey = GlobalKey();
-  final GlobalKey _historyKey = GlobalKey();
-
-  late AnimationController _animationController;
+  final ScrollController _mainScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _fundService = FundService();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
     _loadDetailData();
-    _historyScrollController.addListener(_onHistoryScroll);
   }
 
   @override
   void dispose() {
-    _historyScrollController.removeListener(_onHistoryScroll);
-    _historyScrollController.dispose();
     _mainScrollController.dispose();
-    _animationController.dispose();
     super.dispose();
-  }
-
-  void _onHistoryScroll() {
-    if (_historyScrollController.position.pixels >=
-        _historyScrollController.position.maxScrollExtent - 20 &&
-        _hasMoreHistory &&
-        !_loadingMoreHistory) {
-      _loadMoreHistory();
-    }
   }
 
   List<NetWorthPoint> get _fundPointsWithChanges {
@@ -135,7 +102,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
         _lastFetchTime = DateTime.now();
       });
 
-      _initHistoryPagination();
       _fetchStockQuotesForHoldings();
     } catch (e) {
       setState(() {
@@ -182,42 +148,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     });
   }
 
-  void _initHistoryPagination() {
-    final descending = List<NetWorthPoint>.from(_fundPointsWithChanges)
-      ..sort((a, b) => b.date.compareTo(a.date));
-    _historyList = descending.take(_historyPageSize).toList();
-    _hasMoreHistory = descending.length > _historyPageSize;
-    _historyPage = 1;
-  }
-
-  Future<void> _loadMoreHistory() async {
-    if (_loadingMoreHistory || !_hasMoreHistory) return;
-    setState(() => _loadingMoreHistory = true);
-    try {
-      final descending = List<NetWorthPoint>.from(_fundPointsWithChanges)
-        ..sort((a, b) => b.date.compareTo(a.date));
-      final start = _historyPage * _historyPageSize;
-      final end = start + _historyPageSize;
-      if (start >= descending.length) {
-        _hasMoreHistory = false;
-        context.showToast('暂无更多历史净值');
-      } else {
-        final newItems = descending.sublist(start, end.clamp(0, descending.length));
-        final lastDate = newItems.last.date;
-        setState(() {
-          _historyList.addAll(newItems);
-          _historyPage++;
-          _hasMoreHistory = end < descending.length;
-        });
-        context.showToast('已加载到 ${_formatDate(lastDate)} 数据');
-      }
-    } catch (e) {
-      context.showToast('加载失败: $e');
-    } finally {
-      setState(() => _loadingMoreHistory = false);
-    }
-  }
-
   Future<void> _refreshValuation() async {
     if (_isRefreshingValuation) return;
     setState(() => _isRefreshingValuation = true);
@@ -247,20 +177,13 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     });
   }
 
-  Future<void> _smoothScrollTo(GlobalKey key, bool isExpanding) async {
-    if (!isExpanding) return;
-    await Future.delayed(const Duration(milliseconds: 200));
-    final context = key.currentContext;
-    if (context != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          alignment: 0.05,
-        );
-      });
-    }
+  void _openHistoryDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return HistoryDialog(fundCode: widget.holding.fundCode);
+      },
+    );
   }
 
   @override
@@ -279,47 +202,31 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
             ? const Center(child: CupertinoActivityIndicator())
             : _error != null
             ? Center(child: Text('加载失败: $_error'))
-            : LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              controller: _mainScrollController,
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: _getDynamicBottomPadding(),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildValuationCard(isDark),
-                  const SizedBox(height: 24),
-                  _buildChartSection(isDark),
-                  const SizedBox(height: 24),
-                  _buildCollapsibleTopHoldings(isDark),
-                  const SizedBox(height: 24),
-                  _buildCollapsibleHistory(isDark),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
+            : SingleChildScrollView(
+          controller: _mainScrollController,
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildValuationCard(isDark),
+              const SizedBox(height: 24),
+              _buildChartSection(isDark),
+              const SizedBox(height: 24),
+              _buildTopHoldingsSection(isDark),
+              const SizedBox(height: 24),
+              _buildHistoryEntry(isDark),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  double _getDynamicBottomPadding() {
-    if (_isHistoryExpanded || _isTopHoldingsExpanded) {
-      return 40;
-    }
-    return 20;
-  }
-
   Widget _buildChartSection(bool isDark) {
     return RepaintBoundary(
       key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
-      child: _OptimizedPerformanceChart(
+      child: FundPerformanceChart(
         fundPoints: _fundPointsWithChanges,
         avgPoints: _avgPoints,
         hsPoints: _hsPoints,
@@ -355,7 +262,6 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     final gsz = _valuation?['gsz'] ?? 0.0;
     final gszzl = _valuation?['gszzl'] ?? 0.0;
     final gztime = _valuation?['gztime'] ?? '';
-    final jzrq = _valuation?['jzrq'] ?? '';
 
     Color changeColor;
     if (gszzl > 0) {
@@ -482,9 +388,8 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  Widget _buildCollapsibleTopHoldings(bool isDark) {
+  Widget _buildTopHoldingsSection(bool isDark) {
     return Container(
-      key: _topHoldingsKey,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
@@ -499,47 +404,15 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _isTopHoldingsExpanded = !_isTopHoldingsExpanded;
-              });
-              _smoothScrollTo(_topHoldingsKey, _isTopHoldingsExpanded);
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '前10重仓股票',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? CupertinoColors.white : CupertinoColors.black),
-                ),
-                AnimatedRotation(
-                  turns: _isTopHoldingsExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Icon(
-                    CupertinoIcons.chevron_down,
-                    size: 20,
-                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                  ),
-                ),
-              ],
-            ),
+          Text(
+            '前10重仓股票',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? CupertinoColors.white : CupertinoColors.black),
           ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 400),
-            crossFadeState: _isTopHoldingsExpanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _buildTopHoldingsGrid(isDark),
-            ),
-            secondChild: const SizedBox.shrink(),
-          ),
+          const SizedBox(height: 12),
+          _buildTopHoldingsGrid(isDark),
         ],
       ),
     );
@@ -652,237 +525,41 @@ class _FundDetailPageState extends State<FundDetailPage> with TickerProviderStat
     );
   }
 
-  Widget _buildCollapsibleHistory(bool isDark) {
-    return Container(
-      key: _historyKey,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 6,
-              offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _isHistoryExpanded = !_isHistoryExpanded;
-              });
-              _smoothScrollTo(_historyKey, _isHistoryExpanded);
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '历史净值',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? CupertinoColors.white : CupertinoColors.black),
-                ),
-                AnimatedRotation(
-                  turns: _isHistoryExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Icon(
-                    CupertinoIcons.chevron_down,
-                    size: 20,
-                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                  ),
-                ),
-              ],
+  Widget _buildHistoryEntry(bool isDark) {
+    return GestureDetector(
+      onTap: _openHistoryDialog,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 6,
+                offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '历史净值',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black),
             ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 400),
-            crossFadeState: _isHistoryExpanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _buildHistoryTable(isDark),
+            Icon(
+              CupertinoIcons.forward,
+              size: 18,
+              color: isDark ? CupertinoColors.white : CupertinoColors.black,
             ),
-            secondChild: const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryTable(bool isDark) {
-    if (_historyList.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: 220,
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF2C2C2E)
-                  : CupertinoColors.lightBackgroundGray,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-            ),
-            child: Table(
-              columnWidths: const {
-                0: FlexColumnWidth(1),
-                1: FlexColumnWidth(1),
-                2: FlexColumnWidth(1)
-              },
-              children: [
-                TableRow(
-                  children: [
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text('日期',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.w600))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text('单位净值',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.w600))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text('日涨幅',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Scrollbar(
-              controller: _historyScrollController,
-              child: ListView.separated(
-                controller: _historyScrollController,
-                primary: false,
-                itemCount: _historyList.length + (_loadingMoreHistory ? 1 : 0),
-                separatorBuilder: (context, index) => Divider(
-                  height: 1,
-                  color: isDark
-                      ? CupertinoColors.white.withOpacity(0.1)
-                      : CupertinoColors.black.withOpacity(0.05),
-                ),
-                itemBuilder: (context, index) {
-                  if (index == _historyList.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Center(child: CupertinoActivityIndicator()),
-                    );
-                  }
-                  final p = _historyList[index];
-                  final growth = p.growth ?? 0.0;
-                  return Table(
-                    columnWidths: const {
-                      0: FlexColumnWidth(1),
-                      1: FlexColumnWidth(1),
-                      2: FlexColumnWidth(1)
-                    },
-                    children: [
-                      TableRow(
-                        children: [
-                          Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Text(_formatDate(p.date),
-                                  textAlign: TextAlign.center)),
-                          Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Text(p.nav.toStringAsFixed(4),
-                                  textAlign: TextAlign.center)),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(
-                              growth == 0
-                                  ? '--'
-                                  : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
-                              style: TextStyle(
-                                  color: growth > 0
-                                      ? CupertinoColors.systemRed
-                                      : (growth < 0
-                                      ? CupertinoColors.systemGreen
-                                      : null)),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
-}
-
-class _OptimizedPerformanceChart extends StatefulWidget {
-  final List<NetWorthPoint> fundPoints;
-  final List<NetWorthPoint> avgPoints;
-  final List<NetWorthPoint> hsPoints;
-
-  const _OptimizedPerformanceChart({
-    required this.fundPoints,
-    required this.avgPoints,
-    required this.hsPoints,
-  });
-
-  @override
-  State<_OptimizedPerformanceChart> createState() => _OptimizedPerformanceChartState();
-}
-
-class _OptimizedPerformanceChartState extends State<_OptimizedPerformanceChart> {
-  Timer? _hoverDebounceTimer;
-
-  bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
-
-  @override
-  void dispose() {
-    _hoverDebounceTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: const BoxDecoration(),
-      child: Listener(
-        onPointerMove: _isMobile ? _handleTouchMove : null,
-        onPointerHover: !_isMobile ? _handleHover : null,
-        child: FundPerformanceChart(
-          fundPoints: widget.fundPoints,
-          avgPoints: widget.avgPoints,
-          hsPoints: widget.hsPoints,
+          ],
         ),
       ),
     );
   }
 
-  void _handleTouchMove(PointerMoveEvent event) {
-    _updateChartHover(event.localPosition);
-  }
-
-  void _handleHover(PointerHoverEvent event) {
-    _hoverDebounceTimer?.cancel();
-    _hoverDebounceTimer = Timer(const Duration(milliseconds: 16), () {
-      _updateChartHover(event.localPosition);
-    });
-  }
-
-  void _updateChartHover(Offset position) {
-  }
+  String _formatGzTime(String gztime) => gztime.isEmpty ? '--' : gztime;
 }
