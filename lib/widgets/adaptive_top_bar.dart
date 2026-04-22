@@ -195,6 +195,7 @@ class AdaptiveTopBar extends StatefulWidget {
   final bool isAllExpanded;
   final String? searchText;
   final bool? isSearchVisible;
+  final String? searchPlaceholder;
 
   final SortKey sortKey;
   final SortOrder sortOrder;
@@ -247,6 +248,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.isAllExpanded = false,
     this.searchText,
     this.isSearchVisible,
+    this.searchPlaceholder,
     this.sortKey = SortKey.none,
     this.sortOrder = SortOrder.descending,
     this.sortCycleType = SortCycleType.fundReturns,
@@ -962,6 +964,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                             focusNode: _internalFocusNode,
                             onChanged: _onSearchChanged,
                             onClear: _onSearchClear,
+                            placeholder: widget.searchPlaceholder,
                           ),
                           secondChild: const SizedBox.shrink(),
                         ),

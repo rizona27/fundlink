@@ -7,6 +7,7 @@ class Search extends StatelessWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
+  final String? placeholder;
 
   const Search({
     super.key,
@@ -14,6 +15,7 @@ class Search extends StatelessWidget {
     required this.focusNode,
     required this.onChanged,
     required this.onClear,
+    this.placeholder,
   });
 
   @override
@@ -54,7 +56,7 @@ class Search extends StatelessWidget {
             child: CupertinoSearchTextField(
               controller: controller,
               focusNode: focusNode,
-              placeholder: '搜索客户名、客户号、基金代码、基金名称',
+              placeholder: placeholder ?? '搜索客户名、客户号、基金代码、基金名称',
               placeholderStyle: TextStyle(
                 fontSize: 15,
                 color: isDarkMode

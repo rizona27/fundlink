@@ -11,98 +11,74 @@ class LogView extends StatefulWidget {
   State<LogView> createState() => _LogViewState();
 }
 
-class _LogViewState extends State<LogView> with TickerProviderStateMixin {
+class _LogViewState extends State<LogView> {
   late DataManager _dataManager;
   Set<LogType> _selectedLogTypes = {};
-  late AnimationController _pageFadeController;
-
-  double _scrollOffset = 0;
-
-  static const int _pageSize = 10;
-  int _displayCount = 10;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
+  String _searchKeyword = '';
 
   final ScrollController _scrollController = ScrollController();
-
-  final Map<String, AnimationController> _fadeControllers = {};
-  final Map<String, AnimationController> _sizeControllers = {};
-
-  bool _isAnimating = false;
-  List<LogEntry> _targetLogs = [];
-
-  static const Duration _fadeDuration = Duration(milliseconds: 200);
-  static const Duration _sizeDuration = Duration(milliseconds: 250);
+  static const int _pageSize = 20;
+  int _displayCount = 20;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
-    _pageFadeController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    )..forward();
-
     _selectedLogTypes = LogType.values.toSet();
     _scrollController.addListener(_onScroll);
-    _targetLogs = [];
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _targetLogs = _getFilteredLogs();
   }
 
   @override
   void dispose() {
-    _pageFadeController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _disposeAllControllers();
     super.dispose();
-  }
-
-  void _disposeAllControllers() {
-    for (var controller in _fadeControllers.values) {
-      controller.dispose();
-    }
-    for (var controller in _sizeControllers.values) {
-      controller.dispose();
-    }
-    _fadeControllers.clear();
-    _sizeControllers.clear();
   }
 
   List<LogEntry> _getFilteredLogs() {
     if (_selectedLogTypes.isEmpty) return [];
-    final logs = _dataManager.logs
-        .where((log) => _selectedLogTypes.contains(log.type))
-        .toList();
-    logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return logs.take(_displayCount).toList();
-  }
 
-  List<LogEntry> get _allFilteredLogs {
-    if (_selectedLogTypes.isEmpty) return [];
-    final logs = _dataManager.logs
+    var logs = _dataManager.logs
         .where((log) => _selectedLogTypes.contains(log.type))
         .toList();
+
+    if (_searchKeyword.isNotEmpty) {
+      final keyword = _searchKeyword.toLowerCase();
+      logs = logs.where((log) =>
+      log.message.toLowerCase().contains(keyword) ||
+          log.type.displayName.contains(keyword)
+      ).toList();
+    }
+
     logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return logs;
+  }
+
+  List<LogEntry> get _displayedLogs {
+    final allLogs = _getFilteredLogs();
+    return allLogs.take(_displayCount).toList();
+  }
+
+  bool get _hasMore {
+    return _displayCount < _getFilteredLogs().length;
   }
 
   bool get _isAllSelected => _selectedLogTypes.length == LogType.values.length;
 
   void _toggleAllSelection() {
-    if (_isAnimating) return;
-    final newTypes = _isAllSelected ? <LogType>{} : LogType.values.toSet();
-    _startTypeChangeAnimation(newTypes);
+    setState(() {
+      _selectedLogTypes = _isAllSelected ? <LogType>{} : LogType.values.toSet();
+      _resetPagination();
+    });
   }
 
   void _clearAllLogs() async {
-    if (_isAnimating) return;
-
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -127,256 +103,48 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _resetPagination();
-          _targetLogs = _getFilteredLogs();
         });
-        _disposeAllControllers();
       }
     }
   }
 
   void _toggleLogType(LogType type) {
-    if (_isAnimating) return;
-    final newTypes = Set<LogType>.from(_selectedLogTypes);
-    if (newTypes.contains(type)) {
-      newTypes.remove(type);
-    } else {
-      newTypes.add(type);
-    }
-    _startTypeChangeAnimation(newTypes);
-  }
-
-  void _startTypeChangeAnimation(Set<LogType> newTypes) async {
-    if (_isAnimating) return;
-    _isAnimating = true;
-
-    final oldLogs = _targetLogs;
-    final newLogs = _getNewFilteredLogs(newTypes);
-
-    final oldIds = oldLogs.map((l) => l.id).toSet();
-    final newIds = newLogs.map((l) => l.id).toSet();
-    final toRemove = oldIds.difference(newIds).toList();
-    final toAdd = newIds.difference(oldIds).toList();
-
-    if (toRemove.isNotEmpty) {
-      await _animateRemoval(toRemove);
-    }
-
-    if (!mounted) return;
-
     setState(() {
-      _selectedLogTypes = newTypes;
+      if (_selectedLogTypes.contains(type)) {
+        _selectedLogTypes.remove(type);
+      } else {
+        _selectedLogTypes.add(type);
+      }
       _resetPagination();
-      _targetLogs = _getFilteredLogs();
     });
-
-    _cleanupControllers(newIds);
-
-    if (toAdd.isNotEmpty) {
-      await _animateAddition(toAdd);
-    }
-
-    _isAnimating = false;
-  }
-
-  Future<void> _animateRemoval(List<String> ids) async {
-    final futures = <Future>[];
-    for (var id in ids) {
-      final fadeCtrl = _fadeControllers[id];
-      if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
-        futures.add(fadeCtrl.reverse().orCancel);
-      }
-      var sizeCtrl = _sizeControllers[id];
-      if (sizeCtrl == null) {
-        sizeCtrl = AnimationController(
-          duration: _sizeDuration,
-          vsync: this,
-        )..value = 1.0;
-        _sizeControllers[id] = sizeCtrl;
-      }
-      if (sizeCtrl.isAnimating == false) {
-        futures.add(sizeCtrl.reverse().orCancel);
-      }
-    }
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-    }
-  }
-
-  Future<void> _animateAddition(List<String> ids) async {
-    for (var id in ids) {
-      if (!_sizeControllers.containsKey(id)) {
-        _sizeControllers[id] = AnimationController(
-          duration: _sizeDuration,
-          vsync: this,
-        )..value = 0.0;
-      } else {
-        _sizeControllers[id]!.value = 0.0;
-      }
-      if (!_fadeControllers.containsKey(id)) {
-        _fadeControllers[id] = AnimationController(
-          duration: _fadeDuration,
-          vsync: this,
-        )..value = 0.0;
-      } else {
-        _fadeControllers[id]!.value = 0.0;
-      }
-    }
-
-    await Future.delayed(Duration.zero);
-
-    if (!mounted) return;
-
-    final futures = <Future>[];
-    for (var id in ids) {
-      final sizeCtrl = _sizeControllers[id];
-      if (sizeCtrl != null && sizeCtrl.isAnimating == false) {
-        futures.add(sizeCtrl.forward().orCancel);
-      }
-      final fadeCtrl = _fadeControllers[id];
-      if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
-        futures.add(fadeCtrl.forward().orCancel);
-      }
-    }
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-    }
-  }
-
-  void _cleanupControllers(Set<String> currentIds) {
-    final toRemove = <String>[];
-    for (var id in _fadeControllers.keys) {
-      if (!currentIds.contains(id)) {
-        toRemove.add(id);
-      }
-    }
-    for (var id in toRemove) {
-      _fadeControllers[id]?.dispose();
-      _fadeControllers.remove(id);
-      _sizeControllers[id]?.dispose();
-      _sizeControllers.remove(id);
-    }
-  }
-
-  List<LogEntry> _getNewFilteredLogs(Set<LogType> newTypes) {
-    if (newTypes.isEmpty) return [];
-    final logs = _dataManager.logs
-        .where((log) => newTypes.contains(log.type))
-        .toList();
-    logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return logs.take(_displayCount).toList();
   }
 
   void _resetPagination() {
     _displayCount = _pageSize;
-    _hasMore = true;
     _isLoadingMore = false;
   }
 
-  void _loadMore() async {
-    if (_isLoadingMore || !_hasMore || _isAnimating) return;
-
-    final totalCount = _allFilteredLogs.length;
-    if (_displayCount >= totalCount) {
-      if (_hasMore) {
-        setState(() {
-          _hasMore = false;
-        });
-      }
-      return;
-    }
+  void _loadMore() {
+    if (_isLoadingMore || !_hasMore) return;
 
     setState(() {
       _isLoadingMore = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    if (!mounted) return;
-
-    final newCount = (_displayCount + _pageSize).clamp(0, totalCount);
-    final newLogs = _getFilteredLogsWithCount(newCount);
-    final currentIds = _targetLogs.map((l) => l.id).toSet();
-    final newIds = newLogs.map((l) => l.id).toSet();
-    final toAdd = newIds.difference(currentIds).toList();
-
-    for (var id in toAdd) {
-      if (!_sizeControllers.containsKey(id)) {
-        _sizeControllers[id] = AnimationController(
-          duration: _sizeDuration,
-          vsync: this,
-        )..value = 0.0;
-      }
-      if (!_fadeControllers.containsKey(id)) {
-        _fadeControllers[id] = AnimationController(
-          duration: _fadeDuration,
-          vsync: this,
-        )..value = 0.0;
-      }
-    }
-
-    setState(() {
-      _displayCount = newCount;
-      _targetLogs = newLogs;
-      _isLoadingMore = false;
-      _hasMore = _displayCount < totalCount;
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (!mounted) return;
+      setState(() {
+        _displayCount += _pageSize;
+        _isLoadingMore = false;
+      });
     });
-
-    await Future.delayed(Duration.zero);
-
-    if (!mounted) return;
-
-    if (toAdd.isNotEmpty) {
-      final futures = <Future>[];
-      for (var id in toAdd) {
-        final sizeCtrl = _sizeControllers[id];
-        if (sizeCtrl != null && sizeCtrl.isAnimating == false) {
-          futures.add(sizeCtrl.forward().orCancel);
-        }
-        final fadeCtrl = _fadeControllers[id];
-        if (fadeCtrl != null && fadeCtrl.isAnimating == false) {
-          futures.add(fadeCtrl.forward().orCancel);
-        }
-      }
-      if (futures.isNotEmpty) {
-        await Future.wait(futures);
-      }
-    }
-  }
-
-  List<LogEntry> _getFilteredLogsWithCount(int count) {
-    if (_selectedLogTypes.isEmpty) return [];
-    final logs = _dataManager.logs
-        .where((log) => _selectedLogTypes.contains(log.type))
-        .toList();
-    logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return logs.take(count).toList();
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 100) {
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
-  }
-
-  AnimationController _getFadeController(String id) {
-    if (!_fadeControllers.containsKey(id)) {
-      _fadeControllers[id] = AnimationController(
-        duration: _fadeDuration,
-        vsync: this,
-      )..value = 1.0;
-    }
-    return _fadeControllers[id]!;
-  }
-
-  AnimationController _getSizeController(String id) {
-    if (!_sizeControllers.containsKey(id)) {
-      _sizeControllers[id] = AnimationController(
-        duration: _sizeDuration,
-        vsync: this,
-      )..value = 1.0;
-    }
-    return _sizeControllers[id]!;
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -404,53 +172,60 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-
-    final logs = _targetLogs;
-    final totalCount = _allFilteredLogs.length;
+    final displayedLogs = _displayedLogs;
+    final totalCount = _getFilteredLogs().length;
 
     return CupertinoPageScaffold(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        color: backgroundColor,
-        child: SafeArea(
-          child: Column(
-            children: [
-              AdaptiveTopBar(
-                scrollOffset: _scrollOffset,
-                showBack: true,
-                onBack: () => Navigator.of(context).pop(),
-                showRefresh: false,
-                showExpandCollapse: false,
-                showSearch: false,
-                showReset: false,
-                showFilter: false,
-                showSort: false,
-                isAllExpanded: false,
-                searchText: '',
-                dataManager: _dataManager,
-                fundService: null,
-                onToggleExpandAll: null,
-                onSearchChanged: null,
-                onSearchClear: null,
-                backgroundColor: Colors.transparent,
-                iconColor: CupertinoTheme.of(context).primaryColor,
-                iconSize: 24,
-                buttonSpacing: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _buildFilterSection(isDarkMode),
-                      _buildContent(isDarkMode, logs, totalCount),
-                      const SizedBox(height: 20),
-                    ],
+      backgroundColor: backgroundColor,
+      child: SafeArea(
+        child: Column(
+          children: [
+            AdaptiveTopBar(
+              scrollOffset: 0,
+              showBack: true,
+              onBack: () => Navigator.of(context).pop(),
+              showRefresh: false,
+              showExpandCollapse: false,
+              showSearch: true,
+              showReset: false,
+              showFilter: false,
+              showSort: false,
+              isAllExpanded: false,
+              searchText: _searchKeyword,
+              searchPlaceholder: '搜索日志内容或类型',
+              dataManager: _dataManager,
+              fundService: null,
+              onToggleExpandAll: null,
+              onSearchChanged: (value) {
+                setState(() {
+                  _searchKeyword = value;
+                  _resetPagination();
+                });
+              },
+              onSearchClear: () {
+                setState(() {
+                  _searchKeyword = '';
+                  _resetPagination();
+                });
+              },
+              backgroundColor: backgroundColor,
+              iconColor: CupertinoTheme.of(context).primaryColor,
+              iconSize: 24,
+              buttonSpacing: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            Expanded(
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildFilterSection(isDarkMode),
                   ),
-                ),
+                  _buildContent(isDarkMode, displayedLogs, totalCount),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -458,8 +233,8 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
   Widget _buildFilterSection(bool isDarkMode) {
     return Container(
-      padding: const EdgeInsets.all(10),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDarkMode
             ? CupertinoColors.systemGrey6.withOpacity(0.4)
@@ -472,149 +247,76 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
           width: 0.5,
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 85,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: _isAllSelected
-                          ? [const Color(0xFF6366F1), const Color(0xFF8B5CF6)]
-                          : [CupertinoColors.systemGrey5.withOpacity(0.5), CupertinoColors.systemGrey5.withOpacity(0.3)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: _isAllSelected
-                          ? const Color(0xFF6366F1).withOpacity(0.5)
-                          : CupertinoColors.systemGrey4.withOpacity(0.5),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    minSize: 0,
-                    onPressed: _toggleAllSelection,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _isAllSelected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
-                          size: 14,
-                          color: _isAllSelected ? CupertinoColors.white : CupertinoColors.systemGrey,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _isAllSelected ? '取消全选' : '全选',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: _isAllSelected ? CupertinoColors.white : CupertinoColors.label,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: LogType.values.map((type) {
+                    return _buildLogTypeChip(type, isDarkMode);
+                  }).toList(),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [CupertinoColors.systemRed.withOpacity(0.15), CupertinoColors.systemRed.withOpacity(0.08)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: CupertinoColors.systemRed.withOpacity(0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    minSize: 0,
-                    onPressed: _clearAllLogs,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          CupertinoIcons.trash,
-                          size: 14,
-                          color: CupertinoColors.systemRed,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '清空日志',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: CupertinoColors.systemRed,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Container(
-            width: 1,
-            height: 50,
-            color: isDarkMode
-                ? CupertinoColors.white.withOpacity(0.1)
-                : CupertinoColors.systemGrey4.withOpacity(0.5),
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-          ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildLogTypeButton(LogType.success, isDarkMode),
-                    _buildLogTypeButton(LogType.error, isDarkMode),
-                    _buildLogTypeButton(LogType.warning, isDarkMode),
-                  ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  icon: _isAllSelected
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.circle,
+                  label: _isAllSelected ? '取消全选' : '全选',
+                  gradient: _isAllSelected
+                      ? [const Color(0xFF6366F1), const Color(0xFF8B5CF6)]
+                      : null,
+                  textColor: _isAllSelected
+                      ? CupertinoColors.white
+                      : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
+                  onPressed: _toggleAllSelection,
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildLogTypeButton(LogType.info, isDarkMode),
-                    _buildLogTypeButton(LogType.network, isDarkMode),
-                    _buildLogTypeButton(LogType.cache, isDarkMode),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionButton(
+                  icon: CupertinoIcons.trash,
+                  label: '清空日志',
+                  gradient: [
+                    CupertinoColors.systemRed.withOpacity(0.15),
+                    CupertinoColors.systemRed.withOpacity(0.08)
                   ],
+                  textColor: CupertinoColors.systemRed,
+                  borderColor: CupertinoColors.systemRed.withOpacity(0.3),
+                  onPressed: _clearAllLogs,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLogTypeButton(LogType type, bool isDarkMode) {
+  Widget _buildLogTypeChip(LogType type, bool isDarkMode) {
     final isSelected = _selectedLogTypes.contains(type);
     final color = type.color;
 
     return GestureDetector(
       onTap: () => _toggleLogType(type),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
               ? color.withOpacity(isDarkMode ? 0.25 : 0.12)
-              : (isDarkMode ? CupertinoColors.systemGrey5.withOpacity(0.3) : CupertinoColors.systemGrey6),
+              : (isDarkMode
+              ? CupertinoColors.systemGrey5.withOpacity(0.3)
+              : CupertinoColors.systemGrey6),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? color : Colors.transparent,
@@ -632,15 +334,66 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Text(
               type.displayName,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 color: isSelected
                     ? color
-                    : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
+                    : (isDarkMode
+                    ? CupertinoColors.white
+                    : CupertinoColors.label),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required List<Color>? gradient,
+    required Color textColor,
+    required VoidCallback onPressed,
+    Color? borderColor,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: gradient != null
+            ? LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradient,
+        )
+            : null,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: borderColor ??
+              (gradient != null
+                  ? gradient.first.withOpacity(0.5)
+                  : CupertinoColors.systemGrey4.withOpacity(0.5)),
+          width: 0.5,
+        ),
+      ),
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        minSize: 0,
+        onPressed: onPressed,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: textColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: textColor,
               ),
             ),
           ],
@@ -651,146 +404,122 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
 
   Widget _buildContent(bool isDarkMode, List<LogEntry> logs, int totalCount) {
     if (_dataManager.logs.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(CupertinoIcons.doc_text, size: 64),
-            SizedBox(height: 16),
-            Text('暂无日志'),
-          ],
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.doc_text,
+                size: 64,
+                color: isDarkMode
+                    ? CupertinoColors.systemGrey
+                    : CupertinoColors.systemGrey3,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '暂无日志',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isDarkMode
+                      ? CupertinoColors.systemGrey
+                      : CupertinoColors.systemGrey2,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (_selectedLogTypes.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(CupertinoIcons.slider_horizontal_3, size: 64),
-            SizedBox(height: 16),
-            Text('请至少选择一种日志类型'),
-          ],
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.slider_horizontal_3,
+                size: 64,
+                color: isDarkMode
+                    ? CupertinoColors.systemGrey
+                    : CupertinoColors.systemGrey3,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '请至少选择一种日志类型',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isDarkMode
+                      ? CupertinoColors.systemGrey
+                      : CupertinoColors.systemGrey2,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (logs.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(CupertinoIcons.doc_text, size: 64),
-            SizedBox(height: 16),
-            Text('没有符合条件的日志'),
-          ],
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.search,
+                size: 64,
+                color: isDarkMode
+                    ? CupertinoColors.systemGrey
+                    : CupertinoColors.systemGrey3,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '没有符合条件的日志',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isDarkMode
+                      ? CupertinoColors.systemGrey
+                      : CupertinoColors.systemGrey2,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? CupertinoColors.systemGrey6.withOpacity(0.4)
-            : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.activeBlue,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '日志记录',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '(${totalCount})',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDarkMode
-                        ? CupertinoColors.white.withOpacity(0.5)
-                        : CupertinoColors.systemGrey,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 0, indent: 10, endIndent: 10),
-          ListView.builder(
-            key: ValueKey('log_list_${_selectedLogTypes.hashCode}'),
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(),
-            addRepaintBoundaries: true,
-            addAutomaticKeepAlives: true,
-            shrinkWrap: true,
-            itemCount: logs.length + (_isLoadingMore ? 1 : 0) + (!_hasMore && totalCount > _pageSize ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (_isLoadingMore && index == logs.length) {
-                return const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Center(child: CupertinoActivityIndicator()),
-                );
-              }
-              if (!_hasMore && totalCount > _pageSize && index == logs.length) {
-                return Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Center(
-                    child: Text(
-                      '已加载全部 $totalCount 条日志',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.4)
-                            : CupertinoColors.systemGrey,
-                      ),
-                    ),
-                  ),
-                );
-              }
-              final log = logs[index];
-              final fadeController = _getFadeController(log.id);
-              final sizeController = _getSizeController(log.id);
-
-              return RepaintBoundary(
-                child: SizeTransition(
-                  sizeFactor: sizeController,
-                  axis: Axis.vertical,
-                  child: FadeTransition(
-                    opacity: fadeController,
-                    child: _buildLogItem(log, index, logs.length, isDarkMode),
-                  ),
-                ),
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+            (context, index) {
+          if (index >= logs.length) {
+            if (_isLoadingMore) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CupertinoActivityIndicator()),
               );
-            },
-          ),
-        ],
+            }
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Text(
+                  '已加载全部 $totalCount 条日志',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDarkMode
+                        ? CupertinoColors.systemGrey
+                        : CupertinoColors.systemGrey2,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final log = logs[index];
+          return _buildLogItem(log, index, logs.length, isDarkMode);
+        },
+        childCount: logs.length + (_hasMore || _isLoadingMore ? 1 : 0),
       ),
     );
   }
@@ -801,24 +530,36 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
     final typeStr = log.type.displayName;
     final typeColor = log.type.color;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? CupertinoColors.systemGrey6.withOpacity(0.3)
+            : CupertinoColors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDarkMode
+              ? CupertinoColors.white.withOpacity(0.08)
+              : CupertinoColors.systemGrey4.withOpacity(0.3),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: typeColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   typeStr,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: typeColor,
                   ),
@@ -828,41 +569,25 @@ class _LogViewState extends State<LogView> with TickerProviderStateMixin {
               Text(
                 timeStr,
                 style: TextStyle(
-                  fontSize: 10,
-                  height: 1.2,
+                  fontSize: 11,
                   color: isDarkMode
-                      ? CupertinoColors.white.withOpacity(0.4)
-                      : CupertinoColors.systemGrey,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  log.message,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.3,
-                    color: textColor,
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                      ? CupertinoColors.systemGrey
+                      : CupertinoColors.systemGrey2,
                 ),
               ),
             ],
           ),
-        ),
-        if (index != totalCount - 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Divider(
-              height: 0,
-              thickness: 0.5,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.1)
-                  : CupertinoColors.systemGrey4.withOpacity(0.5),
+          const SizedBox(height: 8),
+          Text(
+            log.message,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: textColor,
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
