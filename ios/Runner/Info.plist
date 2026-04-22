@@ -45,5 +45,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册以导入/导出基金持仓数据</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要保存基金持仓数据到相册</string>
 </dict>
 </plist>
