@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../services/file_export_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
@@ -14,6 +15,8 @@ class ExportHoldingView extends StatefulWidget {
 }
 
 class _ExportHoldingViewState extends State<ExportHoldingView> {
+  late DataManager _dataManager;
+  
   int _currentStep = 0;
 
   String _format = 'csv';
@@ -56,7 +59,9 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dataManager = DataManagerProvider.of(context);
       _updatePreview();
+      FileExportService.setDataManager(_dataManager);
     });
   }
 
@@ -239,6 +244,8 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     try {
       final selectedFieldIds = _fields.where((f) => f.selected).map((f) => f.id).toList();
 
+      _dataManager.addLog('开始导出数据: 格式=$_format, 范围=$_scope, 数量=${_filteredHoldings.length}', type: LogType.info);
+
       await FileExportService.exportAndDownload(
         holdings: _filteredHoldings,
         format: _format,
@@ -254,10 +261,12 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       _exportedFileName = fileName;
       _saveToHistory(fileName, _filteredHoldings.length);
       context.showToast('导出成功，共${_filteredHoldings.length}条记录');
+      _dataManager.addLog('导出成功: $fileName (${_filteredHoldings.length}条)', type: LogType.success);
     } catch (e) {
       _exportError = e.toString();
       _exportSuccess = false;
       context.showToast('导出失败: $e');
+      _dataManager.addLog('导出失败: $e', type: LogType.error);
     } finally {
       setState(() => _isExporting = false);
     }

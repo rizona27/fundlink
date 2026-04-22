@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
@@ -10,9 +10,17 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:universal_html/html.dart' as html;
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
+import '../services/data_manager.dart';
 import '../widgets/toast.dart';
 
 class FileExportService {
+  static DataManager? _dataManager;
+  
+  static void setDataManager(DataManager manager) {
+    _dataManager = manager;
+  }
+  
   static Future<void> exportAndDownload({
     required List<FundHolding> holdings,
     required String format,
@@ -124,13 +132,16 @@ class FileExportService {
 
         if (savedPath != null && savedPath.isNotEmpty) {
           context.showToast('文件已保存: $fileName');
-          print('保存路径: $savedPath');
+          debugPrint('导出文件已保存: $savedPath');
+          _dataManager?.addLog('导出文件成功: $fileName', type: LogType.success);
         } else {
           context.showToast('已取消保存');
+          _dataManager?.addLog('导出文件被取消', type: LogType.info);
         }
       } catch (e) {
-        print('保存文件失败: $e');
+        debugPrint('保存文件失败: $e');
         context.showToast('保存文件失败: $e');
+        _dataManager?.addLog('导出文件失败: $e', type: LogType.error);
       }
 
       if (shareAfterSave) {
@@ -140,9 +151,11 @@ class FileExportService {
           final file = File(filePath);
           await file.writeAsBytes(bytes);
           await Share.shareXFiles([XFile(filePath)], text: '分享我的基金持仓数据');
+          _dataManager?.addLog('分享导出文件: $fileName', type: LogType.info);
         } catch (e) {
-          print('分享文件失败: $e');
+          debugPrint('分享文件失败: $e');
           context.showToast('分享失败: $e');
+          _dataManager?.addLog('分享导出文件失败: $e', type: LogType.error);
         }
       }
     }

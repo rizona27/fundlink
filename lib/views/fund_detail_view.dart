@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
+import '../models/log_entry.dart';
+import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../widgets/fund_performance_chart.dart';
 import '../widgets/toast.dart';
@@ -19,6 +22,7 @@ class FundDetailPage extends StatefulWidget {
 }
 
 class _FundDetailPageState extends State<FundDetailPage> {
+  late DataManager _dataManager;
   late FundService _fundService;
 
   List<NetWorthPoint> _fundPoints = [];
@@ -46,7 +50,8 @@ class _FundDetailPageState extends State<FundDetailPage> {
   @override
   void initState() {
     super.initState();
-    _fundService = FundService();
+    _dataManager = DataManagerProvider.of(context);
+    _fundService = FundService(_dataManager);
     _loadDetailData();
   }
 
@@ -136,7 +141,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
       setState(() {
         _valuation = valuation;
       });
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('估值刷新失败: $e');
+      _dataManager.addLog('基金 ${widget.holding.fundCode} 估值刷新失败: $e', type: LogType.error);
+    }
   }
 
   Future<void> _fetchStockQuotesForHoldings() async {

@@ -84,7 +84,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       _dataManager.addListener(_dataListener);
       _isInitialized = true;
       _updateCachedItems();
-      _dataManager.addLog('进入收益排行页面', type: LogType.info);
     }
   }
 
@@ -293,7 +292,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       _maxDays = null;
     });
     _updateCachedItems();
-    _dataManager.addLog('重置收益排行筛选条件', type: LogType.info);
     context.showToast('筛选条件已重置');
   }
 
@@ -310,7 +308,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     String sortType = key.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
-    _dataManager.addLog('排序方式切换为: ${key.displayName}${_sortOrder == SortOrder.ascending ? "(升序)" : "(降序)"}', type: LogType.info);
   }
 
   void _onSortOrderChanged(SortOrder order) {
@@ -321,7 +318,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     String sortType = _sortKey.displayName;
     String orderText = order == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType} $orderText');
-    _dataManager.addLog('排序顺序切换为: ${order == SortOrder.ascending ? "升序" : "降序"}', type: LogType.info);
   }
 
   void _toggleFilter() {

@@ -38,7 +38,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _dataManager.addLog('进入设置页面', type: LogType.info);
   }
 
   @override

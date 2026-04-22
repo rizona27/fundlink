@@ -3,12 +3,14 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
@@ -1137,7 +1139,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('无法读取文件内容');
       }
       final extension = file.extension?.toLowerCase();
-      print('文件大小: ${bytes.length}, 扩展名: $extension');
+      debugPrint('开始处理导入文件: ${file.name}, 大小: ${bytes.length}字节, 扩展名: $extension');
 
       final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
       final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
@@ -1156,7 +1158,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           _headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
           _rawData = sheet.rows.skip(1).map((row) => row.map((cell) => _getCellValue(cell)).toList()).toList();
         } catch (e) {
-          print('Excel 解析失败: $e');
+          debugPrint('Excel 解析失败，尝试 CSV: $e');
           try {
             final csvString = _decodeCsvBytes(bytes);
             final rows = const CsvToListConverter().convert(csvString);
@@ -1191,15 +1193,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('文件没有数据行');
       }
 
-      print('表头: $_headers');
-      print('数据行数: ${_rawData.length}');
-      print('第一行数据: ${_rawData.isNotEmpty ? _rawData.first : '无'}');
+      debugPrint('文件解析成功 - 表头: ${_headers.length}列, 数据行数: ${_rawData.length}');
 
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
     } catch (e, stack) {
-      print('解析文件失败: $e');
-      print(stack);
+      debugPrint('解析文件失败: $e\n$stack');
+      final dataManager = DataManagerProvider.of(context);
+      dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
         context.showToast('解析文件失败: $e');
         showCupertinoDialog(
@@ -1224,18 +1225,24 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   DateTime? _parseDate(String dateStr) {
     try {
       return DateTime.parse(dateStr);
-    } catch (_) {}
+    } catch (_) {
+      debugPrint('日期解析失败(ISO格式): $dateStr');
+    }
     final parts = dateStr.split('-');
     if (parts.length == 3) {
       try {
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-      } catch (_) {}
+      } catch (_) {
+        debugPrint('日期解析失败(yyyy-MM-dd): $dateStr');
+      }
     }
     final slashParts = dateStr.split('/');
     if (slashParts.length == 3) {
       try {
         return DateTime(int.parse(slashParts[0]), int.parse(slashParts[1]), int.parse(slashParts[2]));
-      } catch (_) {}
+      } catch (_) {
+        debugPrint('日期解析失败(yyyy/MM/dd): $dateStr');
+      }
     }
     return null;
   }
@@ -1302,6 +1309,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         try {
           fundInfo = await fundService.fetchFundInfo(fundCode);
         } catch (e) {
+          debugPrint('导入时获取基金$fundCode信息失败: $e');
+          dataManager.addLog('导入时获取基金$fundCode信息失败: $e', type: LogType.error);
           fundInfo = {
             'fundName': '',
             'currentNav': 0.0,
@@ -1347,6 +1356,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       } catch (e) {
         fail++;
         errors.add('第${i+1}行: $e');
+        dataManager.addLog('导入第${i+1}行失败: $e', type: LogType.error);
       }
       setState(() => _importProgress = (i+1) / _validData.length);
     }
@@ -1367,6 +1377,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     if (skip > 0) message += '，跳过$skip条';
     if (fail > 0) message += '，失败$fail条';
     context.showToast(message);
+    
+    if (fail > 0) {
+      dataManager.addLog('批量导入完成: 成功$success, 跳过$skip, 失败$fail', type: LogType.warning);
+    } else {
+      dataManager.addLog('批量导入完成: 成功$success, 跳过$skip', type: LogType.success);
+    }
   }
 }
 
