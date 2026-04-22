@@ -247,7 +247,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     final feeRateText = _feeRateController.text.trim();
     
     if (amountText.isEmpty || _currentNav == null || _currentNav! <= 0) {
-      print('无法计算份额: amount=$amountText, nav=$_currentNav');
       return;
     }
     
@@ -256,7 +255,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
     
     if (amount == null || amount <= 0) {
-      print('无法计算份额: amount=$amount');
       return;
     }
     
@@ -264,19 +262,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     // 例如：10000 / (1 + 0/100) / 2.3361 = 4280.75
     final shares = amount / (1 + feeRate / 100) / _currentNav!;
     
-    print('=== 份额计算调试 ===');
-    print('金额: $amount');
-    print('费率: $feeRate%');
-    print('净值: $_currentNav');
-    print('计算公式: $amount / (1 + $feeRate/100) / $_currentNav');
-    print('计算结果: $shares');
-    
     if (shares > 0) {
       // 始终更新份额，确保与金额同步
       _purchaseSharesController.text = shares.toStringAsFixed(2);
-      print('自动填充份额: ${_purchaseSharesController.text}');
     }
-    print('==================');
   }
 
   Future<void> _saveHolding() async {

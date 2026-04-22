@@ -79,17 +79,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       final sortKeyStr = prefs.getString(_keySortKey);
       final sortOrderStr = prefs.getString(_keySortOrder);
+      
+      // 如果没有保存的排序状态，使用默认的无排序
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
               (e) => e.toString() == sortKeyStr,
           orElse: () => SortKey.none,
         );
+      } else {
+        _sortKey = SortKey.none; // 默认无排序
       }
+      
       if (sortOrderStr != null) {
         _sortOrder = SortOrder.values.firstWhere(
               (e) => e.toString() == sortOrderStr,
           orElse: () => SortOrder.descending,
         );
+      } else {
+        _sortOrder = SortOrder.descending; // 默认排序顺序
       }
     } catch (e) {
       debugPrint('加载排序状态失败: $e');
