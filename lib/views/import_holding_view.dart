@@ -10,6 +10,7 @@ import 'package:csv/csv.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
@@ -1294,14 +1295,11 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
 
         final isDuplicate = existingHoldings.any((h) =>
         h.clientId == clientId &&
-            h.fundCode == fundCode &&
-            h.purchaseDate.year == date.year &&
-            h.purchaseDate.month == date.month &&
-            h.purchaseDate.day == date.day);
+            h.fundCode == fundCode);
 
         if (isDuplicate) {
           skip++;
-          skipReasons.add('$clientName / $fundCode / ${date.toIso8601String().split('T')[0]}');
+          skipReasons.add('$clientName / $fundCode');
           continue;
         }
 
@@ -1327,31 +1325,22 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         final currentNav = fundInfo['currentNav'] as double? ?? 0.0;
         final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
         final isValid = fundInfo['isValid'] as bool? ?? (currentNav > 0);
-        final navReturn1m = fundInfo['navReturn1m'] as double?;
-        final navReturn3m = fundInfo['navReturn3m'] as double?;
-        final navReturn6m = fundInfo['navReturn6m'] as double?;
-        final navReturn1y = fundInfo['navReturn1y'] as double?;
 
-        final holding = FundHolding(
-          clientName: clientName,
+        // 创建交易记录而不是直接创建持仓
+        final transaction = TransactionRecord(
           clientId: clientId,
+          clientName: clientName,
           fundCode: fundCode,
           fundName: fundName,
-          purchaseAmount: purchaseAmount,
-          purchaseShares: purchaseShares,
-          purchaseDate: date,
-          navDate: navDate,
-          currentNav: currentNav,
-          isValid: isValid,
+          type: TransactionType.buy,
+          amount: purchaseAmount,
+          shares: purchaseShares,
+          tradeDate: date,
+          nav: currentNav > 0 ? currentNav : null,
           remarks: '',
-          isPinned: false,
-          pinnedTimestamp: null,
-          navReturn1m: navReturn1m,
-          navReturn3m: navReturn3m,
-          navReturn6m: navReturn6m,
-          navReturn1y: navReturn1y,
         );
-        await dataManager.addHolding(holding);
+        
+        await dataManager.addTransaction(transaction);
         success++;
       } catch (e) {
         fail++;

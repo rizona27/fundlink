@@ -175,10 +175,10 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     var filtered = List<FundHolding>.from(validHoldings);
 
     if (_minAmount != null) {
-      filtered = filtered.where((h) => h.purchaseAmount >= _minAmount!).toList();
+      filtered = filtered.where((h) => h.totalCost >= _minAmount!).toList();
     }
     if (_maxAmount != null) {
-      filtered = filtered.where((h) => h.purchaseAmount <= _maxAmount!).toList();
+      filtered = filtered.where((h) => h.totalCost <= _maxAmount!).toList();
     }
     if (_minProfit != null) {
       filtered = filtered.where((h) {
@@ -206,13 +206,19 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     }
     if (_minDays != null) {
       filtered = filtered.where((h) {
-        final days = DateTime.now().difference(h.purchaseDate).inDays;
+        final transactions = _dataManager.getTransactionHistory(h.clientId, h.fundCode);
+        final days = transactions.isNotEmpty 
+            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+            : 0;
         return days >= _minDays!;
       }).toList();
     }
     if (_maxDays != null) {
       filtered = filtered.where((h) {
-        final days = DateTime.now().difference(h.purchaseDate).inDays;
+        final transactions = _dataManager.getTransactionHistory(h.clientId, h.fundCode);
+        final days = transactions.isNotEmpty 
+            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+            : 0;
         return days <= _maxDays!;
       }).toList();
     }
@@ -220,7 +226,10 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final items = <_RankItem>[];
     for (final holding in filtered) {
       final profit = _dataManager.calculateProfit(holding);
-      final days = DateTime.now().difference(holding.purchaseDate).inDays;
+      final transactions = _dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
+      final days = transactions.isNotEmpty 
+          ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+          : 0;
       items.add(_RankItem(holding: holding, profit: profit, daysHeld: days));
     }
 
@@ -232,8 +241,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       double? valueA, valueB;
       switch (_sortKey) {
         case SortKey.amount:
-          valueA = a.holding.purchaseAmount;
-          valueB = b.holding.purchaseAmount;
+          valueA = a.holding.totalCost;
+          valueB = b.holding.totalCost;
           break;
         case SortKey.profit:
           valueA = a.profit.absolute;
@@ -688,7 +697,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
               Expanded(flex: 20, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(holding.fundCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center), const SizedBox(height: 2), Text(holding.fundName, style: TextStyle(fontSize: 10, color: isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)]))),
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
-              Expanded(flex: 14, child: Container(alignment: Alignment.center, child: Text(_formatAmountInTenThousands(holding.purchaseAmount), style: TextStyle(fontSize: 12, color: isDarkMode ? CupertinoColors.white : CupertinoColors.black)))),
+              Expanded(flex: 14, child: Container(alignment: Alignment.center, child: Text(_formatAmountInTenThousands(holding.totalCost), style: TextStyle(fontSize: 12, color: isDarkMode ? CupertinoColors.white : CupertinoColors.black)))),
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
               Expanded(flex: 14, child: Container(alignment: Alignment.center, child: Text(_formatAmountInTenThousands(profit.absolute), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: _getValueColor(profit.absolute))))),
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),

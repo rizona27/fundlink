@@ -22,8 +22,9 @@ class FundDetailPage extends StatefulWidget {
 }
 
 class _FundDetailPageState extends State<FundDetailPage> {
-  late DataManager _dataManager;
-  late FundService _fundService;
+  DataManager? _dataManager;
+  FundService? _fundService;
+  bool _isInitialized = false;
 
   List<NetWorthPoint> _fundPoints = [];
   List<NetWorthPoint> _avgPoints = [];
@@ -50,9 +51,17 @@ class _FundDetailPageState extends State<FundDetailPage> {
   @override
   void initState() {
     super.initState();
-    _dataManager = DataManagerProvider.of(context);
-    _fundService = FundService(_dataManager);
-    _loadDetailData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialized) {
+      _dataManager = DataManagerProvider.of(context);
+      _fundService = FundService(_dataManager!);
+      _isInitialized = true;
+      _loadDetailData();
+    }
   }
 
   @override
@@ -85,19 +94,19 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
     setState(() => _loading = true);
     try {
-      final rawTrend = await _fundService.fetchNetWorthTrend(widget.holding.fundCode);
+      final rawTrend = await _fundService!.fetchNetWorthTrend(widget.holding.fundCode);
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
         ..sort((a, b) => a.date.compareTo(b.date));
       _cachedFundPointsWithChanges = null;
 
-      final benchmark = await _fundService.fetchBenchmarkData(widget.holding.fundCode);
+      final benchmark = await _fundService!.fetchBenchmarkData(widget.holding.fundCode);
       _avgPoints = (benchmark['average'] as List<NetWorthPoint>)
         ..sort((a, b) => a.date.compareTo(b.date));
       _hsPoints = (benchmark['hs300'] as List<NetWorthPoint>)
         ..sort((a, b) => a.date.compareTo(b.date));
 
-      final holdings = await _fundService.fetchTopHoldingsFromHtml(widget.holding.fundCode);
-      final valuation = await _fundService.fetchRealtimeValuation(widget.holding.fundCode);
+      final holdings = await _fundService!.fetchTopHoldingsFromHtml(widget.holding.fundCode);
+      final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
 
       setState(() {
         _topHoldings = holdings;
@@ -137,30 +146,30 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   Future<void> _refreshValuationOnly() async {
     try {
-      final valuation = await _fundService.fetchRealtimeValuation(widget.holding.fundCode);
+      final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
       setState(() {
         _valuation = valuation;
       });
     } catch (e) {
       debugPrint('估值刷新失败: $e');
-      _dataManager.addLog('基金 ${widget.holding.fundCode} 估值刷新失败: $e', type: LogType.error);
+      _dataManager?.addLog('基金 ${widget.holding.fundCode} 估值刷新失败: $e', type: LogType.error);
     }
   }
-
+  
   Future<void> _fetchStockQuotesForHoldings() async {
     if (_topHoldings.isEmpty) return;
     final stockCodes = _topHoldings.map((h) => h.stockCode).toList();
-    final quotes = await _fundService.fetchStockQuotes(stockCodes);
+    final quotes = await _fundService!.fetchStockQuotes(stockCodes);
     setState(() {
       _stockQuotes = quotes;
     });
   }
-
+  
   Future<void> _refreshValuation() async {
     if (_isRefreshingValuation) return;
     setState(() => _isRefreshingValuation = true);
     try {
-      final valuation = await _fundService.fetchRealtimeValuation(widget.holding.fundCode);
+      final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
       setState(() {
         _valuation = valuation;
       });

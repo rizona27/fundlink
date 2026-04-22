@@ -139,7 +139,7 @@ extension SortKeyExtension on SortKey {
     }
   }
 
-  double? getValue(FundHolding holding) {
+  double? getValue(FundHolding holding, {DataManager? dataManager}) {
     switch (this) {
       case SortKey.latestNav:
         return holding.currentNav;
@@ -152,13 +152,18 @@ extension SortKeyExtension on SortKey {
       case SortKey.navReturn1y:
         return holding.navReturn1y;
       case SortKey.amount:
-        return holding.purchaseAmount;
+        return holding.totalCost;
       case SortKey.profit:
         return holding.profit;
       case SortKey.profitRate:
         return holding.annualizedProfitRate;
       case SortKey.days:
-        return DateTime.now().difference(holding.purchaseDate).inDays.toDouble();
+        if (dataManager == null) return 0.0;
+        final transactions = dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
+        final days = transactions.isNotEmpty 
+            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+            : 0;
+        return days.toDouble();
       case SortKey.none:
         return null;
     }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../services/fund_service.dart';
@@ -24,6 +25,7 @@ extension ThemeModeDisplayName on ThemeMode {
 
 class DataManager extends ChangeNotifier {
   static const String _holdingsKey = 'fund_holdings';
+  static const String _transactionsKey = 'fund_transactions';
   static const String _logsKey = 'logs';
   static const String _privacyModeKey = 'privacy_mode';
   static const String _themeModeKey = 'theme_mode';
@@ -32,6 +34,7 @@ class DataManager extends ChangeNotifier {
   static const int _valuationCacheValidSeconds = 180;
 
   List<FundHolding> _holdings = [];
+  List<TransactionRecord> _transactions = [];
   List<LogEntry> _logs = [];
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
@@ -46,6 +49,7 @@ class DataManager extends ChangeNotifier {
   Completer<void>? _currentValuationRefreshCompleter;
 
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
+  List<TransactionRecord> get transactions => List.unmodifiable(_transactions);
   List<LogEntry> get logs => List.unmodifiable(_logs);
   bool get isPrivacyMode => _isPrivacyMode;
   ThemeMode get themeMode => _themeMode;
@@ -70,6 +74,7 @@ class DataManager extends ChangeNotifier {
   Future<void> loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
+    // 加载持仓数据
     final holdingsJson = prefs.getStringList(_holdingsKey);
     if (holdingsJson != null) {
       _holdings = holdingsJson
@@ -78,6 +83,17 @@ class DataManager extends ChangeNotifier {
       debugPrint('DataManager: 持仓数据加载成功，总数: ${_holdings.length}');
     } else {
       debugPrint('DataManager: 没有找到持仓数据');
+    }
+
+    // 加载交易记录
+    final transactionsJson = prefs.getStringList(_transactionsKey);
+    if (transactionsJson != null) {
+      _transactions = transactionsJson
+          .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
+          .toList();
+      debugPrint('DataManager: 交易记录加载成功，总数: ${_transactions.length}');
+    } else {
+      debugPrint('DataManager: 没有找到交易记录');
     }
 
     final logsJson = prefs.getStringList(_logsKey);
@@ -133,6 +149,11 @@ class DataManager extends ChangeNotifier {
         .map((holding) => jsonEncode(holding.toJson()))
         .toList();
     await prefs.setStringList(_holdingsKey, holdingsJson);
+
+    final transactionsJson = _transactions
+        .map((tx) => jsonEncode(tx.toJson()))
+        .toList();
+    await prefs.setStringList(_transactionsKey, transactionsJson);
 
     final logsJson = _logs
         .take(100)
@@ -325,6 +346,111 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 添加交易记录并自动更新持仓
+  Future<void> addTransaction(TransactionRecord transaction) async {
+    // 验证交易数据
+    if (transaction.amount <= 0 || transaction.shares <= 0) {
+      await addLog('添加交易失败: 金额和份额必须大于0', type: LogType.error);
+      throw Exception('无效的交易数据');
+    }
+
+    // 添加交易记录
+    _transactions = [..._transactions, transaction];
+
+    // 重新计算该客户该基金的持仓
+    await _rebuildHolding(transaction.clientId, transaction.fundCode);
+
+    await saveData();
+    await addLog(
+      '${transaction.type.displayName}交易: ${transaction.fundCode} - ${transaction.clientName}, '
+      '金额: ${transaction.amount.toStringAsFixed(2)}元, '
+      '份额: ${transaction.shares.toStringAsFixed(2)}份',
+      type: LogType.success,
+    );
+    notifyListeners();
+  }
+
+  /// 根据交易记录重建持仓
+  Future<void> _rebuildHolding(String clientId, String fundCode) async {
+    // 获取该客户该基金的所有交易记录
+    final relatedTransactions = _transactions
+        .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
+        .toList()
+      ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
+
+    if (relatedTransactions.isEmpty) {
+      // 如果没有交易记录，删除对应的持仓
+      _holdings.removeWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
+      return;
+    }
+
+    // 获取最新的基金信息
+    final firstTx = relatedTransactions.first;
+    final lastTx = relatedTransactions.last;
+
+    // 从现有持仓中获取净值信息，如果没有则使用默认值
+    final existingHolding = _holdings.firstWhere(
+      (h) => h.clientId == clientId && h.fundCode == fundCode,
+      orElse: () => FundHolding.invalid(fundCode: fundCode),
+    );
+
+    // 基于交易记录重新计算持仓
+    final newHolding = FundHolding.fromTransactions(
+      clientId: clientId,
+      clientName: firstTx.clientName,
+      fundCode: fundCode,
+      fundName: firstTx.fundName,
+      transactions: relatedTransactions,
+      navDate: existingHolding.navDate,
+      currentNav: existingHolding.currentNav,
+      isValid: existingHolding.isValid,
+      isPinned: existingHolding.isPinned,
+      pinnedTimestamp: existingHolding.pinnedTimestamp,
+      navReturn1m: existingHolding.navReturn1m,
+      navReturn3m: existingHolding.navReturn3m,
+      navReturn6m: existingHolding.navReturn6m,
+      navReturn1y: existingHolding.navReturn1y,
+    );
+
+    // 如果持仓已存在，更新它；否则添加新持仓
+    final existingIndex = _holdings.indexWhere(
+      (h) => h.clientId == clientId && h.fundCode == fundCode,
+    );
+
+    if (existingIndex != -1) {
+      _holdings[existingIndex] = newHolding;
+    } else {
+      _holdings = [..._holdings, newHolding];
+    }
+  }
+
+  /// 获取指定客户和基金的交易历史
+  List<TransactionRecord> getTransactionHistory(String clientId, String fundCode) {
+    return _transactions
+        .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
+        .toList()
+      ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate)); // 按时间倒序
+  }
+
+  /// 删除交易记录并重新计算持仓
+  Future<void> deleteTransaction(String transactionId) async {
+    final index = _transactions.indexWhere((tx) => tx.id == transactionId);
+    if (index == -1) {
+      await addLog('删除交易失败: 未找到交易记录', type: LogType.error);
+      throw Exception('交易记录不存在');
+    }
+
+    final transaction = _transactions[index];
+    _transactions = List.from(_transactions)..removeAt(index);
+
+    // 重新计算持仓
+    await _rebuildHolding(transaction.clientId, transaction.fundCode);
+
+    await saveData();
+    await addLog('删除交易记录: ${transaction.fundCode} - ${transaction.type.displayName}', type: LogType.info);
+    notifyListeners();
+  }
+
   Future<void> updateHolding(FundHolding updatedHolding) async {
     final index = _holdings.indexWhere((h) => h.id == updatedHolding.id);
     if (index == -1) {
@@ -338,6 +464,23 @@ class DataManager extends ChangeNotifier {
 
     await saveData();
     await addLog('更新持仓: ${updatedHolding.fundCode} - ${updatedHolding.clientName}', type: LogType.success);
+    notifyListeners();
+  }
+
+  /// 更新持仓的净值信息（不改变交易记录）
+  Future<void> updateHoldingNav(String clientId, String fundCode, double currentNav, DateTime navDate) async {
+    final index = _holdings.indexWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
+    if (index == -1) return;
+
+    final holding = _holdings[index];
+    final updatedHolding = holding.copyWith(
+      currentNav: currentNav,
+      navDate: navDate,
+      isValid: currentNav > 0,
+    );
+
+    _holdings[index] = updatedHolding;
+    await saveData();
     notifyListeners();
   }
 
@@ -395,22 +538,30 @@ class DataManager extends ChangeNotifier {
       final holding = _holdings[i];
       final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
       if (fetched['isValid'] == true) {
-        final updated = holding.copyWith(
-          fundName: fetched['fundName'],
-          currentNav: fetched['currentNav'],
-          navDate: fetched['navDate'],
-          isValid: true,
-          navReturn1m: fetched['navReturn1m'],
-          navReturn3m: fetched['navReturn3m'],
-          navReturn6m: fetched['navReturn6m'],
-          navReturn1y: fetched['navReturn1y'],
+        await updateHoldingNav(
+          holding.clientId,
+          holding.fundCode,
+          fetched['currentNav'],
+          fetched['navDate'],
         );
-        await updateHolding(updated);
+        
+        // 同时更新收益率信息
+        final index = _holdings.indexWhere((h) => h.id == holding.id);
+        if (index != -1) {
+          final updated = _holdings[index].copyWith(
+            navReturn1m: fetched['navReturn1m'],
+            navReturn3m: fetched['navReturn3m'],
+            navReturn6m: fetched['navReturn6m'],
+            navReturn1y: fetched['navReturn1y'],
+          );
+          _holdings[index] = updated;
+        }
       } else {
         await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
       }
       onProgress?.call(i + 1, total);
     }
+    await saveData();
   }
 
   Future<void> addLog(String message, {LogType type = LogType.info}) async {
@@ -468,20 +619,27 @@ class DataManager extends ChangeNotifier {
   }
 
   ProfitResult calculateProfit(FundHolding holding) {
-    if (holding.purchaseShares <= 0 || holding.currentNav <= 0 || holding.purchaseAmount <= 0) {
+    if (holding.totalShares <= 0 || holding.currentNav <= 0 || holding.totalCost <= 0) {
       return const ProfitResult(absolute: 0.0, annualized: 0.0);
     }
 
-    final currentMarketValue = holding.currentNav * holding.purchaseShares;
-    final absoluteProfit = currentMarketValue - holding.purchaseAmount;
+    final currentMarketValue = holding.currentNav * holding.totalShares;
+    final absoluteProfit = currentMarketValue - holding.totalCost;
 
-    final days = DateTime.now().difference(holding.purchaseDate).inDays;
+    // 计算持有天数：从首次买入到现在
+    final relatedTransactions = getTransactionHistory(holding.clientId, holding.fundCode);
+    if (relatedTransactions.isEmpty) {
+      return ProfitResult(absolute: absoluteProfit, annualized: 0.0);
+    }
+    
+    final firstTradeDate = relatedTransactions.last.tradeDate; // 因为是倒序，最后一条是最早的
+    final days = DateTime.now().difference(firstTradeDate).inDays;
 
     if (days <= 0) {
       return ProfitResult(absolute: absoluteProfit, annualized: 0.0);
     }
 
-    final annualizedReturn = (absoluteProfit / holding.purchaseAmount) / days * 365 * 100;
+    final annualizedReturn = (absoluteProfit / holding.totalCost) / days * 365 * 100;
 
     return ProfitResult(absolute: absoluteProfit, annualized: annualizedReturn);
   }

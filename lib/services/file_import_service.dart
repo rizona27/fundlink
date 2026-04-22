@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
 import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import 'package:uuid/uuid.dart';
 
 class FileImportService {
@@ -60,6 +61,80 @@ class FileImportService {
     return (headers: headers, rows: dataRows);
   }
 
+  /// 将行数据转换为交易记录（新模型）
+  static TransactionRecord rowToTransaction(
+      List<dynamic> row,
+      Map<String, int> fieldMapping, {
+        String? customId,
+      }) {
+    String getString(String fieldId) {
+      final idx = fieldMapping[fieldId];
+      if (idx == null || idx >= row.length) return '';
+      final val = row[idx];
+      return val?.toString().trim() ?? '';
+    }
+
+    double? getDouble(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return double.tryParse(str);
+    }
+
+    DateTime? getDate(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return _parseFlexibleDate(str);
+    }
+
+    final clientName = getString('clientName');
+    if (clientName.isEmpty) throw Exception('客户姓名不能为空');
+
+    final clientId = getString('clientId');
+    if (clientId.isEmpty) throw Exception('客户号不能为空');
+
+    final fundCode = getString('fundCode');
+    if (fundCode.isEmpty) throw Exception('基金代码不能为空');
+
+    final tradeDate = getDate('purchaseDate') ?? getDate('tradeDate');
+    if (tradeDate == null) throw Exception('交易日期无效或格式错误');
+
+    final amount = getDouble('purchaseAmount') ?? getDouble('amount');
+    if (amount == null || amount <= 0) throw Exception('交易金额无效');
+
+    final shares = getDouble('purchaseShares') ?? getDouble('shares');
+    if (shares == null || shares <= 0) throw Exception('交易份额无效');
+
+    // 判断交易类型：默认为买入，如果有type字段则根据字段值判断
+    TransactionType type = TransactionType.buy;
+    final typeStr = getString('type').toUpperCase();
+    if (typeStr == 'SELL' || typeStr == '卖出') {
+      type = TransactionType.sell;
+    } else if (typeStr == 'BUY' || typeStr == '买入') {
+      type = TransactionType.buy;
+    }
+
+    final fundName = getString('fundName');
+    final nav = getDouble('currentNav') ?? getDouble('nav');
+    final fee = getDouble('fee');
+    final remarks = getString('remarks');
+
+    return TransactionRecord(
+      id: customId ?? const Uuid().v4(),
+      clientId: clientId,
+      clientName: clientName,
+      fundCode: fundCode,
+      fundName: fundName.isNotEmpty ? fundName : '未知基金',
+      type: type,
+      amount: amount,
+      shares: shares,
+      tradeDate: tradeDate,
+      nav: nav,
+      fee: fee,
+      remarks: remarks.isNotEmpty ? remarks : '',
+    );
+  }
+
+  /// 兼容旧方法：将行数据转换为持仓（用于向后兼容）
   static FundHolding rowToHolding(
       List<dynamic> row,
       Map<String, int> fieldMapping, {
@@ -108,6 +183,7 @@ class FileImportService {
     final remarks = getString('remarks');
 
     final isValid = currentNav > 0 && fundName.isNotEmpty;
+    final averageCost = purchaseAmount / purchaseShares;
 
     return FundHolding(
       id: customId ?? const Uuid().v4(),
@@ -115,9 +191,9 @@ class FileImportService {
       clientId: clientId,
       fundCode: fundCode,
       fundName: fundName,
-      purchaseAmount: purchaseAmount,
-      purchaseShares: purchaseShares,
-      purchaseDate: purchaseDate,
+      totalShares: purchaseShares,
+      totalCost: purchaseAmount,
+      averageCost: averageCost,
       navDate: navDate,
       currentNav: currentNav,
       isValid: isValid,
@@ -128,6 +204,7 @@ class FileImportService {
       navReturn3m: null,
       navReturn6m: null,
       navReturn1y: null,
+      transactionIds: [],
     );
   }
 

@@ -167,9 +167,9 @@ class FileExportService {
       case 'clientId': return '客户号';
       case 'fundCode': return '基金代码';
       case 'fundName': return '基金名称';
-      case 'purchaseDate': return '购买日期';
-      case 'purchaseAmount': return '购买金额';
-      case 'purchaseShares': return '购买份额';
+      case 'totalShares': return '持有份额';
+      case 'totalCost': return '累计成本';
+      case 'averageCost': return '平均成本';
       case 'currentNav': return '当前净值';
       case 'navDate': return '净值日期';
       case 'remarks': return '备注';
@@ -183,9 +183,9 @@ class FileExportService {
       case 'clientId': return holding.clientId;
       case 'fundCode': return holding.fundCode;
       case 'fundName': return holding.fundName;
-      case 'purchaseDate': return holding.purchaseDate.toIso8601String().split('T')[0];
-      case 'purchaseAmount': return holding.purchaseAmount.toStringAsFixed(2);
-      case 'purchaseShares': return holding.purchaseShares.toStringAsFixed(4);
+      case 'totalShares': return holding.totalShares.toStringAsFixed(4);
+      case 'totalCost': return holding.totalCost.toStringAsFixed(2);
+      case 'averageCost': return holding.averageCost.toStringAsFixed(4);
       case 'currentNav': return holding.currentNav.toStringAsFixed(4);
       case 'navDate': return holding.navDate.toIso8601String().split('T')[0];
       case 'remarks': return holding.remarks;
@@ -199,9 +199,9 @@ class FileExportService {
       ExportFieldDefinition(id: 'clientId', label: '客户号', required: true),
       ExportFieldDefinition(id: 'fundCode', label: '基金代码', required: true),
       ExportFieldDefinition(id: 'fundName', label: '基金名称', required: false),
-      ExportFieldDefinition(id: 'purchaseDate', label: '购买日期', required: true),
-      ExportFieldDefinition(id: 'purchaseAmount', label: '购买金额', required: true),
-      ExportFieldDefinition(id: 'purchaseShares', label: '购买份额', required: true),
+      ExportFieldDefinition(id: 'totalShares', label: '持有份额', required: true),
+      ExportFieldDefinition(id: 'totalCost', label: '累计成本', required: true),
+      ExportFieldDefinition(id: 'averageCost', label: '平均成本', required: false),
       ExportFieldDefinition(id: 'currentNav', label: '当前净值', required: false),
       ExportFieldDefinition(id: 'navDate', label: '净值日期', required: false),
       ExportFieldDefinition(id: 'remarks', label: '备注', required: false),

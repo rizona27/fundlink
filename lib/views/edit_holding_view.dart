@@ -1,101 +1,13 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart' show Colors, Divider;
+import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
-import '../models/fund_holding.dart';
-import '../models/log_entry.dart';
 import '../widgets/toast.dart';
-import '../widgets/glass_button.dart';
-
-class AmountInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    if (newValue.text.isEmpty) return newValue;
-
-    String filtered = newValue.text.replaceAll(RegExp(r'[^0-9.]'), '');
-    final parts = filtered.split('.');
-    if (parts.length > 2) {
-      filtered = parts[0] + '.' + parts[1];
-    }
-    if (filtered.startsWith('.')) {
-      filtered = '0$filtered';
-    }
-    final newParts = filtered.split('.');
-    String integerPart = newParts[0];
-    String decimalPart = newParts.length > 1 ? newParts[1] : '';
-    if (integerPart.length > 9) {
-      integerPart = integerPart.substring(0, 9);
-    }
-    if (decimalPart.length > 2) {
-      decimalPart = decimalPart.substring(0, 2);
-    }
-    String formatted;
-    if (decimalPart.isEmpty) {
-      formatted = integerPart;
-    } else {
-      formatted = '$integerPart.$decimalPart';
-    }
-    if (filtered.endsWith('.') && decimalPart.isEmpty && integerPart.isNotEmpty) {
-      formatted = '$integerPart.';
-    }
-    if (formatted != newValue.text) {
-      final cursorPos = formatted.length;
-      return newValue.copyWith(
-        text: formatted,
-        selection: TextSelection.collapsed(offset: cursorPos),
-      );
-    }
-    return newValue;
-  }
-}
-
-class ClientNameInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    final allowedPattern = RegExp(r'[a-zA-Z0-9\u4e00-\u9fa5 ]');
-    String filtered = newValue.text
-        .split('')
-        .where((c) => allowedPattern.hasMatch(c))
-        .join('');
-    filtered = filtered.replaceAll(RegExp(r' +'), ' ');
-    final spaceCount = filtered.split('').where((c) => c == ' ').length;
-    if (spaceCount > 1) {
-      final firstSpaceIndex = filtered.indexOf(' ');
-      if (firstSpaceIndex != -1) {
-        filtered = filtered.substring(0, firstSpaceIndex + 1) +
-            filtered.substring(firstSpaceIndex + 1).replaceAll(' ', '');
-      }
-    }
-    if (filtered != newValue.text) {
-      final cursorPos = filtered.length;
-      return newValue.copyWith(
-        text: filtered,
-        selection: TextSelection.collapsed(offset: cursorPos),
-      );
-    }
-    return newValue;
-  }
-}
-
-class ClientIdInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    final filtered = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final limited = filtered.length > 12 ? filtered.substring(0, 12) : filtered;
-    if (limited != newValue.text) {
-      return newValue.copyWith(
-        text: limited,
-        selection: TextSelection.collapsed(offset: limited.length),
-      );
-    }
-    return newValue;
-  }
-}
+import '../widgets/add_transaction_dialog.dart';
+import '../widgets/adaptive_top_bar.dart';
 
 class EditHoldingView extends StatefulWidget {
   final FundHolding holding;
@@ -109,351 +21,384 @@ class EditHoldingView extends StatefulWidget {
 class _EditHoldingViewState extends State<EditHoldingView> {
   late DataManager _dataManager;
   late FundService _fundService;
-
-  late TextEditingController _clientNameController;
-  late TextEditingController _clientIdController;
-  late TextEditingController _fundCodeController;
-  late TextEditingController _purchaseAmountController;
-  late TextEditingController _purchaseSharesController;
-  late TextEditingController _remarksController;
-
-  bool _clientNameError = false;
-  bool _fundCodeError = false;
-  bool _amountError = false;
-  bool _sharesError = false;
-
-  late DateTime _purchaseDate;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _clientNameController = TextEditingController(text: widget.holding.clientName);
-    _clientIdController = TextEditingController(text: widget.holding.clientId);
-    _fundCodeController = TextEditingController(text: widget.holding.fundCode);
-    _purchaseAmountController = TextEditingController(text: widget.holding.purchaseAmount.toStringAsFixed(2));
-    _purchaseSharesController = TextEditingController(text: widget.holding.purchaseShares.toStringAsFixed(2));
-    _remarksController = TextEditingController(text: widget.holding.remarks);
-    _purchaseDate = widget.holding.purchaseDate;
-  }
+  List<TransactionRecord> _transactions = [];
+  bool _isLoading = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
+    _loadTransactions();
   }
 
-  @override
-  void dispose() {
-    _clientNameController.dispose();
-    _clientIdController.dispose();
-    _fundCodeController.dispose();
-    _purchaseAmountController.dispose();
-    _purchaseSharesController.dispose();
-    _remarksController.dispose();
-    super.dispose();
-  }
-
-  bool get _isFormValid {
-    return !_clientNameError &&
-        !_fundCodeError &&
-        !_amountError &&
-        !_sharesError &&
-        _clientNameController.text.trim().isNotEmpty &&
-        _fundCodeController.text.trim().isNotEmpty &&
-        _purchaseAmountController.text.trim().isNotEmpty &&
-        _purchaseSharesController.text.trim().isNotEmpty;
-  }
-
-  void _validateClientName(String value) {
-    final trimmed = value.trim();
+  void _loadTransactions() {
     setState(() {
-      _clientNameError = trimmed.isEmpty || trimmed.length > 20;
-    });
-  }
-
-  void _validateFundCode(String value) {
-    final trimmed = value.trim();
-    setState(() {
-      _fundCodeError = trimmed.isEmpty || !RegExp(r'^\d{6}$').hasMatch(trimmed);
-    });
-  }
-
-  void _validateAmount(String value) {
-    final trimmed = value.trim();
-    bool error = false;
-    if (trimmed.isNotEmpty) {
-      final amount = double.tryParse(trimmed);
-      error = amount == null || amount <= 0;
-    } else {
-      error = true;
-    }
-    setState(() => _amountError = error);
-  }
-
-  void _validateShares(String value) {
-    final trimmed = value.trim();
-    bool error = false;
-    if (trimmed.isNotEmpty) {
-      final shares = double.tryParse(trimmed);
-      error = shares == null || shares <= 0;
-    } else {
-      error = true;
-    }
-    setState(() => _sharesError = error);
-  }
-
-  void _onFundCodeChanged(String value) {
-    final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
-    if (newValue != _fundCodeController.text) {
-      final cursor = _fundCodeController.selection.baseOffset;
-      _fundCodeController.text = newValue;
-      _fundCodeController.selection = TextSelection.collapsed(
-        offset: cursor.clamp(0, newValue.length),
+      _transactions = _dataManager.getTransactionHistory(
+        widget.holding.clientId,
+        widget.holding.fundCode,
       );
-    }
-    _validateFundCode(newValue);
+    });
   }
 
-  void _showDatePickerModal() {
-    showCupertinoModalPopup(
+  Future<void> _showAddTransactionDialog(TransactionType type) async {
+    await showCupertinoDialog(
       context: context,
-      builder: (context) => _DatePickerModal(
-        initialDate: _purchaseDate,
-        onConfirm: (newDate) {
-          setState(() {
-            _purchaseDate = newDate;
-          });
-        },
+      barrierDismissible: true,
+      builder: (context) => AddTransactionDialog(
+        clientId: widget.holding.clientId,
+        clientName: widget.holding.clientName,
+        fundCode: widget.holding.fundCode,
+        fundName: widget.holding.fundName,
+        type: type,
+        currentNav: widget.holding.currentNav > 0 ? widget.holding.currentNav : null,
+        currentShares: widget.holding.totalShares,
+        onTransactionAdded: _loadTransactions,
       ),
     );
   }
 
-  Future<void> _saveChanges() async {
-    if (_isSaving) return;
-    if (!_isFormValid) return;
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    final amount = double.parse(_purchaseAmountController.text.trim());
-    final shares = double.parse(_purchaseSharesController.text.trim());
-    final newFundCode = _fundCodeController.text.trim().toUpperCase();
-    final fundCodeChanged = newFundCode != widget.holding.fundCode;
-
-    final updatedHolding = widget.holding.copyWith(
-      clientName: _clientNameController.text.trim(),
-      clientId: _clientIdController.text.trim(),
-      fundCode: newFundCode,
-      purchaseAmount: amount,
-      purchaseShares: shares,
-      purchaseDate: _purchaseDate,
-      remarks: _remarksController.text.trim(),
-      fundName: fundCodeChanged ? '待加载' : widget.holding.fundName,
-      currentNav: fundCodeChanged ? 0 : widget.holding.currentNav,
-      navDate: fundCodeChanged ? DateTime.now() : widget.holding.navDate,
-      isValid: fundCodeChanged ? false : widget.holding.isValid,
+  Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      barrierDismissible: true, // 允许点击外部关闭
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('确认删除'),
+        content: Text(
+          '确定要删除这条${tx.type.displayName}记录吗？\n'
+          '金额：${tx.amount.toStringAsFixed(2)}元\n'
+          '份额：${tx.shares.toStringAsFixed(2)}份',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('删除'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
     );
 
-    try {
-      await _dataManager.updateHolding(updatedHolding);
-      await _dataManager.addLog('更新持仓: ${updatedHolding.fundCode} - ${updatedHolding.clientName}', type: LogType.success);
-      context.showToast('保存成功');
-
-      if (fundCodeChanged || !updatedHolding.isValid) {
-        final fundInfo = await _fundService.fetchFundInfo(updatedHolding.fundCode);
-        final finalHolding = updatedHolding.copyWith(
-          fundName: fundInfo['fundName'] as String? ?? '待加载',
-          currentNav: fundInfo['currentNav'] as double? ?? 0,
-          navDate: fundInfo['navDate'] as DateTime? ?? DateTime.now(),
-          isValid: fundInfo['isValid'] as bool? ?? false,
-        );
-        await _dataManager.updateHolding(finalHolding);
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      await _dataManager.addLog('更新持仓失败: $e', type: LogType.error);
-      context.showToast('保存失败');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
+    if (confirmed == true && mounted) {
+      try {
+        await _dataManager.deleteTransaction(tx.id);
+        _loadTransactions();
+        context.showToast('删除成功');
+      } catch (e) {
+        context.showToast('删除失败: $e');
       }
     }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final frostedBgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
-        : CupertinoColors.white.withValues(alpha: 0.85);
-    final inputBgColor = isDarkMode ? CupertinoColors.systemGrey6 : CupertinoColors.white;
-    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    final placeholderColor = isDarkMode
-        ? CupertinoColors.white.withValues(alpha: 0.5)
-        : CupertinoColors.systemGrey;
+    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final cardColor = isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
+    final secondaryTextColor = isDarkMode 
+        ? CupertinoColors.white.withOpacity(0.6)
+        : const Color(0xFF8E8E93);
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false,
-        leading: const SizedBox.shrink(),
-        middle: const Text(
-          '编辑持仓',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Colors.transparent,
-      ),
-      child: SafeArea(
-        child: _isSaving
-            ? const Center(child: CupertinoActivityIndicator(radius: 20))
-            : SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        color: backgroundColor,
+        child: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildFrostedSection(
-                title: '必填信息',
-                isDarkMode: isDarkMode,
-                frostedBgColor: frostedBgColor,
-                children: [
-                  _buildRowField(
-                    label: '客户姓名',
-                    required: true,
-                    child: _buildTextField(
-                      controller: _clientNameController,
-                      hint: '请输入客户姓名',
-                      error: _clientNameError,
-                      onChanged: _validateClientName,
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                      inputFormatters: [ClientNameInputFormatter()],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '基金代码',
-                    required: true,
-                    child: _buildTextField(
-                      controller: _fundCodeController,
-                      hint: '请输入6位基金代码',
-                      error: _fundCodeError,
-                      onChanged: _onFundCodeChanged,
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '购买金额',
-                    required: true,
-                    child: _buildAmountField(
-                      controller: _purchaseAmountController,
-                      hint: '请输入购买金额',
-                      error: _amountError,
-                      onChanged: _validateAmount,
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '购买份额',
-                    required: true,
-                    child: _buildAmountField(
-                      controller: _purchaseSharesController,
-                      hint: '请输入购买份额',
-                      error: _sharesError,
-                      onChanged: _validateShares,
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '购买日期',
-                    required: true,
-                    child: _buildDatePickerField(
-                      purchaseDate: _purchaseDate,
-                      onTap: _showDatePickerModal,
-                      isDarkMode: isDarkMode,
-                    ),
-                  ),
-                ],
+              AdaptiveTopBar(
+                scrollOffset: 0,
+                showBack: true,
+                onBack: () => Navigator.of(context).pop(),
+                showRefresh: false,
+                showExpandCollapse: false,
+                showSearch: false,
+                showReset: false,
+                showFilter: false,
+                showSort: false,
+                backgroundColor: Colors.transparent,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+                iconSize: 24,
+                buttonSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-              const SizedBox(height: 24),
-              _buildFrostedSection(
-                title: '选填信息',
-                isDarkMode: isDarkMode,
-                frostedBgColor: frostedBgColor,
-                children: [
-                  _buildRowField(
-                    label: '客户号',
-                    required: false,
-                    child: _buildTextField(
-                      controller: _clientIdController,
-                      hint: '选填，最多12位数字',
-                      onChanged: (_) {},
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                      inputFormatters: [ClientIdInputFormatter()],
-                    ),
+              Expanded(
+                child: Column(
+                  children: [
+                    // 持仓信息卡片
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.holding.fundName,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '(${widget.holding.fundCode})',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '备注',
-                    required: false,
-                    child: _buildTextField(
-                      controller: _remarksController,
-                      hint: '选填，最多30个字符',
-                      onChanged: (v) {
-                        if (v.length > 30) {
-                          final cursor = _remarksController.selection.baseOffset;
-                          _remarksController.text = v.substring(0, 30);
-                          _remarksController.selection = TextSelection.collapsed(
-                            offset: cursor.clamp(0, 30),
-                          );
-                        }
-                      },
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
-                      maxLength: 30,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('客户', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text(widget.holding.clientName, 
+                                style: TextStyle(
+                                  fontSize: 14, 
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                )),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('客户号', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text(widget.holding.clientId.isNotEmpty ? widget.holding.clientId : '-', 
+                                style: TextStyle(
+                                  fontSize: 14, 
+                                  color: secondaryTextColor.withOpacity(0.7), // 客户号使用更浅的颜色
+                                )),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              Row(
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('累计投入', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text('${widget.holding.totalCost.toStringAsFixed(2)}元', 
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('持有份额', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text('${widget.holding.totalShares.toStringAsFixed(2)}份', 
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('平均成本', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text(widget.holding.averageCost.toStringAsFixed(4), 
+                                style: TextStyle(fontSize: 14, color: textColor)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('当前净值', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text(widget.holding.currentNav.toStringAsFixed(4), 
+                                style: TextStyle(fontSize: 14, color: textColor)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                        ],
+                      ),
+                    ),
+
+                    // 操作按钮
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
                 children: [
                   Expanded(
-                    child: GlassButton(
-                      label: '取消',
-                      onPressed: () => Navigator.of(context).pop(),
-                      isPrimary: false,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF34C759).withOpacity(0.8),
+                                const Color(0xFF34C759).withOpacity(0.6),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF34C759).withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: () => _showAddTransactionDialog(TransactionType.buy),
+                            child: const Text(
+                              '加仓',
+                              style: TextStyle(
+                                color: CupertinoColors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: GlassButton(
-                      label: '保存修改',
-                      onPressed: _isFormValid ? _saveChanges : null,
-                      isPrimary: true,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFFFF3B30).withOpacity(0.8),
+                                const Color(0xFFFF3B30).withOpacity(0.6),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFFF3B30).withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: () => _showAddTransactionDialog(TransactionType.sell),
+                            child: const Text(
+                              '减仓',
+                              style: TextStyle(
+                                color: CupertinoColors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            // 交易历史标题
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+              child: Row(
+                children: [
+                  Text('交易记录', 
+                      style: TextStyle(
+                        fontSize: 16, 
+                        fontWeight: FontWeight.w600, 
+                        color: textColor,
+                      )),
+                  const Spacer(),
+                  Text('${_transactions.length}条', 
+                      style: TextStyle(
+                        fontSize: 12, 
+                        color: secondaryTextColor,
+                      )),
+                ],
+                      ),
+                    ),
+
+                    // 交易历史列表
+                    Expanded(
+                      child: _transactions.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.doc_text,
+                                    size: 48,
+                                    color: secondaryTextColor,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '暂无交易记录',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: secondaryTextColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              itemCount: _transactions.length,
+                              itemBuilder: (context, index) {
+                                final tx = _transactions[index];
+                                return _buildTransactionCard(tx, isDarkMode, textColor, secondaryTextColor);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -462,366 +407,101 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  Widget _buildFrostedSection({
-    required String title,
-    required bool isDarkMode,
-    required Color frostedBgColor,
-    required List<Widget> children,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-            ),
-          ),
-        ),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: frostedBgColor,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(children: children),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildTransactionCard(TransactionRecord tx, bool isDarkMode, Color textColor, Color secondaryTextColor) {
+    final typeColor = tx.type == TransactionType.buy 
+        ? const Color(0xFF34C759)
+        : const Color(0xFFFF3B30);
 
-  Widget _buildRowField({
-    required String label,
-    required bool required,
-    required Widget child,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Flexible(
-          flex: 0,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: 70,
-              maxWidth: 85,
-            ),
-            child: Row(
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDarkMode 
+              ? CupertinoColors.white.withOpacity(0.05)
+              : CupertinoColors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: typeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                if (required)
-                  const Text(' *', style: TextStyle(color: CupertinoColors.systemRed)),
+                child: Text(
+                  tx.type.displayName,
+                  style: TextStyle(
+                    color: typeColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _formatDate(tx.tradeDate),
+                style: TextStyle(fontSize: 11, color: secondaryTextColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('金额', style: TextStyle(fontSize: 9, color: secondaryTextColor)),
+                    const SizedBox(height: 2),
+                    Text('${tx.amount.toStringAsFixed(2)}元', 
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('份额', style: TextStyle(fontSize: 9, color: secondaryTextColor)),
+                    const SizedBox(height: 2),
+                    Text('${tx.shares.toStringAsFixed(2)}份', 
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor)),
+                  ],
+                ),
+              ),
+              if (tx.nav != null) ...[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('净值', style: TextStyle(fontSize: 9, color: secondaryTextColor)),
+                      const SizedBox(height: 2),
+                      Text(tx.nav!.toStringAsFixed(4), 
+                          style: TextStyle(fontSize: 13, color: textColor)),
+                    ],
+                  ),
+                ),
               ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: child),
-      ],
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    required Function(String) onChanged,
-    required Color inputBgColor,
-    required Color textColor,
-    required Color placeholderColor,
-    bool error = false,
-    List<TextInputFormatter>? inputFormatters,
-    int? maxLength,
-  }) {
-    Color bottomBorderColor;
-    if (error) {
-      bottomBorderColor = CupertinoColors.systemRed;
-    } else if (controller.text.trim().isNotEmpty && !error) {
-      bottomBorderColor = CupertinoColors.activeBlue;
-    } else {
-      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: inputBgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border(
-          bottom: BorderSide(
-            color: bottomBorderColor,
-            width: 1.5,
-          ),
-        ),
-      ),
-      child: CupertinoTextField(
-        controller: controller,
-        placeholder: hint,
-        onChanged: onChanged,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        style: TextStyle(color: textColor),
-        placeholderStyle: TextStyle(color: placeholderColor),
-        inputFormatters: inputFormatters,
-        maxLength: maxLength,
-      ),
-    );
-  }
-
-  Widget _buildAmountField({
-    required TextEditingController controller,
-    required String hint,
-    required Function(String) onChanged,
-    required Color inputBgColor,
-    required Color textColor,
-    required Color placeholderColor,
-    bool error = false,
-  }) {
-    Color bottomBorderColor;
-    if (error) {
-      bottomBorderColor = CupertinoColors.systemRed;
-    } else if (controller.text.trim().isNotEmpty && !error) {
-      bottomBorderColor = CupertinoColors.activeBlue;
-    } else {
-      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: inputBgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border(
-          bottom: BorderSide(
-            color: bottomBorderColor,
-            width: 1.5,
-          ),
-        ),
-      ),
-      child: CupertinoTextField(
-        controller: controller,
-        placeholder: hint,
-        onChanged: onChanged,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        style: TextStyle(color: textColor),
-        placeholderStyle: TextStyle(color: placeholderColor),
-        inputFormatters: [AmountInputFormatter()],
-      ),
-    );
-  }
-
-  Widget _buildDatePickerField({
-    required DateTime purchaseDate,
-    required VoidCallback onTap,
-    required bool isDarkMode,
-  }) {
-    final bgColor = isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.white;
-    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    final iconColor = isDarkMode
-        ? CupertinoColors.systemGrey
-        : CupertinoColors.inactiveGray;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-          border: const Border(
-            bottom: BorderSide(color: CupertinoColors.systemGrey, width: 0.5),
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(
-              '${purchaseDate.year}-${purchaseDate.month.toString().padLeft(2, '0')}-${purchaseDate.day.toString().padLeft(2, '0')}',
-              style: TextStyle(fontSize: 16, color: textColor),
-            ),
-            const Spacer(),
-            Icon(
-              CupertinoIcons.calendar,
-              size: 16,
-              color: iconColor,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DatePickerModal extends StatefulWidget {
-  final DateTime initialDate;
-  final ValueChanged<DateTime> onConfirm;
-
-  const _DatePickerModal({
-    required this.initialDate,
-    required this.onConfirm,
-  });
-
-  @override
-  State<_DatePickerModal> createState() => _DatePickerModalState();
-}
-
-class _DatePickerModalState extends State<_DatePickerModal> {
-  late DateTime _tempDate;
-
-  @override
-  void initState() {
-    super.initState();
-    _tempDate = widget.initialDate;
-  }
-
-  void _updateTempDate({int? year, int? month, int? day}) {
-    setState(() {
-      int y = year ?? _tempDate.year;
-      int m = month ?? _tempDate.month;
-      int d = day ?? _tempDate.day;
-      int maxDays = DateTime(y, m + 1, 0).day;
-      if (d > maxDays) d = maxDays;
-      _tempDate = DateTime(y, m, d);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final now = DateTime.now();
-    final years = List.generate(10, (i) => now.year - 5 + i);
-    final months = List.generate(12, (i) => i + 1);
-    final days = List.generate(
-      DateTime(_tempDate.year, _tempDate.month + 1, 0).day,
-          (i) => i + 1,
-    );
-
-    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
-    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
-    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
-      background: isDarkMode
-          ? CupertinoColors.white.withValues(alpha: 0.05)
-          : CupertinoColors.black.withValues(alpha: 0.03),
-    );
-
-    return CupertinoPopupSurface(
-      child: Container(
-        height: 280,
-        decoration: BoxDecoration(
-          color: panelBgColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-        ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 200,
-              child: Row(
-                children: [
-                  _buildPickerColumn(
-                    years,
-                    years.indexOf(_tempDate.year),
-                    '年',
-                        (i) => _updateTempDate(year: years[i]),
-                    panelBgColor,
-                    textColor,
-                    selectionOverlay,
-                  ),
-                  _buildPickerColumn(
-                    months,
-                    _tempDate.month - 1,
-                    '月',
-                        (i) => _updateTempDate(month: i + 1),
-                    panelBgColor,
-                    textColor,
-                    selectionOverlay,
-                  ),
-                  _buildPickerColumn(
-                    days,
-                    _tempDate.day - 1,
-                    '日',
-                        (i) => _updateTempDate(day: i + 1),
-                    panelBgColor,
-                    textColor,
-                    selectionOverlay,
-                  ),
-                ],
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minSize: 0,
+                onPressed: () => _confirmDeleteTransaction(tx),
+                child: Icon(
+                  CupertinoIcons.delete,
+                  size: 18,
+                  color: CupertinoColors.systemRed,
+                ),
               ),
-            ),
-            Container(
-              height: 0.5,
-              color: isDarkMode
-                  ? CupertinoColors.separator
-                  : CupertinoColors.opaqueSeparator,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  GlassButton(
-                    label: '取消',
-                    onPressed: () => Navigator.pop(context),
-                    isPrimary: false,
-                    height: 44,
-                    borderRadius: 30,
-                  ),
-                  const SizedBox(width: 12),
-                  GlassButton(
-                    label: '完成',
-                    onPressed: () {
-                      widget.onConfirm(_tempDate);
-                      Navigator.pop(context);
-                    },
-                    isPrimary: true,
-                    height: 44,
-                    borderRadius: 30,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPickerColumn(
-      List<int> items,
-      int initial,
-      String unit,
-      ValueChanged<int> onChanged,
-      Color bgColor,
-      Color textColor,
-      Widget overlay,
-      ) {
-    return Expanded(
-      child: CupertinoPicker(
-        scrollController: FixedExtentScrollController(initialItem: initial),
-        itemExtent: 40,
-        backgroundColor: bgColor,
-        selectionOverlay: overlay,
-        onSelectedItemChanged: onChanged,
-        children: items.map((item) => Center(
-          child: Text('$item$unit', style: TextStyle(color: textColor, fontSize: 16)),
-        )).toList(),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -445,7 +445,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${holding.fundCode} | ${holding.purchaseAmount.toStringAsFixed(2)}元 | ${holding.purchaseShares.toStringAsFixed(2)}份',
+                  '${holding.fundCode} | ${holding.totalCost.toStringAsFixed(2)}元 | ${holding.totalShares.toStringAsFixed(2)}份',
                   style: TextStyle(fontSize: 11, color: secondaryTextColor),
                 ),
                 if (holding.remarks.isNotEmpty)

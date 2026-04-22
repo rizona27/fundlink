@@ -203,11 +203,11 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       }
       if (_filters['minAmount']!.isNotEmpty) {
         final min = double.tryParse(_filters['minAmount']!);
-        if (min != null) holdings = holdings.where((h) => h.purchaseAmount >= min).toList();
+        if (min != null) holdings = holdings.where((h) => h.totalCost >= min).toList();
       }
       if (_filters['maxAmount']!.isNotEmpty) {
         final max = double.tryParse(_filters['maxAmount']!);
-        if (max != null) holdings = holdings.where((h) => h.purchaseAmount <= max).toList();
+        if (max != null) holdings = holdings.where((h) => h.totalCost <= max).toList();
       }
       if (_filters['profitMin']!.isNotEmpty) {
         final minProfitPercent = double.tryParse(_filters['profitMin']!);

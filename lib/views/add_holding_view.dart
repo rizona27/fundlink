@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
@@ -113,12 +114,17 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   final TextEditingController _fundCodeController = TextEditingController();
   final TextEditingController _purchaseAmountController = TextEditingController();
   final TextEditingController _purchaseSharesController = TextEditingController();
+  final TextEditingController _feeRateController = TextEditingController(); // 交易费率
   final TextEditingController _remarksController = TextEditingController();
 
   bool _clientNameError = false;
   bool _fundCodeError = false;
   bool _amountError = false;
   bool _sharesError = false;
+
+  String _fundName = ''; // 基金名称
+  double? _currentNav; // 当前净值
+  DateTime? _navDate; // 净值日期
 
   DateTime _purchaseDate = DateTime.now();
   bool _isSaving = false;
@@ -137,6 +143,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     _fundCodeController.dispose();
     _purchaseAmountController.dispose();
     _purchaseSharesController.dispose();
+    _feeRateController.dispose();
     _remarksController.dispose();
     super.dispose();
   }
@@ -201,6 +208,75 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       );
     }
     _validateFundCode(newValue);
+    
+    // 当输入完整的6位基金代码时，查询基金信息
+    if (newValue.length == 6) {
+      _fetchFundInfo(newValue);
+    } else {
+      setState(() {
+        _fundName = '';
+        _currentNav = null;
+      });
+    }
+  }
+  
+  Future<void> _fetchFundInfo(String fundCode) async {
+    try {
+      final fundInfo = await _fundService.fetchFundInfo(fundCode);
+      if (mounted) {
+        setState(() {
+          _fundName = fundInfo['fundName'] as String? ?? '';
+          _currentNav = fundInfo['currentNav'] as double?;
+          _navDate = fundInfo['navDate'] as DateTime?;
+          
+          // 调试信息
+          print('基金代码: $fundCode');
+          print('基金名称: $_fundName');
+          print('当前净值: $_currentNav');
+          print('净值日期: $_navDate');
+        });
+      }
+    } catch (e) {
+      print('获取基金信息失败: $e');
+    }
+  }
+  
+  // 根据金额、费率、净值计算份额
+  void _calculateShares() {
+    final amountText = _purchaseAmountController.text.trim();
+    final feeRateText = _feeRateController.text.trim();
+    
+    if (amountText.isEmpty || _currentNav == null || _currentNav! <= 0) {
+      print('无法计算份额: amount=$amountText, nav=$_currentNav');
+      return;
+    }
+    
+    final amount = double.tryParse(amountText);
+    // 交易费率默认为0
+    final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
+    
+    if (amount == null || amount <= 0) {
+      print('无法计算份额: amount=$amount');
+      return;
+    }
+    
+    // 份额 = 金额 / (1 + 费率%) / 净值
+    // 例如：10000 / (1 + 0/100) / 2.3361 = 4280.75
+    final shares = amount / (1 + feeRate / 100) / _currentNav!;
+    
+    print('=== 份额计算调试 ===');
+    print('金额: $amount');
+    print('费率: $feeRate%');
+    print('净值: $_currentNav');
+    print('计算公式: $amount / (1 + $feeRate/100) / $_currentNav');
+    print('计算结果: $shares');
+    
+    if (shares > 0) {
+      // 始终更新份额，确保与金额同步
+      _purchaseSharesController.text = shares.toStringAsFixed(2);
+      print('自动填充份额: ${_purchaseSharesController.text}');
+    }
+    print('==================');
   }
 
   Future<void> _saveHolding() async {
@@ -214,46 +290,146 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     final amount = double.parse(_purchaseAmountController.text.trim());
     final shares = double.parse(_purchaseSharesController.text.trim());
     final fundCode = _fundCodeController.text.trim().toUpperCase();
-
-    final fundInfo = await _fundService.fetchFundInfo(fundCode);
-    final fundName = fundInfo['fundName'] as String? ?? '待加载';
-    final currentNav = fundInfo['currentNav'] as double? ?? 0;
-    final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
-    final isValid = fundInfo['isValid'] as bool? ?? false;
-    final navReturn1m = fundInfo['navReturn1m'] as double?;
-    final navReturn3m = fundInfo['navReturn3m'] as double?;
-    final navReturn6m = fundInfo['navReturn6m'] as double?;
-    final navReturn1y = fundInfo['navReturn1y'] as double?;
-
-    final newHolding = FundHolding(
-      clientName: _clientNameController.text.trim(),
-      clientId: _clientIdController.text.trim(),
-      fundCode: fundCode,
-      fundName: fundName,
-      purchaseAmount: amount,
-      purchaseShares: shares,
-      purchaseDate: _purchaseDate,
-      navDate: navDate,
-      currentNav: currentNav,
-      isValid: isValid,
-      remarks: _remarksController.text.trim(),
-      navReturn1m: navReturn1m,
-      navReturn3m: navReturn3m,
-      navReturn6m: navReturn6m,
-      navReturn1y: navReturn1y,
-    );
+    final clientId = _clientIdController.text.trim();
+    final clientName = _clientNameController.text.trim();
 
     try {
-      await _dataManager.addHolding(newHolding);
-      await _dataManager.addLog('新增持仓: $fundCode - ${newHolding.clientName}', type: LogType.success);
-      context.showToast('添加成功');
+      final clientId = _clientIdController.text.trim();
+      final clientName = _clientNameController.text.trim();
+      
+      // 检查是否已存在该客户+基金的持仓
+      // 规则：1. 如果客户号相同，则一定是同一客户
+      //       2. 如果客户号为空但用户名相同，可能是同名客户，需要二次确认
+      List<FundHolding> existingHoldings = [];
+      bool isSameClientId = false;
+      bool isSameClientName = false;
+      bool shouldMerge = false; // 是否应该合并
+      
+      if (clientId.isNotEmpty) {
+        // 有客户号，优先按客户号匹配
+        existingHoldings = _dataManager.holdings
+            .where((h) => h.clientId == clientId && h.fundCode == fundCode)
+            .toList();
+        
+        if (existingHoldings.isNotEmpty) {
+          isSameClientId = true;
+        }
+      }
+      
+      // 如果没找到相同客户号的，再按用户名查找
+      if (existingHoldings.isEmpty) {
+        existingHoldings = _dataManager.holdings
+            .where((h) => h.clientName == clientName && h.fundCode == fundCode)
+            .toList();
+        
+        if (existingHoldings.isNotEmpty) {
+          isSameClientName = true;
+        }
+      }
+
+      if (existingHoldings.isNotEmpty) {
+        final existingHolding = existingHoldings.first;
+        
+        if (isSameClientId) {
+          // 客户号相同，直接提示合并
+          final confirmed = await showCupertinoDialog<bool>(
+            context: context,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('检测到重复持仓'),
+              content: Text(
+                '客户 "$clientName" ($clientId) 已持有基金 "$fundCode"\n'
+                '当前持有：${existingHolding.totalShares.toStringAsFixed(2)}份\n'
+                '\n是否将本次交易合并到该持仓？',
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('取消'),
+                  onPressed: () => Navigator.pop(context, false),
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  child: const Text('合并'),
+                  onPressed: () => Navigator.pop(context, true),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed != true) {
+            setState(() => _isSaving = false);
+            return;
+          }
+          shouldMerge = true; // 标记为需要合并
+        } else if (isSameClientName) {
+          // 用户名相同但客户号不同，提示可能存在同名客户
+          final confirmed = await showCupertinoDialog<bool>(
+            context: context,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('检测到同名客户'),
+              content: Text(
+                '发现同名客户 "$clientName" 已持有基金 "$fundCode"\n'
+                '原客户号：${existingHolding.clientId.isEmpty ? "无" : existingHolding.clientId}\n'
+                '当前客户号：${clientId.isEmpty ? "无" : clientId}\n'
+                '原持有份额：${existingHolding.totalShares.toStringAsFixed(2)}份\n'
+                '\n是否为同一客户？\n'
+                '- 是：合并到现有持仓\n'
+                '- 否：创建新持仓',
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('否，创建新持仓'),
+                  onPressed: () => Navigator.pop(context, false),
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  child: const Text('是，合并'),
+                  onPressed: () => Navigator.pop(context, true),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed != true) {
+            // 用户选择创建新持仓，继续执行
+          } else {
+            // 用户选择合并
+            shouldMerge = true; // 标记为需要合并
+          }
+        }
+      }
+
+      // 获取基金信息
+      final fundInfo = await _fundService.fetchFundInfo(fundCode);
+      final fundName = fundInfo['fundName'] as String? ?? '待加载';
+      final currentNav = fundInfo['currentNav'] as double? ?? 0;
+      final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
+      final isValid = fundInfo['isValid'] as bool? ?? false;
+
+      // 创建交易记录（买入）
+      final transaction = TransactionRecord(
+        clientId: clientId,
+        clientName: clientName,
+        fundCode: fundCode,
+        fundName: fundName,
+        type: TransactionType.buy,
+        amount: amount,
+        shares: shares,
+        tradeDate: _purchaseDate,
+        nav: currentNav > 0 ? currentNav : null,
+        remarks: _remarksController.text.trim(),
+      );
+
+      // 添加交易记录（会自动重建持仓）
+      await _dataManager.addTransaction(transaction);
+      
+      context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
 
       if (mounted) {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      await _dataManager.addLog('添加持仓失败: $e', type: LogType.error);
-      context.showToast('添加失败');
+      await _dataManager.addLog('添加交易失败: $e', type: LogType.error);
+      context.showToast('添加失败: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -293,10 +469,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
         leading: const SizedBox.shrink(),
-        middle: const Text(
-          '新增持仓',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+        middle: const Text(''), // 去掉标题
         backgroundColor: Colors.transparent,
       ),
       child: SafeArea(
@@ -330,25 +503,74 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   _buildRowField(
                     label: '基金代码',
                     required: true,
-                    child: _buildTextField(
-                      controller: _fundCodeController,
-                      hint: '请输入6位基金代码',
-                      error: _fundCodeError,
-                      onChanged: _onFundCodeChanged,
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTextField(
+                          controller: _fundCodeController,
+                          hint: '请输入6位基金代码',
+                          error: _fundCodeError,
+                          onChanged: _onFundCodeChanged,
+                          inputBgColor: inputBgColor,
+                          textColor: textColor,
+                          placeholderColor: placeholderColor,
+                        ),
+                        if (_fundName.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDarkMode 
+                                  ? const Color(0xFF007AFF).withValues(alpha: 0.1)
+                                  : const Color(0xFF007AFF).withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _fundName,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDarkMode 
+                                          ? CupertinoColors.systemBlue
+                                          : const Color(0xFF007AFF),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (_currentNav != null && _currentNav! > 0 && _navDate != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${_currentNav!.toStringAsFixed(4)}(${_navDate!.month.toString().padLeft(2, '0')}-${_navDate!.day.toString().padLeft(2, '0')})',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDarkMode 
+                                          ? CupertinoColors.white.withOpacity(0.7)
+                                          : const Color(0xFF8E8E93),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),
                   _buildRowField(
-                    label: '购买金额',
+                    label: '交易金额',
                     required: true,
                     child: _buildAmountField(
                       controller: _purchaseAmountController,
-                      hint: '请输入购买金额',
+                      hint: '请输入买入金额',
                       error: _amountError,
-                      onChanged: _validateAmount,
+                      onChanged: (value) {
+                        _validateAmount(value);
+                        _calculateShares(); // 自动计算份额
+                      },
                       inputBgColor: inputBgColor,
                       textColor: textColor,
                       placeholderColor: placeholderColor,
@@ -356,11 +578,26 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   ),
                   const SizedBox(height: 12),
                   _buildRowField(
-                    label: '购买份额',
+                    label: '交易费率',
+                    required: false,
+                    child: _buildAmountField(
+                      controller: _feeRateController,
+                      hint: '', // 无提示文字
+                      error: false,
+                      onChanged: (value) => _calculateShares(), // 自动计算份额
+                      inputBgColor: inputBgColor,
+                      textColor: textColor,
+                      placeholderColor: placeholderColor,
+                      suffix: '%',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildRowField(
+                    label: '交易份额',
                     required: true,
                     child: _buildAmountField(
                       controller: _purchaseSharesController,
-                      hint: '请输入购买份额',
+                      hint: '请输入买入份额',
                       error: _sharesError,
                       onChanged: _validateShares,
                       inputBgColor: inputBgColor,
@@ -583,6 +820,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     required Color textColor,
     required Color placeholderColor,
     bool error = false,
+    String? suffix,
   }) {
     Color bottomBorderColor;
     if (error) {
@@ -613,6 +851,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         style: TextStyle(color: textColor),
         placeholderStyle: TextStyle(color: placeholderColor),
         inputFormatters: [AmountInputFormatter()],
+        suffix: suffix != null
+            ? Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(suffix, style: TextStyle(color: placeholderColor)),
+              )
+            : null,
       ),
     );
   }
@@ -653,6 +897,99 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  // 基金代码输入框（左右分栏显示）
+  Widget _buildFundCodeField({
+    required TextEditingController controller,
+    required String fundName,
+    required bool error,
+    required Function(String) onChanged,
+    required Color inputBgColor,
+    required Color textColor,
+    required Color placeholderColor,
+    required bool isDarkMode,
+  }) {
+    Color bottomBorderColor;
+    if (error) {
+      bottomBorderColor = CupertinoColors.systemRed;
+    } else if (controller.text.trim().isNotEmpty && !error) {
+      bottomBorderColor = CupertinoColors.activeBlue;
+    } else {
+      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
+    }
+
+    // 构建右侧显示的文本：基金名称(截断) + 净值(日期)
+    String rightText = '';
+    if (fundName.isNotEmpty) {
+      // 基金名称最多6个汉字，后面加省略号
+      String displayName = fundName;
+      if (displayName.length > 6) {
+        displayName = displayName.substring(0, 6) + '...';
+      }
+      
+      // 如果有净值，添加净值信息
+      if (_currentNav != null && _currentNav! > 0 && _navDate != null) {
+        final navDateStr = '${_navDate!.month.toString().padLeft(2, '0')}-${_navDate!.day.toString().padLeft(2, '0')}';
+        rightText = '$displayName ${_currentNav!.toStringAsFixed(4)}($navDateStr)';
+      } else {
+        rightText = displayName;
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: inputBgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          bottom: BorderSide(
+            color: bottomBorderColor,
+            width: 1.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 左侧：基金代码输入框
+          Expanded(
+            flex: 2,
+            child: CupertinoTextField(
+              controller: controller,
+              placeholder: '请输入6位基金代码',
+              onChanged: onChanged,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+              placeholderStyle: TextStyle(color: placeholderColor),
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              keyboardType: TextInputType.number,
+              decoration: null, // 移除默认装饰
+            ),
+          ),
+          // 右侧：基金名称和净值显示
+          if (rightText.isNotEmpty)
+            Expanded(
+              flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(
+                  rightText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDarkMode 
+                        ? CupertinoColors.systemBlue
+                        : const Color(0xFF007AFF),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

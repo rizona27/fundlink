@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
 import '../views/fund_detail_view.dart';
+import '../widgets/transaction_history_dialog.dart';
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;
@@ -96,16 +97,22 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   }
 
   int get holdingDays {
-    final startDate = DateTime(widget.holding.purchaseDate.year, widget.holding.purchaseDate.month, widget.holding.purchaseDate.day);
+    // 获取首次交易日期
+    if (_dataManager == null) return 0;
+    final transactions = _dataManager!.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
+    if (transactions.isEmpty) return 0;
+    
+    final firstTradeDate = transactions.last.tradeDate; // 因为是倒序，最后一条是最早的
+    final startDate = DateTime(firstTradeDate.year, firstTradeDate.month, firstTradeDate.day);
     final endDate = DateTime(widget.holding.navDate.year, widget.holding.navDate.month, widget.holding.navDate.day);
     return endDate.difference(startDate).inDays + 1;
   }
 
   double get absoluteReturnPercentage {
-    if (!widget.holding.isValid || widget.holding.purchaseAmount <= 0 || widget.holding.currentNav <= 0) {
+    if (!widget.holding.isValid || widget.holding.totalCost <= 0 || widget.holding.currentNav <= 0) {
       return 0.0;
     }
-    return (widget.holding.profit / widget.holding.purchaseAmount) * 100;
+    return (widget.holding.profit / widget.holding.totalCost) * 100;
   }
 
   String _formatDate(DateTime date) => '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -157,7 +164,7 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   void _onCopyClientId() {
     if (widget.holding.clientId.isEmpty) return;
     Clipboard.setData(ClipboardData(text: widget.holding.clientId));
-    widget.onCopyClientId?.call();
+    widget.onShowToast?.call('客户号已复制: ${widget.holding.clientId}');
   }
 
   void _onGenerateReport() {
@@ -168,25 +175,51 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
     widget.onGenerateReport?.call();
   }
 
+  void _onViewTransactionHistory() {
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: true, // 允许点击外部关闭
+      builder: (context) => TransactionHistoryDialog(
+        clientId: widget.holding.clientId,
+        fundCode: widget.holding.fundCode,
+        fundName: widget.holding.fundName,
+      ),
+    );
+  }
+
+  void _onNavigateToDetail() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => FundDetailPage(holding: widget.holding),
+      ),
+    );
+  }
+
   String get _reportContent {
     final profit = widget.holding.profit;
     final annualizedReturn = widget.holding.annualizedProfitRate;
-    final purchaseAmountFormatted = _formatPurchaseAmountForReport(widget.holding.purchaseAmount);
+    final purchaseAmountFormatted = _formatPurchaseAmountForReport(widget.holding.totalCost);
     final formattedCurrentNav = widget.holding.currentNav.toStringAsFixed(4);
     final formattedAbsoluteProfit = _formatProfitAmountForReport(profit);
     final formattedAnnualizedProfit = _formatPercentageForReport(annualizedReturn);
     final formattedAbsoluteReturnPercentage = _formatPercentageForReport(absoluteReturnPercentage);
     final navDateString = _formatDate(widget.holding.navDate);
+    
+    // 获取首次交易日期
+    final dataManager = _dataManager!;
+    final transactions = dataManager.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
+    final firstTradeDate = transactions.isNotEmpty ? transactions.last.tradeDate : DateTime.now();
+    final holdingDays = DateTime.now().difference(firstTradeDate).inDays;
+    
     return '''
 ${widget.holding.fundName} | ${widget.holding.fundCode}
-├ 购买日期:${_formatSwiftShortDate(widget.holding.purchaseDate)}
+├ 首次购买:${_formatSwiftShortDate(firstTradeDate)}
 ├ 持有天数:${holdingDays}天
-├ 购买金额:$purchaseAmountFormatted
+├ 持有份额:${widget.holding.totalShares.toStringAsFixed(2)}份
 ├ 最新净值:$formattedCurrentNav | $navDateString
 ├ 收益:$formattedAbsoluteProfit
 ├ 收益率:$formattedAnnualizedProfit(年化)
-└ 收益率:$formattedAbsoluteReturnPercentage(绝对)
-''';
+└ 收益率:$formattedAbsoluteReturnPercentage(绝对)''';
   }
 
   String _formatPurchaseAmountForReport(double amount) {
@@ -216,12 +249,11 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
 
   String _formatSwiftShortDate(DateTime date) => '${date.year.toString().substring(2)}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  void _onNavigateToDetail() {
-    Navigator.of(context).push(
-      CupertinoPageRoute(
-        builder: (context) => FundDetailPage(holding: widget.holding),
-      ),
-    );
+  DateTime _getFirstTradeDate() {
+    if (_dataManager == null) return widget.holding.navDate;
+    final transactions = _dataManager!.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
+    if (transactions.isEmpty) return widget.holding.navDate;
+    return transactions.last.tradeDate; // 因为是倒序，最后一条是最早的
   }
 
   @override
@@ -343,8 +375,8 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: Text('购买金额: ${_formatPurchaseAmount(widget.holding.purchaseAmount)}', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode)))),
-                      Expanded(child: Text('份额: ${widget.holding.purchaseShares.toStringAsFixed(2)}份', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode)), overflow: TextOverflow.ellipsis)),
+                      Expanded(child: Text('累计投入: ${_formatPurchaseAmount(widget.holding.totalCost)}', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode)))),
+                      Expanded(child: Text('份额: ${widget.holding.totalShares.toStringAsFixed(2)}份', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode)), overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -390,8 +422,8 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text('购买日期: ', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
-                      Text(_formatShortDate(widget.holding.purchaseDate), style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
+                      Text('首次购买: ', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
+                      Text(_formatShortDate(_getFirstTradeDate()), style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
                       const Spacer(),
                       Text('持有天数: ', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
                       Text('${holdingDays}天', style: TextStyle(fontSize: 11, color: _getSecondaryTextColor(isDarkMode))),
@@ -408,14 +440,22 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                   ],
                   const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minSize: 0,
                         onPressed: _onNavigateToDetail,
-                        child: const Text('详情', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
+                        child: const Text('基金详情', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
                       ),
+                      const SizedBox(width: 8),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minSize: 0,
+                        onPressed: () => _onViewTransactionHistory(),
+                        child: const Text('交易记录',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF34C759))),
+                      ),
+                      const Spacer(),
                       Row(
                         children: [
                           CupertinoButton(

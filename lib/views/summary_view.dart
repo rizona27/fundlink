@@ -429,9 +429,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   double? _calculateHoldingReturn(FundHolding holding) {
-    if (holding.purchaseAmount <= 0) return null;
+    if (holding.totalCost <= 0) return null;
     final profit = _dataManager.calculateProfit(holding);
-    return (profit.absolute / holding.purchaseAmount) * 100;
+    return (profit.absolute / holding.totalCost) * 100;
   }
 
   Color _getReturnColor(double? value) {
