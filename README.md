@@ -20,12 +20,7 @@
 
 ## 🚀 部署与运行
 
-### 环境要求
 
-- Flutter SDK >= 3.x
-- CocoaPods (用于 iOS 编译)
-
-### 快速开始
 
 Bash
 
@@ -42,34 +37,6 @@ flutter pub run build_runner build
 # 启动项目
 flutter run
 ```
-
-### Windows Release 打包
-
-```powershell
-# 1. 清理构建缓存
-flutter clean
-
-# 2. 获取依赖
-flutter pub get
-
-# 3. 构建 Release 版本
-flutter build windows --release
-
-# 4. 打包分发文件（使用提供的脚本）
-powershell -ExecutionPolicy Bypass -File .\package_windows.ps1
-
-# 或者手动打包
-New-Item -ItemType Directory -Force -Path "FundLink-v1.0.6-Windows"
-Copy-Item "build\windows\x64\runner\Release\*" -Destination "FundLink-v1.0.6-Windows" -Recurse
-```
-
-**重要提示：**
-- ⚠️ 分发时必须包含所有 `.dll` 文件和 `data` 文件夹
-- ❌ 不要只复制 `fundlink.exe` 文件
-- ✅ 将整个文件夹压缩后分发给用户
-- ✅ 已使用静态链接，无需安装 Visual C++ Redistributable
-
-------
 
 ## 📝 项目结构
 
