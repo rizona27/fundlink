@@ -7,6 +7,7 @@ import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
+import '../models/fund_info_cache.dart';
 import '../services/fund_service.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
 
@@ -31,7 +32,9 @@ class DataManager extends ChangeNotifier {
   static const String _themeModeKey = 'theme_mode';
   static const String _valuationCacheKey = 'valuation_cache';
   static const String _showHoldersOnSummaryCardKey = 'show_holders_on_summary_card';
+  static const String _fundInfoCacheKey = 'fund_info_cache';
   static const int _valuationCacheValidSeconds = 180;
+  static const int _fundInfoCacheValidDays = 7; // 基金信息缓存有效期7天
 
   List<FundHolding> _holdings = [];
   List<TransactionRecord> _transactions = [];
@@ -39,6 +42,7 @@ class DataManager extends ChangeNotifier {
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
   Map<String, Map<String, dynamic>> _valuationCache = {};
+  Map<String, FundInfoCache> _fundInfoCache = {}; // 基金信息缓存
   bool _showHoldersOnSummaryCard = true;
 
   bool _isValuationRefreshing = false;
@@ -58,6 +62,27 @@ class DataManager extends ChangeNotifier {
   String get lastValuationUpdateTime => _lastValuationUpdateTime;
   bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
   bool get showHoldersOnSummaryCard => _showHoldersOnSummaryCard;
+
+  // 获取基金信息缓存
+  FundInfoCache? getFundInfoCache(String fundCode) {
+    final cached = _fundInfoCache[fundCode];
+    if (cached == null) return null;
+    
+    // 检查缓存是否过期（7天）
+    final now = DateTime.now();
+    if (now.difference(cached.cacheTime).inDays > _fundInfoCacheValidDays) {
+      _fundInfoCache.remove(fundCode);
+      return null;
+    }
+    
+    return cached;
+  }
+
+  // 保存基金信息缓存
+  void saveFundInfoCache(FundInfoCache fundInfo) {
+    _fundInfoCache[fundInfo.fundCode] = fundInfo;
+    saveFundInfoCacheToPrefs(); // 异步保存到本地
+  }
 
   List<FundHolding> get pinnedHoldings {
     return _holdings.where((h) => h.isPinned).toList();
@@ -116,6 +141,7 @@ class DataManager extends ChangeNotifier {
     _showHoldersOnSummaryCard = prefs.getBool(_showHoldersOnSummaryCardKey) ?? true;
 
     await loadValuationCache();
+    await loadFundInfoCache();
 
     notifyListeners();
   }
@@ -186,6 +212,33 @@ class DataManager extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_valuationCacheKey, jsonEncode(_valuationCache));
     debugPrint('DataManager: 估值缓存已保存');
+  }
+
+  // 加载基金信息缓存
+  Future<void> loadFundInfoCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_fundInfoCacheKey);
+    if (jsonStr != null) {
+      try {
+        final List<dynamic> rawList = jsonDecode(jsonStr);
+        _fundInfoCache = {};
+        for (final raw in rawList) {
+          final fundInfo = FundInfoCache.fromJson(Map<String, dynamic>.from(raw));
+          _fundInfoCache[fundInfo.fundCode] = fundInfo;
+        }
+        debugPrint('DataManager: 基金信息缓存加载成功，共 ${_fundInfoCache.length} 条');
+      } catch (e) {
+        debugPrint('DataManager: 加载基金信息缓存失败: $e');
+      }
+    }
+  }
+
+  // 保存基金信息缓存到本地
+  Future<void> saveFundInfoCacheToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheList = _fundInfoCache.values.map((info) => info.toJson()).toList();
+    await prefs.setString(_fundInfoCacheKey, jsonEncode(cacheList));
+    debugPrint('DataManager: 基金信息缓存已保存，共 ${cacheList.length} 条');
   }
 
   Map<String, dynamic>? getValuation(String fundCode) {

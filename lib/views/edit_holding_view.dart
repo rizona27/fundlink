@@ -195,26 +195,24 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('客户', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text(holding.clientName, 
-                                style: TextStyle(
-                                  fontSize: 13, 
-                                  fontWeight: FontWeight.w500,
-                                  color: textColor,
-                                )),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('客户号', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
-                            const SizedBox(height: 4),
-                            Text(holding.clientId.isNotEmpty ? holding.clientId : '-', 
-                                style: TextStyle(
-                                  fontSize: 13, 
-                                  color: secondaryTextColor.withOpacity(0.7),
-                                )),
+                            Row(
+                              children: [
+                                Text(holding.clientName, 
+                                    style: TextStyle(
+                                      fontSize: 13, 
+                                      fontWeight: FontWeight.w500,
+                                      color: textColor,
+                                    )),
+                                if (holding.clientId.isNotEmpty) ...[
+                                  const SizedBox(width: 4),
+                                  Text('(${holding.clientId})', 
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: secondaryTextColor.withOpacity(0.7),
+                                      )),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),

@@ -410,20 +410,22 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _expandedFundCodes.remove(fundCode);
       } else {
         _expandedFundCodes.add(fundCode);
-        // 展开后延迟滚动，等待动画完成
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _scrollToKey('fund_$fundCode');
-        });
+        
+        // 只有当展开的是最后一个卡片时，才滚动到底部
+        final sortedCodes = _sortedFundCodes;
+        if (sortedCodes.isNotEmpty && fundCode == sortedCodes.last) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _scrollToBottom();
+          });
+        }
       }
     });
   }
 
-  // 滚动到指定key的widget
-  void _scrollToKey(String key) {
+  // 滚动到底部
+  void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    // 使用简单的滚动到底部策略
-    // 因为展开的是最后一个元素，所以滚动到最大位置即可
     Future.delayed(const Duration(milliseconds: 400), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(

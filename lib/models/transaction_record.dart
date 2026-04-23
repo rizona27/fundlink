@@ -50,6 +50,7 @@ class TransactionRecord {
   final double? fee;
   final String remarks;
   final DateTime createdAt;
+  final bool isAfter1500; // 是否15:00后交易（影响净值日期选择）
 
   TransactionRecord({
     String? id,
@@ -65,6 +66,7 @@ class TransactionRecord {
     this.fee,
     this.remarks = '',
     DateTime? createdAt,
+    this.isAfter1500 = false, // 默认15:00前
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -88,6 +90,7 @@ class TransactionRecord {
     double? fee,
     String? remarks,
     DateTime? createdAt,
+    bool? isAfter1500,
   }) {
     return TransactionRecord(
       id: id ?? this.id,
@@ -103,6 +106,7 @@ class TransactionRecord {
       fee: fee ?? this.fee,
       remarks: remarks ?? this.remarks,
       createdAt: createdAt ?? this.createdAt,
+      isAfter1500: isAfter1500 ?? this.isAfter1500,
     );
   }
 
@@ -121,6 +125,7 @@ class TransactionRecord {
       'fee': fee,
       'remarks': remarks,
       'createdAt': createdAt.toIso8601String(),
+      'isAfter1500': isAfter1500,
     };
   }
 
@@ -139,6 +144,7 @@ class TransactionRecord {
       fee: json['fee'] != null ? (json['fee'] as num).toDouble() : null,
       remarks: json['remarks'] as String? ?? '',
       createdAt: DateTime.parse(json['createdAt'] as String),
+      isAfter1500: json['isAfter1500'] as bool? ?? false,
     );
   }
 

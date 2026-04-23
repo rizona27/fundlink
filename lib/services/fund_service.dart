@@ -8,6 +8,7 @@ import 'package:html/dom.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
+import '../models/fund_info_cache.dart';
 import 'data_manager.dart';
 
 class FundService {
@@ -40,10 +41,29 @@ class FundService {
 
     _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
 
+    // 优先检查 DataManager 的持久化缓存
+    if (!forceRefresh && _dataManager != null) {
+      final cachedInfo = _dataManager!.getFundInfoCache(code);
+      if (cachedInfo != null) {
+        debugPrint('✅ [持久化缓存命中] 基金代码 $code');
+        _dataManager?.addLog('基金代码 $code: 使用持久化缓存数据', type: LogType.cache);
+        return {
+          'fundName': cachedInfo.fundName,
+          'currentNav': cachedInfo.currentNav,
+          'navDate': cachedInfo.navDate,
+          'navReturn1m': cachedInfo.navReturn1m,
+          'navReturn3m': cachedInfo.navReturn3m,
+          'navReturn6m': cachedInfo.navReturn6m,
+          'navReturn1y': cachedInfo.navReturn1y,
+          'isValid': true,
+        };
+      }
+    }
+
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
-      debugPrint('✅ [缓存命中] 基金代码 $code');
-      _dataManager?.addLog('基金代码 $code: 使用缓存数据', type: LogType.cache);
+      debugPrint('✅ [内存缓存命中] 基金代码 $code');
+      _dataManager?.addLog('基金代码 $code: 使用内存缓存数据', type: LogType.cache);
       return cached;
     }
 
@@ -58,6 +78,23 @@ class FundService {
 
     try {
       final result = await future;
+      
+      // 保存到 DataManager 的持久化缓存
+      if (_dataManager != null && result['isValid'] == true) {
+        final fundInfo = FundInfoCache(
+          fundCode: code,
+          fundName: result['fundName'] as String,
+          currentNav: result['currentNav'] as double,
+          navDate: result['navDate'] as DateTime,
+          navReturn1m: result['navReturn1m'] as double?,
+          navReturn3m: result['navReturn3m'] as double?,
+          navReturn6m: result['navReturn6m'] as double?,
+          navReturn1y: result['navReturn1y'] as double?,
+          cacheTime: DateTime.now(),
+        );
+        _dataManager!.saveFundInfoCache(fundInfo);
+      }
+      
       if (!forceRefresh) _cache[code] = result;
       return result;
     } catch (e) {

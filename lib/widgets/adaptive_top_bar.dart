@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
@@ -334,6 +335,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   void _updateHideProgress() {
+    // 如果是PC端（Windows/macOS/Linux），始终显示顶部工具栏
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      _hideController.value = 1.0; // 始终完全显示
+      return;
+    }
+
     _scrollTimer?.cancel();
     _scrollTimer = Timer(const Duration(milliseconds: 8), () {
       if (!mounted) return;

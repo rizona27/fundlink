@@ -116,6 +116,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   final TextEditingController _purchaseAmountController = TextEditingController();
   final TextEditingController _purchaseSharesController = TextEditingController();
   final TextEditingController _feeRateController = TextEditingController(); // 交易费率
+  final TextEditingController _confirmNavController = TextEditingController(); // 确认净值
   final TextEditingController _remarksController = TextEditingController();
 
   bool _clientNameError = false;
@@ -130,6 +131,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   List<NetWorthPoint>? _cachedTrendData; // 缓存的净值趋势数据
 
   DateTime _purchaseDate = DateTime.now();
+  bool _isAfter1500 = false; // 是否15:00后交易
   bool _isSaving = false;
 
   @override
@@ -147,6 +149,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     _purchaseAmountController.dispose();
     _purchaseSharesController.dispose();
     _feeRateController.dispose();
+    _confirmNavController.dispose();
     _remarksController.dispose();
     super.dispose();
   }
@@ -280,15 +283,17 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     }
     
     final amount = double.tryParse(amountText);
-    // 交易费率默认为0
+    // 交易费率默认为0，输入的是百分比值（如1.5表示1.5%）
     final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
     
     if (amount == null || amount <= 0) {
       return;
     }
     
-    // 份额 = 金额 / (1 + 费率%) / 确认净值
-    // 例如：10000 / (1 + 0/100) / 2.3361 = 4280.75
+    // 内扣法计算：
+    // 净申购金额 = 申购金额 / (1 + 费率)
+    // 确认份额 = 净申购金额 / 确认净值
+    // 例如：500000 / (1 + 0.015) / 2.2366 = 220249.86
     final shares = amount / (1 + feeRate / 100) / _confirmNav!;
     
     if (shares > 0) {
@@ -420,10 +425,14 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                 '当前客户号：${clientId.isEmpty ? "无" : clientId}\n'
                 '原持有份额：${existingHolding.totalShares.toStringAsFixed(2)}份\n'
                 '\n是否为同一客户？\n'
-                '- 是：合并到现有持仓\n'
-                '- 否：创建新持仓',
+                '• 是，合并：将本次交易合并到现有持仓（使用原客户号）\n'
+                '• 否，创建新持仓：为当前客户号创建独立的持仓记录',
               ),
               actions: [
+                CupertinoDialogAction(
+                  child: const Text('取消'),
+                  onPressed: () => Navigator.pop(context, null),
+                ),
                 CupertinoDialogAction(
                   child: const Text('否，创建新持仓'),
                   onPressed: () => Navigator.pop(context, false),
@@ -436,6 +445,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
               ],
             ),
           );
+
+          // 用户点击取消
+          if (confirmed == null) {
+            setState(() => _isSaving = false);
+            return;
+          }
 
           if (confirmed != true) {
             // 用户选择创建新持仓，继续执行
@@ -465,6 +480,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         tradeDate: _purchaseDate,
         nav: _confirmNav != null && _confirmNav! > 0 ? _confirmNav : (currentNav > 0 ? currentNav : null),
         remarks: _remarksController.text.trim(),
+        isAfter1500: _isAfter1500,
       );
 
       // 添加交易记录（会自动重建持仓）
@@ -527,28 +543,70 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       
       if (trendData.isEmpty) return;
       
-      // 查找最接近目标日期的净值
-      NetWorthPoint? closestPoint;
+      // 根据15:00前后确定目标净值日期
+      // 15:00前：使用当天净值（如果当天没有，用下一个交易日）
+      // 15:00后：使用下一个交易日净值
+      DateTime targetNavDate = _isAfter1500 
+          ? targetDate.add(const Duration(days: 1)) // 15:00后，查找下一天
+          : targetDate; // 15:00前，查找当天
+      
+      // 查找策略：
+      // 1. 首先查找等于目标净值日期的净值
+      // 2. 如果找不到，查找晚于目标净值日期的第一个净值
+      // 3. 如果都找不到，查找最接近的净值（前后3天内）
+      
+      NetWorthPoint? exactPoint; // 精确匹配
+      NetWorthPoint? nextPoint;  // 下一个交易日
+      NetWorthPoint? closestPoint; // 最接近
       int minDiff = 999999;
       
       for (final point in trendData) {
-        final diff = point.date.difference(targetDate).inDays.abs();
-        if (diff < minDiff) {
-          minDiff = diff;
+        final diff = point.date.difference(targetNavDate).inDays;
+        
+        // 精确匹配
+        if (diff == 0) {
+          exactPoint = point;
+          break;
+        }
+        
+        // 查找下一个交易日（晚于目标净值日期的第一个）
+        if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
+          nextPoint = point;
+        }
+        
+        // 查找最接近的（用于兜底）
+        final absDiff = diff.abs();
+        if (absDiff < minDiff) {
+          minDiff = absDiff;
           closestPoint = point;
         }
       }
       
-      // 如果找到的日期在3天以内，认为有效
-      if (closestPoint != null && minDiff <= 3) {
+      // 优先级：精确匹配 > 下一个交易日 > 最接近（3天内）
+      NetWorthPoint? selectedPoint;
+      String matchType = '';
+      
+      if (exactPoint != null) {
+        selectedPoint = exactPoint;
+        matchType = '精确匹配';
+      } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
+        selectedPoint = nextPoint;
+        matchType = '下一交易日';
+      } else if (closestPoint != null && minDiff <= 3) {
+        selectedPoint = closestPoint;
+        matchType = '最接近';
+      }
+      
+      if (selectedPoint != null) {
         setState(() {
-          _confirmNav = closestPoint!.nav;
-          _navDate = closestPoint!.date;
-          _confirmNavController.text = closestPoint!.nav.toStringAsFixed(4);
+          _confirmNav = selectedPoint!.nav;
+          _navDate = selectedPoint!.date;
+          _confirmNavController.text = selectedPoint!.nav.toStringAsFixed(4);
         });
-        print('找到日期 ${closestPoint!.date} 的净值: ${closestPoint!.nav}');
+        final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
+        print('$timeLabel交易 - $matchType - 选择日期: $targetDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
       } else {
-        print('未找到 $targetDate 附近的净值数据（最近的是 ${closestPoint?.date}，相差${minDiff}天）');
+        print('未找到 $targetNavDate 附近的净值数据（最近的是 ${closestPoint?.date}，相差${minDiff}天）');
       }
     } catch (e) {
       print('获取历史净值失败: $e');
@@ -663,6 +721,38 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   ),
                   const SizedBox(height: 12),
                   _buildRowField(
+                    label: '购买日期',
+                    required: true,
+                    child: _buildDatePickerField(
+                      purchaseDate: _purchaseDate,
+                      onTap: _showDatePickerModal,
+                      isDarkMode: isDarkMode,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildRowField(
+                    label: '交易时间',
+                    required: true,
+                    child: _buildTimeSegmentField(
+                      isAfter1500: _isAfter1500,
+                      onChanged: (value) async {
+                        setState(() {
+                          _isAfter1500 = value;
+                        });
+                        // 重新获取净值
+                        if (_fundCodeController.text.trim().length == 6) {
+                          await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);
+                          // 净值更新后，重新计算份额
+                          print('切换15:00前后，重新计算份额。当前确认净值: $_confirmNav, 金额: ${_purchaseAmountController.text}, 费率: ${_feeRateController.text}');
+                          _calculateShares();
+                          print('计算后份额: ${_purchaseSharesController.text}');
+                        }
+                      },
+                      isDarkMode: isDarkMode,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildRowField(
                     label: '交易金额',
                     required: true,
                     child: _buildAmountField(
@@ -697,29 +787,20 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   _buildRowField(
                     label: '确认净值',
                     required: true,
-                    child: Builder(
-                      builder: (context) {
-                        final controller = TextEditingController(
-                          text: _confirmNav != null && _confirmNav! > 0 
-                              ? _confirmNav!.toStringAsFixed(4) 
-                              : '',
-                        );
-                        return _buildAmountField(
-                          controller: controller,
-                          hint: '可修改，默认当前净值',
-                          error: false,
-                          onChanged: (value) {
-                            final nav = double.tryParse(value.trim());
-                            if (nav != null && nav > 0) {
-                              setState(() => _confirmNav = nav);
-                              _calculateShares(); // 重新计算份额
-                            }
-                          },
-                          inputBgColor: inputBgColor,
-                          textColor: textColor,
-                          placeholderColor: placeholderColor,
-                        );
+                    child: _buildAmountField(
+                      controller: _confirmNavController,
+                      hint: '可修改，默认当前净值',
+                      error: false,
+                      onChanged: (value) {
+                        final nav = double.tryParse(value.trim());
+                        if (nav != null && nav > 0) {
+                          setState(() => _confirmNav = nav);
+                          _calculateShares(); // 重新计算份额
+                        }
                       },
+                      inputBgColor: inputBgColor,
+                      textColor: textColor,
+                      placeholderColor: placeholderColor,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -730,20 +811,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       controller: _purchaseSharesController,
                       hint: '请输入买入份额',
                       error: _sharesError,
-                      onChanged: _validateShares,
+                      onChanged: (value) {
+                        _validateShares(value);
+                        _calculateNavFromShares(); // 根据份额反推净值
+                      },
                       inputBgColor: inputBgColor,
                       textColor: textColor,
                       placeholderColor: placeholderColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRowField(
-                    label: '购买日期',
-                    required: true,
-                    child: _buildDatePickerField(
-                      purchaseDate: _purchaseDate,
-                      onTap: _showDatePickerModal,
-                      isDarkMode: isDarkMode,
                     ),
                   ),
                 ],
@@ -1028,6 +1102,71 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  // 交易时间选择器（15:00前/后）
+  Widget _buildTimeSegmentField({
+    required bool isAfter1500,
+    required ValueChanged<bool> onChanged,
+    required bool isDarkMode,
+  }) {
+    final bgColor = isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6;
+    final selectedColor = const Color(0xFF007AFF);
+    final unselectedTextColor = isDarkMode 
+        ? CupertinoColors.white.withValues(alpha: 0.6)
+        : CupertinoColors.systemGrey;
+
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(false),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: !isAfter1500 ? selectedColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '15:00前',
+                  style: TextStyle(
+                    color: !isAfter1500 ? CupertinoColors.white : unselectedTextColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(true),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isAfter1500 ? selectedColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '15:00后',
+                  style: TextStyle(
+                    color: isAfter1500 ? CupertinoColors.white : unselectedTextColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -43,6 +43,31 @@ flutter pub run build_runner build
 flutter run
 ```
 
+### Windows Release 打包
+
+```powershell
+# 1. 清理构建缓存
+flutter clean
+
+# 2. 获取依赖
+flutter pub get
+
+# 3. 构建 Release 版本
+flutter build windows --release
+
+# 4. 打包分发文件（使用提供的脚本）
+powershell -ExecutionPolicy Bypass -File .\package_windows.ps1
+
+# 或者手动打包
+New-Item -ItemType Directory -Force -Path "FundLink-v1.0.6-Windows"
+Copy-Item "build\windows\x64\runner\Release\*" -Destination "FundLink-v1.0.6-Windows" -Recurse
+```
+
+**重要提示：**
+- ⚠️ 分发时必须包含所有 `.dll` 文件和 `data` 文件夹
+- ❌ 不要只复制 `fundlink.exe` 文件
+- ✅ 将整个文件夹压缩后分发给用户
+
 ------
 
 ## 📝 项目结构
@@ -60,6 +85,7 @@ lib/
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性
+│   ├── fund_info_cache.dart               # 基金信息缓存模型，存储基金代码、名称、当前净值、估值等数据的本地缓存结构
 │   ├── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息（金额、份额、日期、净值、手续费等）
 │   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型（信息/成功/错误/警告/网络/缓存）、时间戳
 │   ├── net_worth_point.dart               # 净值及趋势
@@ -81,6 +107,7 @@ lib/
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
+│   ├── transaction_history_view.dart      # 交易历史视图页，完整展示某客户某基金的所有交易记录，支持删除单条交易
 │   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明
 │
 └── widgets/

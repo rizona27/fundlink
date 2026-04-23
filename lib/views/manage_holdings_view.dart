@@ -24,6 +24,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   final Set<String> _expandedClients = {};
   int _dataVersion = 0;
   double _scrollOffset = 0;
+  final ScrollController _scrollController = ScrollController();
 
   final TextEditingController _renameController = TextEditingController();
 
@@ -49,6 +50,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   void dispose() {
     _dataManager.removeListener(_onDataManagerChanged);
     _renameController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -89,6 +91,21 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   bool get _areAnyCardsExpanded => _expandedClients.isNotEmpty;
 
+  // 滚动到底部
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
   void _toggleAllCards() {
     setState(() {
       if (_areAnyCardsExpanded) {
@@ -109,6 +126,20 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
       return '$displayName($clientId)';
     }
     return displayName;
+  }
+
+  // 获取脱敏后的客户名
+  String _getClientName(String key) {
+    final parts = key.split('|');
+    final clientName = parts[0];
+    return _dataManager.obscuredName(clientName);
+  }
+
+  // 获取客户号
+  String? _getClientId(String key) {
+    final parts = key.split('|');
+    final clientId = parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
+    return clientId;
   }
 
   Color _getClientColor(String name) {
@@ -323,6 +354,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                     titleFontSize: 18,
                   )
                       : ListView.builder(
+                    controller: _scrollController,
                     key: ValueKey(_dataVersion),
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
                     itemCount: _sortedKeys.length,
@@ -342,7 +374,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                       return Column(
                         children: [
                           GradientCard(
-                            title: _getDisplayName(key),
+                            title: _getClientName(key),
+                            clientId: _getClientId(key),
                             subtitle: '持仓数:',
                             countValue: holdings.length,
                             gradient: gradient,
@@ -354,6 +387,14 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                   _expandedClients.remove(key);
                                 } else {
                                   _expandedClients.add(key);
+                                  
+                                  // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                                  final sortedKeys = _sortedKeys;
+                                  if (sortedKeys.isNotEmpty && key == sortedKeys.last) {
+                                    Future.delayed(const Duration(milliseconds: 100), () {
+                                      _scrollToBottom();
+                                    });
+                                  }
                                 }
                               });
                             },

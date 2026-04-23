@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import '../models/transaction_record.dart';
+import '../models/net_worth_point.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../widgets/toast.dart';
@@ -47,6 +48,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   bool _hasManuallyEditedShares = false; // 用户是否手动编辑过份额
   bool _hasManuallyEditedAmount = false; // 用户是否手动编辑过金额
   bool _isFetchingNav = false; // 是否正在获取净值
+  bool _isAfter1500 = false; // 是否15:00后交易
 
   @override
   void didChangeDependencies() {
@@ -57,23 +59,38 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 
   Future<void> _fetchCurrentNavIfNeeded() async {
-    // 如果当前净值为0或null，尝试从API获取
-    if (widget.currentNav == null || widget.currentNav! <= 0) {
-      setState(() => _isFetchingNav = true);
-      try {
-        final fundService = FundService(_dataManager);
-        final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
-        if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+    // 总是尝试获取最新净值，无论是否有缓存
+    setState(() => _isFetchingNav = true);
+    try {
+      final fundService = FundService(_dataManager);
+      final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
+      if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+        if (mounted) {
           setState(() {
             _navController.text = fundInfo['currentNav'].toStringAsFixed(4);
           });
         }
-      } catch (e) {
-        debugPrint('获取基金净值失败: $e');
-      } finally {
+      } else if (widget.currentNav != null && widget.currentNav! > 0) {
+        // 如果API获取失败，但有传入的净值，使用传入的值
         if (mounted) {
-          setState(() => _isFetchingNav = false);
+          setState(() {
+            _navController.text = widget.currentNav!.toStringAsFixed(4);
+          });
         }
+      }
+    } catch (e) {
+      debugPrint('获取基金净值失败: $e');
+      // 如果API失败，但有传入的净值，使用传入的值
+      if (widget.currentNav != null && widget.currentNav! > 0) {
+        if (mounted) {
+          setState(() {
+            _navController.text = widget.currentNav!.toStringAsFixed(4);
+          });
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingNav = false);
       }
     }
   }
@@ -172,9 +189,71 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       context: context,
       builder: (context) => _TransactionDatePickerModal(
         initialDate: _tradeDate,
-        onConfirm: (date) => setState(() => _tradeDate = date),
+        onConfirm: (date) {
+          setState(() => _tradeDate = date);
+          // 日期改变后，重新获取净值
+          _fetchNavByDate();
+        },
       ),
     );
+  }
+  
+  // 根据日期获取基金净值
+  Future<void> _fetchNavByDate() async {
+    try {
+      final fundService = FundService(_dataManager);
+      
+      // 根据15:00前后确定目标净值日期
+      DateTime targetNavDate = _isAfter1500 
+          ? _tradeDate.add(const Duration(days: 1)) // 15:00后，查找下一天
+          : _tradeDate; // 15:00前，查找当天
+      
+      final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
+      if (trendData.isEmpty) return;
+      
+      // 查找策略：精确匹配 > 下一交易日 > 最接近（3天内）
+      NetWorthPoint? exactPoint;
+      NetWorthPoint? nextPoint;
+      NetWorthPoint? closestPoint;
+      int minDiff = 999999;
+      
+      for (final point in trendData) {
+        final diff = point.date.difference(targetNavDate).inDays;
+        
+        if (diff == 0) {
+          exactPoint = point;
+          break;
+        }
+        
+        if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
+          nextPoint = point;
+        }
+        
+        final absDiff = diff.abs();
+        if (absDiff < minDiff) {
+          minDiff = absDiff;
+          closestPoint = point;
+        }
+      }
+      
+      NetWorthPoint? selectedPoint;
+      if (exactPoint != null) {
+        selectedPoint = exactPoint;
+      } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
+        selectedPoint = nextPoint;
+      } else if (closestPoint != null && minDiff <= 3) {
+        selectedPoint = closestPoint;
+      }
+      
+      if (selectedPoint != null && mounted) {
+        setState(() {
+          _navController.text = selectedPoint!.nav.toStringAsFixed(4);
+        });
+        print('加仓/减仓 - 选择日期: $_tradeDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
+      }
+    } catch (e) {
+      print('获取历史净值失败: $e');
+    }
   }
 
   Future<void> _submit() async {
@@ -280,6 +359,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         tradeDate: _tradeDate,
         nav: nav,
         remarks: '',
+        isAfter1500: _isAfter1500,
       );
 
       await _dataManager.addTransaction(transaction);
@@ -525,6 +605,68 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                             Icon(CupertinoIcons.calendar, size: 16, color: secondaryColor),
                           ],
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 交易时间选择（15:00前/后）
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _isAfter1500 = false);
+                                _fetchNavByDate(); // 重新获取净值
+                                _calculateEstimated(); // 重新计算份额/金额
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: !_isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '15:00前',
+                                  style: TextStyle(
+                                    color: !_isAfter1500 ? CupertinoColors.white : secondaryColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _isAfter1500 = true);
+                                _fetchNavByDate(); // 重新获取净值
+                                _calculateEstimated(); // 重新计算份额/金额
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '15:00后',
+                                  style: TextStyle(
+                                    color: _isAfter1500 ? CupertinoColors.white : secondaryColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),

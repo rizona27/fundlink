@@ -174,12 +174,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     });
   }
 
-  // 滚动到指定key的widget
-  void _scrollToKey(String key) {
+  // 滚动到底部
+  void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    // 使用简单的滚动到底部策略
-    // 因为展开的是最后一个元素，所以滚动到最大位置即可
     Future.delayed(const Duration(milliseconds: 400), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -480,10 +478,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                         _expandedClients.remove(group.key);
                       } else {
                         _expandedClients.add(group.key);
-                        // 展开后延迟滚动，等待动画完成
-                        Future.delayed(const Duration(milliseconds: 100), () {
-                          _scrollToKey('client_${group.key}');
-                        });
+                        
+                        // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                        final groups = _clientGroups;
+                        if (groups.isNotEmpty && group.key == groups.last.key) {
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            _scrollToBottom();
+                          });
+                        }
                       }
                     });
                   },
