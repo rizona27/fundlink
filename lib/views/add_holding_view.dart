@@ -7,6 +7,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
+import '../models/net_worth_point.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
@@ -126,6 +127,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   double? _currentNav; // 当前净值（从API获取）
   DateTime? _navDate; // 净值日期
   double? _confirmNav; // 确认净值（用户可修改）
+  List<NetWorthPoint>? _cachedTrendData; // 缓存的净值趋势数据
 
   DateTime _purchaseDate = DateTime.now();
   bool _isSaving = false;
@@ -232,6 +234,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _navDate = fundInfo['navDate'] as DateTime?;
           _confirmNav = _currentNav; // 默认使用API返回的净值作为确认净值
           
+          // 更新确认净值输入框
+          if (_confirmNav != null && _confirmNav! > 0) {
+            _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+          }
+          
           // 调试信息
           print('基金代码: $fundCode');
           print('基金名称: $_fundName');
@@ -239,9 +246,27 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           print('确认净值: $_confirmNav');
           print('净值日期: $_navDate');
         });
+        
+        // 后台缓存净值趋势数据，用于后续根据日期查找
+        _cacheTrendData(fundCode);
       }
     } catch (e) {
       print('获取基金信息失败: $e');
+    }
+  }
+  
+  // 缓存净值趋势数据
+  Future<void> _cacheTrendData(String fundCode) async {
+    try {
+      final trendData = await _fundService.fetchNetWorthTrend(fundCode);
+      if (mounted) {
+        setState(() {
+          _cachedTrendData = trendData;
+        });
+        print('已缓存 ${trendData.length} 条净值数据');
+      }
+    } catch (e) {
+      print('缓存净值趋势数据失败: $e');
     }
   }
   
@@ -296,11 +321,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     if (nav > 0) {
       setState(() {
         _confirmNav = nav;
-      });
-      // 更新确认净值输入框
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // 找到确认净值的TextField并更新
-        // 这里通过setState触发重建即可
+        // 更新确认净值输入框的文本
+        _confirmNavController.text = nav.toStringAsFixed(4);
       });
     }
   }
@@ -470,13 +492,67 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       context: context,
       builder: (context) => _DatePickerModal(
         initialDate: _purchaseDate,
-        onConfirm: (newDate) {
+        onConfirm: (newDate) async {
           setState(() {
             _purchaseDate = newDate;
           });
+          
+          // 选择日期后，尝试获取该日期的净值
+          if (_fundCodeController.text.trim().length == 6) {
+            await _fetchNavByDate(_fundCodeController.text.trim(), newDate);
+          }
         },
       ),
     );
+  }
+  
+  // 根据日期获取基金净值
+  Future<void> _fetchNavByDate(String fundCode, DateTime targetDate) async {
+    try {
+      List<NetWorthPoint> trendData;
+      
+      // 优先使用缓存的数据
+      if (_cachedTrendData != null && _cachedTrendData!.isNotEmpty) {
+        trendData = _cachedTrendData!;
+        print('使用缓存的净值数据');
+      } else {
+        // 如果没有缓存，则重新获取
+        trendData = await _fundService.fetchNetWorthTrend(fundCode);
+        if (mounted) {
+          setState(() {
+            _cachedTrendData = trendData;
+          });
+        }
+      }
+      
+      if (trendData.isEmpty) return;
+      
+      // 查找最接近目标日期的净值
+      NetWorthPoint? closestPoint;
+      int minDiff = 999999;
+      
+      for (final point in trendData) {
+        final diff = point.date.difference(targetDate).inDays.abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestPoint = point;
+        }
+      }
+      
+      // 如果找到的日期在3天以内，认为有效
+      if (closestPoint != null && minDiff <= 3) {
+        setState(() {
+          _confirmNav = closestPoint!.nav;
+          _navDate = closestPoint!.date;
+          _confirmNavController.text = closestPoint!.nav.toStringAsFixed(4);
+        });
+        print('找到日期 ${closestPoint!.date} 的净值: ${closestPoint!.nav}');
+      } else {
+        print('未找到 $targetDate 附近的净值数据（最近的是 ${closestPoint?.date}，相差${minDiff}天）');
+      }
+    } catch (e) {
+      print('获取历史净值失败: $e');
+    }
   }
 
   @override
