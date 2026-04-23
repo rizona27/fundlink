@@ -261,7 +261,10 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final profit = widget.holding.profit;
     final absoluteReturn = widget.holding.profitRate;
-    final annualizedReturn = widget.holding.annualizedProfitRate;
+    // 使用DataManager的calculateProfit方法获取准确的年化收益率
+    final annualizedReturn = _dataManager != null 
+        ? _dataManager!.calculateProfit(widget.holding).annualized 
+        : 0.0;
     final bool hasNoData = !widget.holding.isValid || widget.holding.currentNav <= 0;
     final isPinned = widget.holding.isPinned;
 

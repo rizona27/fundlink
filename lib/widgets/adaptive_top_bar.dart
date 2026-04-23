@@ -157,7 +157,11 @@ extension SortKeyExtension on SortKey {
       case SortKey.profit:
         return holding.profit;
       case SortKey.profitRate:
-        return holding.annualizedProfitRate;
+        // 使用DataManager的calculateProfit方法获取准确的年化收益率
+        if (dataManager != null) {
+          return dataManager.calculateProfit(holding).annualized;
+        }
+        return 0.0;
       case SortKey.days:
         if (dataManager == null) return 0.0;
         final transactions = dataManager.getTransactionHistory(holding.clientId, holding.fundCode);

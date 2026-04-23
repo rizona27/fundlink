@@ -459,6 +459,7 @@ class DataManager extends ChangeNotifier {
       isValid: existingHolding.isValid,
       isPinned: existingHolding.isPinned,
       pinnedTimestamp: existingHolding.pinnedTimestamp,
+      navReturn1w: existingHolding.navReturn1w,
       navReturn1m: existingHolding.navReturn1m,
       navReturn3m: existingHolding.navReturn3m,
       navReturn6m: existingHolding.navReturn6m,
@@ -602,6 +603,7 @@ class DataManager extends ChangeNotifier {
         final index = _holdings.indexWhere((h) => h.id == holding.id);
         if (index != -1) {
           final updated = _holdings[index].copyWith(
+            navReturn1w: fetched['navReturn1w'],
             navReturn1m: fetched['navReturn1m'],
             navReturn3m: fetched['navReturn3m'],
             navReturn6m: fetched['navReturn6m'],

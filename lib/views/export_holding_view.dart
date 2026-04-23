@@ -42,6 +42,16 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
     ExportField(id: 'fundName', label: '基金名称', required: false, selected: false),
     ExportField(id: 'currentNav', label: '当前净值', required: false, selected: false),
     ExportField(id: 'navDate', label: '净值日期', required: false, selected: false),
+    ExportField(id: 'profit', label: '绝对收益', required: false, selected: false),
+    ExportField(id: 'profitRate', label: '绝对收益率(%)', required: false, selected: false),
+    ExportField(id: 'annualizedProfitRate', label: '年化收益率(%)', required: false, selected: false),
+    ExportField(id: 'holdingDays', label: '持有天数', required: false, selected: false),
+    ExportField(id: 'totalValue', label: '持仓市值', required: false, selected: false),
+    ExportField(id: 'navReturn1w', label: '近1周收益(%)', required: false, selected: false),
+    ExportField(id: 'navReturn1m', label: '近1月收益(%)', required: false, selected: false),
+    ExportField(id: 'navReturn3m', label: '近3月收益(%)', required: false, selected: false),
+    ExportField(id: 'navReturn6m', label: '近6月收益(%)', required: false, selected: false),
+    ExportField(id: 'navReturn1y', label: '近1年收益(%)', required: false, selected: false),
     ExportField(id: 'remarks', label: '备注', required: false, selected: false),
   ];
 

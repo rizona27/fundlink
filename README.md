@@ -84,8 +84,9 @@ lib/
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值，间隔可设置
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供"交易记录"入口
+    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供“交易记录”入口
     ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用
+    ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现（近1周~成立来），优先使用API数据，自动计算补充周期
     ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
     ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑

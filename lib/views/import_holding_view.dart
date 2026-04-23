@@ -3,10 +3,12 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:universal_html/html.dart' as html;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -37,6 +39,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     FieldConfig(id: 'purchaseAmount', label: '购买金额', required: true, mappedIndex: -1, hint: '购买金额/金额/申购金额/成本'),
     FieldConfig(id: 'purchaseShares', label: '购买份额', required: true, mappedIndex: -1, hint: '份额/当前份额/持仓份额'),
     FieldConfig(id: 'purchaseDate', label: '购买日期', required: true, mappedIndex: -1, hint: '购买日期/申购日期/成交日期'),
+    FieldConfig(id: 'transactionType', label: '交易类型', required: false, mappedIndex: -1, hint: '加仓/减仓(选填)'),
+    FieldConfig(id: 'transactionAmount', label: '交易金额', required: false, mappedIndex: -1, hint: '加仓/减仓金额(选填)'),
+    FieldConfig(id: 'transactionShares', label: '交易份额', required: false, mappedIndex: -1, hint: '加仓/减仓份额(选填)'),
+    FieldConfig(id: 'transactionDate', label: '交易日期', required: false, mappedIndex: -1, hint: '加仓/减仓日期(选填)'),
   ];
 
   List<Map<String, dynamic>> _previewData = [];
@@ -197,15 +203,27 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           ),
         ),
         const SizedBox(height: 16),
-        Center(
-          child: GlassButton(
-            label: '返回',
-            onPressed: () => Navigator.of(context).pop(),
-            isPrimary: false,
-            width: null,
-            minWidth: 120,
-            height: 44,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GlassButton(
+              label: '下载模板',
+              onPressed: _downloadTemplate,
+              isPrimary: false,
+              width: null,
+              minWidth: 120,
+              height: 44,
+            ),
+            const SizedBox(width: 12),
+            GlassButton(
+              label: '返回',
+              onPressed: () => Navigator.of(context).pop(),
+              isPrimary: false,
+              width: null,
+              minWidth: 120,
+              height: 44,
+            ),
+          ],
         ),
       ],
     );
@@ -509,6 +527,36 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         }
         else if (config.id == 'purchaseDate') {
           if (header.contains('购买日期') || header.contains('申购日期') || header.contains('成交日期')) {
+            config.mappedIndex = i;
+            break;
+          }
+        }
+        else if (config.id == 'transactionType') {
+          if (header.contains('交易类型') || header.contains('加减仓')) {
+            config.mappedIndex = i;
+            break;
+          }
+        }
+        else if (config.id == 'transactionAmount') {
+          if (header.contains('交易金额') || 
+              (header.contains('加仓') && header.contains('金额')) ||
+              (header.contains('减仓') && header.contains('金额'))) {
+            config.mappedIndex = i;
+            break;
+          }
+        }
+        else if (config.id == 'transactionShares') {
+          if (header.contains('交易份额') ||
+              (header.contains('加仓') && header.contains('份额')) ||
+              (header.contains('减仓') && header.contains('份额'))) {
+            config.mappedIndex = i;
+            break;
+          }
+        }
+        else if (config.id == 'transactionDate') {
+          if (header.contains('交易日期') ||
+              (header.contains('加仓') && header.contains('日期')) ||
+              (header.contains('减仓') && header.contains('日期'))) {
             config.mappedIndex = i;
             break;
           }
@@ -1071,6 +1119,57 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         ),
       ],
     );
+  }
+
+  Future<void> _downloadTemplate() async {
+    try {
+      // 创建示例数据 - 包含基础持仓和加减仓流水
+      final headers = [
+        '客户姓名', '客户号', '基金代码', '购买金额', '购买份额', '购买日期',
+        '交易类型(选填)', '交易金额(选填)', '交易份额(选填)', '交易日期(选填)'
+      ];
+      final sampleData = [
+        // 基础持仓（无加减仓）
+        ['张三', 'C001', '000001', '10000.00', '8000.00', '2024-01-15', '', '', '', ''],
+        // 有加仓记录
+        ['李四', 'C002', '110022', '20000.00', '15000.00', '2024-02-20', '加仓', '5000.00', '3500.00', '2024-03-15'],
+        // 有减仓记录
+        ['王五', 'C003', '519674', '5000.00', '4500.00', '2024-03-10', '减仓', '2000.00', '1800.00', '2024-04-10'],
+      ];
+
+      // 生成CSV内容
+      final csvData = [headers, ...sampleData];
+      final csvString = const ListToCsvConverter().convert(csvData);
+      final bytes = Uint8List.fromList(utf8.encode(csvString));
+
+      // 保存文件
+      if (kIsWeb) {
+        // Web端直接下载
+        final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute("download", "FundLink-Template.csv")
+          ..click();
+        html.Url.revokeObjectUrl(url);
+        if (mounted) context.showToast('模板已下载');
+      } else {
+        // 移动端/桌面端使用file_saver
+        final savedPath = await FileSaver.instance.saveAs(
+          name: 'FundLink-Template',
+          bytes: bytes,
+          fileExtension: 'csv',
+          mimeType: MimeType.other,
+        );
+        
+        if (savedPath != null && savedPath.isNotEmpty) {
+          if (mounted) context.showToast('模板已保存');
+        } else {
+          if (mounted) context.showToast('已取消保存');
+        }
+      }
+    } catch (e) {
+      if (mounted) context.showToast('生成模板失败: $e');
+    }
   }
 
   Future<void> _pickFile() async {

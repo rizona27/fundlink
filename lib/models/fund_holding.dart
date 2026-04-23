@@ -21,6 +21,7 @@ class FundHolding {
   final String remarks;
   final bool isPinned;
   final DateTime? pinnedTimestamp;
+  final double? navReturn1w;  // 近1周收益率
   final double? navReturn1m;
   final double? navReturn3m;
   final double? navReturn6m;
@@ -44,6 +45,7 @@ class FundHolding {
     this.remarks = '',
     this.isPinned = false,
     this.pinnedTimestamp,
+    this.navReturn1w,
     this.navReturn1m,
     this.navReturn3m,
     this.navReturn6m,
@@ -56,14 +58,14 @@ class FundHolding {
   double get profit => totalValue - totalCost;
   double get profitRate => totalCost > 0 ? profit / totalCost * 100 : 0;
 
+  // 注意：年化收益率需要通过DataManager.calculateProfit()获取准确值
+  // 此属性已废弃，仅保留用于向后兼容
+  @Deprecated('Use DataManager.calculateProfit() instead')
   double get annualizedProfitRate {
     if (totalCost <= 0 || transactionIds.isEmpty) return 0;
-    // TODO: 需要从交易记录中获取首次买入日期
-    // 这里暂时使用一个占位值，后续需要在DataManager中计算
-    final days = 365; // 临时占位
-    if (days <= 0) return 0;
-    final totalReturn = profit / totalCost;
-    return totalReturn / days * 365 * 100;
+    // 此计算不准确，因为无法获取真实的持有天数
+    // 请使用 DataManager.calculateProfit(this).annualized 获取准确的年化收益率
+    return 0; 
   }
 
   bool get isValidHolding {
@@ -88,6 +90,7 @@ class FundHolding {
     String? remarks,
     bool? isPinned,
     DateTime? pinnedTimestamp,
+    double? navReturn1w,
     double? navReturn1m,
     double? navReturn3m,
     double? navReturn6m,
@@ -109,6 +112,7 @@ class FundHolding {
       remarks: remarks ?? this.remarks,
       isPinned: isPinned ?? this.isPinned,
       pinnedTimestamp: pinnedTimestamp ?? this.pinnedTimestamp,
+      navReturn1w: navReturn1w ?? this.navReturn1w,
       navReturn1m: navReturn1m ?? this.navReturn1m,
       navReturn3m: navReturn3m ?? this.navReturn3m,
       navReturn6m: navReturn6m ?? this.navReturn6m,
@@ -133,6 +137,7 @@ class FundHolding {
       'remarks': remarks,
       'isPinned': isPinned,
       'pinnedTimestamp': pinnedTimestamp?.toIso8601String(),
+      'navReturn1w': navReturn1w,
       'navReturn1m': navReturn1m,
       'navReturn3m': navReturn3m,
       'navReturn6m': navReturn6m,
@@ -180,6 +185,7 @@ class FundHolding {
       pinnedTimestamp: json['pinnedTimestamp'] != null
           ? DateTime.parse(json['pinnedTimestamp'] as String)
           : null,
+      navReturn1w: json['navReturn1w'] as double?,
       navReturn1m: json['navReturn1m'] as double?,
       navReturn3m: json['navReturn3m'] as double?,
       navReturn6m: json['navReturn6m'] as double?,
@@ -219,6 +225,7 @@ class FundHolding {
     String remarks = '',
     bool isPinned = false,
     DateTime? pinnedTimestamp,
+    double? navReturn1w,
     double? navReturn1m,
     double? navReturn3m,
     double? navReturn6m,
@@ -258,6 +265,7 @@ class FundHolding {
       remarks: remarks,
       isPinned: isPinned,
       pinnedTimestamp: pinnedTimestamp,
+      navReturn1w: navReturn1w,
       navReturn1m: navReturn1m,
       navReturn3m: navReturn3m,
       navReturn6m: navReturn6m,

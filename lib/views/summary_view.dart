@@ -11,6 +11,7 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/gradient_card.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../widgets/fund_performance_dialog.dart';
 import 'add_holding_view.dart';
 
 class SummaryView extends StatefulWidget {
@@ -525,39 +526,48 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     final bgColor = isDarkMode ? Colors.black.withOpacity(0.95) : CupertinoColors.white;
     final holdersList = _buildHoldersListInline(holdings, isDarkMode);
 
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    return GestureDetector(
+      onTap: () => _showPerformanceDialog(
+        firstHolding.fundCode,
+        firstHolding.fundName,
+        holding: firstHolding,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _buildReturnItem('近1月', firstHolding.navReturn1m),
-              const SizedBox(width: 16),
-              _buildReturnItem('近3月', firstHolding.navReturn3m),
-              const SizedBox(width: 16),
-              _buildReturnItem('近6月', firstHolding.navReturn6m),
-              const SizedBox(width: 16),
-              _buildReturnItem('近1年', firstHolding.navReturn1y),
-            ],
-          ),
-          if (holdersList != null) ...[
-            const Divider(height: 24),
-            holdersList,
+      child: Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
           ],
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 业绩周期展示
+            Row(
+              children: [
+                _buildReturnItem('近1月', firstHolding.navReturn1m),
+                const SizedBox(width: 16),
+                _buildReturnItem('近3月', firstHolding.navReturn3m),
+                const SizedBox(width: 16),
+                _buildReturnItem('近6月', firstHolding.navReturn6m),
+                const SizedBox(width: 16),
+                _buildReturnItem('近1年', firstHolding.navReturn1y),
+              ],
+            ),
+            
+            if (holdersList != null) ...[
+              const Divider(height: 24),
+              holdersList,
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -593,6 +603,19 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     String sortType = _sortKey.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType}${_sortKey == SortKey.none ? '' : ' $orderText'}');
+  }
+
+  void _showPerformanceDialog(String fundCode, String fundName, {FundHolding? holding}) {
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => FundPerformanceDialog(
+        fundCode: fundCode,
+        fundName: fundName,
+        dataManager: _dataManager,
+        holding: holding,
+      ),
+    );
   }
 
   @override

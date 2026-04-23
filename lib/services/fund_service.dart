@@ -180,7 +180,24 @@ class FundService {
         debugPrint('⚠️ 未找到 Data_netWorthTrend');
       }
 
-      double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
+      double? navReturn1w, navReturn1m, navReturn3m, navReturn6m, navReturn1y;
+
+      // 尝试获取近1周收益率 (syl_1z)
+      final ret1wPatterns = [
+        RegExp(r'syl_1z\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_1z\s*=\s*'([^']*)'"),
+        RegExp(r'syl_1z\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret1wPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn1w = double.tryParse(val);
+            if (navReturn1w != null) break;
+          }
+        }
+      }
 
       final ret1mPatterns = [
         RegExp(r'syl_1y\s*=\s*"([^"]*)"'),
@@ -246,7 +263,7 @@ class FundService {
         }
       }
 
-      debugPrint('📈 收益率: 1月=$navReturn1m, 3月=$navReturn3m, 6月=$navReturn6m, 1年=$navReturn1y');
+      debugPrint('📈 收益率: 1周=$navReturn1w, 1月=$navReturn1m, 3月=$navReturn3m, 6月=$navReturn6m, 1年=$navReturn1y');
 
       final isValid = fundName != '未知基金' && currentNav > 0;
 
@@ -261,6 +278,7 @@ class FundService {
         'currentNav': currentNav,
         'navDate': navDate,
         'isValid': isValid,
+        'navReturn1w': navReturn1w,
         'navReturn1m': navReturn1m,
         'navReturn3m': navReturn3m,
         'navReturn6m': navReturn6m,

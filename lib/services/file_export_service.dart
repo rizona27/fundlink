@@ -71,7 +71,7 @@ class FileExportService {
   static Future<Uint8List> _generateCsvBytes(List<FundHolding> holdings, List<String> selectedFields) async {
     final headers = selectedFields.map((field) => _getFieldLabel(field)).toList();
     final rows = holdings.map((h) {
-      return selectedFields.map((field) => _getFieldValue(h, field)).toList();
+      return selectedFields.map((field) => _getFieldValue(h, field, dataManager: _dataManager)).toList();
     }).toList();
     final csvData = [headers, ...rows];
     final csvString = const ListToCsvConverter().convert(csvData);
@@ -90,7 +90,7 @@ class FileExportService {
     for (int r = 0; r < holdings.length; r++) {
       final holding = holdings[r];
       for (int c = 0; c < selectedFields.length; c++) {
-        final value = _getFieldValue(holding, selectedFields[c]);
+        final value = _getFieldValue(holding, selectedFields[c], dataManager: _dataManager);
         final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1);
         sheet?.cell(cellIndex).value = excel.TextCellValue(value);
       }
@@ -172,12 +172,22 @@ class FileExportService {
       case 'averageCost': return '平均成本';
       case 'currentNav': return '当前净值';
       case 'navDate': return '净值日期';
+      case 'profit': return '绝对收益';
+      case 'profitRate': return '绝对收益率(%)';
+      case 'annualizedProfitRate': return '年化收益率(%)';
+      case 'holdingDays': return '持有天数';
+      case 'totalValue': return '持仓市值';
+      case 'navReturn1w': return '近1周收益(%)';
+      case 'navReturn1m': return '近1月收益(%)';
+      case 'navReturn3m': return '近3月收益(%)';
+      case 'navReturn6m': return '近6月收益(%)';
+      case 'navReturn1y': return '近1年收益(%)';
       case 'remarks': return '备注';
       default: return fieldId;
     }
   }
 
-  static String _getFieldValue(FundHolding holding, String fieldId) {
+  static String _getFieldValue(FundHolding holding, String fieldId, {DataManager? dataManager}) {
     switch (fieldId) {
       case 'clientName': return holding.clientName;
       case 'clientId': return holding.clientId;
@@ -188,6 +198,29 @@ class FileExportService {
       case 'averageCost': return holding.averageCost.toStringAsFixed(4);
       case 'currentNav': return holding.currentNav.toStringAsFixed(4);
       case 'navDate': return holding.navDate.toIso8601String().split('T')[0];
+      case 'profit': return holding.profit.toStringAsFixed(2);
+      case 'profitRate': return holding.profitRate.toStringAsFixed(2);
+      case 'annualizedProfitRate': 
+        // 使用DataManager计算准确的年化收益率
+        if (dataManager != null) {
+          return dataManager.calculateProfit(holding).annualized.toStringAsFixed(2);
+        }
+        return '0.00';
+      case 'holdingDays':
+        if (dataManager != null) {
+          final transactions = dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
+          if (transactions.isNotEmpty) {
+            final days = DateTime.now().difference(transactions.last.tradeDate).inDays;
+            return days.toString();
+          }
+        }
+        return '0';
+      case 'totalValue': return holding.totalValue.toStringAsFixed(2);
+      case 'navReturn1w': return holding.navReturn1w?.toStringAsFixed(2) ?? '';
+      case 'navReturn1m': return holding.navReturn1m?.toStringAsFixed(2) ?? '';
+      case 'navReturn3m': return holding.navReturn3m?.toStringAsFixed(2) ?? '';
+      case 'navReturn6m': return holding.navReturn6m?.toStringAsFixed(2) ?? '';
+      case 'navReturn1y': return holding.navReturn1y?.toStringAsFixed(2) ?? '';
       case 'remarks': return holding.remarks;
       default: return '';
     }
@@ -204,6 +237,16 @@ class FileExportService {
       ExportFieldDefinition(id: 'averageCost', label: '平均成本', required: false),
       ExportFieldDefinition(id: 'currentNav', label: '当前净值', required: false),
       ExportFieldDefinition(id: 'navDate', label: '净值日期', required: false),
+      ExportFieldDefinition(id: 'profit', label: '绝对收益', required: false),
+      ExportFieldDefinition(id: 'profitRate', label: '绝对收益率(%)', required: false),
+      ExportFieldDefinition(id: 'annualizedProfitRate', label: '年化收益率(%)', required: false),
+      ExportFieldDefinition(id: 'holdingDays', label: '持有天数', required: false),
+      ExportFieldDefinition(id: 'totalValue', label: '持仓市值', required: false),
+      ExportFieldDefinition(id: 'navReturn1w', label: '近1周收益(%)', required: false),
+      ExportFieldDefinition(id: 'navReturn1m', label: '近1月收益(%)', required: false),
+      ExportFieldDefinition(id: 'navReturn3m', label: '近3月收益(%)', required: false),
+      ExportFieldDefinition(id: 'navReturn6m', label: '近6月收益(%)', required: false),
+      ExportFieldDefinition(id: 'navReturn1y', label: '近1年收益(%)', required: false),
       ExportFieldDefinition(id: 'remarks', label: '备注', required: false),
     ];
   }
