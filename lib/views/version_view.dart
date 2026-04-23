@@ -6,7 +6,7 @@ import '../widgets/adaptive_top_bar.dart';
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
-  static const String appVersion = 'v1.0.5';
+  static const String appVersion = 'v1.0.6';
 
   @override
   Widget build(BuildContext context) {
