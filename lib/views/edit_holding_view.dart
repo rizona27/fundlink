@@ -23,6 +23,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   late FundService _fundService;
   List<TransactionRecord> _transactions = [];
   bool _isLoading = false;
+  FundHolding? _currentHolding; // 当前持仓（动态更新）
 
   @override
   void didChangeDependencies() {
@@ -30,9 +31,20 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _loadTransactions();
+    _updateCurrentHolding(); // 初始化当前持仓
+  }
+
+  void _updateCurrentHolding() {
+    // 从DataManager中获取最新的持仓信息
+    final holding = _dataManager.holdings.firstWhere(
+      (h) => h.clientId == widget.holding.clientId && h.fundCode == widget.holding.fundCode,
+      orElse: () => widget.holding, // 如果找不到，使用传入的holding
+    );
+    setState(() => _currentHolding = holding);
   }
 
   void _loadTransactions() {
+    _updateCurrentHolding(); // 加载交易时也更新持仓
     setState(() {
       _transactions = _dataManager.getTransactionHistory(
         widget.holding.clientId,
@@ -51,9 +63,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         fundCode: widget.holding.fundCode,
         fundName: widget.holding.fundName,
         type: type,
-        currentNav: widget.holding.currentNav > 0 ? widget.holding.currentNav : null,
-        currentShares: widget.holding.totalShares,
-        onTransactionAdded: _loadTransactions,
+        currentNav: _currentHolding?.currentNav != null && _currentHolding!.currentNav > 0 
+            ? _currentHolding!.currentNav 
+            : null,
+        currentShares: _currentHolding?.totalShares ?? widget.holding.totalShares,
+        onTransactionAdded: () {
+          _loadTransactions(); // 重新加载交易记录
+          _dataManager.notifyListeners(); // 触发全局刷新
+        },
       ),
     );
   }
@@ -108,6 +125,9 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         ? CupertinoColors.white.withOpacity(0.6)
         : const Color(0xFF8E8E93);
 
+    // 使用最新的持仓信息
+    final holding = _currentHolding ?? widget.holding;
+
     return CupertinoPageScaffold(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -149,7 +169,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     children: [
                       Expanded(
                         child: Text(
-                          widget.holding.fundName,
+                          holding.fundName,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -158,7 +178,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                         ),
                       ),
                       Text(
-                        '(${widget.holding.fundCode})',
+                        '(${holding.fundCode})',
                         style: TextStyle(
                           fontSize: 14,
                           color: secondaryTextColor,
@@ -175,10 +195,10 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('客户', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text(widget.holding.clientName, 
+                            Text(holding.clientName, 
                                 style: TextStyle(
-                                  fontSize: 14, 
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13, 
+                                  fontWeight: FontWeight.w500,
                                   color: textColor,
                                 )),
                           ],
@@ -190,10 +210,10 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('客户号', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text(widget.holding.clientId.isNotEmpty ? widget.holding.clientId : '-', 
+                            Text(holding.clientId.isNotEmpty ? holding.clientId : '-', 
                                 style: TextStyle(
-                                  fontSize: 14, 
-                                  color: secondaryTextColor.withOpacity(0.7), // 客户号使用更浅的颜色
+                                  fontSize: 13, 
+                                  color: secondaryTextColor.withOpacity(0.7),
                                 )),
                           ],
                         ),
@@ -209,8 +229,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('累计投入', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text('${widget.holding.totalCost.toStringAsFixed(2)}元', 
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+                            Text('${holding.totalCost.toStringAsFixed(2)}元', 
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor)),
                           ],
                         ),
                       ),
@@ -220,8 +240,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('持有份额', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text('${widget.holding.totalShares.toStringAsFixed(2)}份', 
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+                            Text('${holding.totalShares.toStringAsFixed(2)}份', 
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor)),
                           ],
                         ),
                       ),
@@ -236,8 +256,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('平均成本', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text(widget.holding.averageCost.toStringAsFixed(4), 
-                                style: TextStyle(fontSize: 14, color: textColor)),
+                            Text(holding.averageCost.toStringAsFixed(4), 
+                                style: TextStyle(fontSize: 13, color: textColor)),
                           ],
                         ),
                       ),
@@ -247,8 +267,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           children: [
                             Text('当前净值', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
                             const SizedBox(height: 4),
-                            Text(widget.holding.currentNav.toStringAsFixed(4), 
-                                style: TextStyle(fontSize: 14, color: textColor)),
+                            Text(holding.currentNav.toStringAsFixed(4), 
+                                style: TextStyle(fontSize: 13, color: textColor)),
                           ],
                         ),
                       ),

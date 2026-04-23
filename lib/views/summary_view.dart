@@ -38,6 +38,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
+  final ScrollController _scrollController = ScrollController(); // 添加滚动控制器
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
@@ -128,6 +129,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _stopValuationTimer();
     _dataManager.removeListener(_dataListener);
     _scrollThrottleTimer?.cancel();
+    _scrollController.dispose(); // 释放滚动控制器
     super.dispose();
   }
 
@@ -408,6 +410,27 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _expandedFundCodes.remove(fundCode);
       } else {
         _expandedFundCodes.add(fundCode);
+        // 展开后延迟滚动，等待动画完成
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _scrollToKey('fund_$fundCode');
+        });
+      }
+    });
+  }
+
+  // 滚动到指定key的widget
+  void _scrollToKey(String key) {
+    if (!_scrollController.hasClients) return;
+    
+    // 使用简单的滚动到底部策略
+    // 因为展开的是最后一个元素，所以滚动到最大位置即可
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
       }
     });
   }
@@ -579,6 +602,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     final backgroundColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     final hasData = _hasData;
     final showHolderCount = !_dataManager.isPrivacyMode;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    const bottomNavBarHeight = 56.0;
+    final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
 
     final enableButtons = hasData;
 
@@ -672,8 +698,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                     return false;
                   },
                   child: ListView.builder(
+                    controller: _scrollController, // 添加滚动控制器
                     key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 8,
+                      bottom: totalBottomPadding,
+                    ),
                     itemCount: sortedCodes.length,
                     itemBuilder: (context, index) {
                       final fundCode = sortedCodes[index];
@@ -777,6 +809,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       }
 
                       return Column(
+                        key: ValueKey('fund_$fundCode'), // 添加key用于滚动定位
                         children: [
                           GradientCard(
                             title: first.fundName,

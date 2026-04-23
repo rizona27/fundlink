@@ -45,6 +45,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   Timer? _debounceTimer;
   Timer? _scrollThrottleTimer;
   late AnimationController _scrollAnimationController;
+  final ScrollController _scrollController = ScrollController(); // 添加滚动控制器
 
   @override
   bool get wantKeepAlive => true;
@@ -104,6 +105,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _scrollThrottleTimer?.cancel();
     _debounceTimer?.cancel();
     _scrollAnimationController.dispose();
+    _scrollController.dispose(); // 释放滚动控制器
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
@@ -169,6 +171,23 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   void _collapseAll() {
     setState(() {
       _expandedClients.clear();
+    });
+  }
+
+  // 滚动到指定key的widget
+  void _scrollToKey(String key) {
+    if (!_scrollController.hasClients) return;
+    
+    // 使用简单的滚动到底部策略
+    // 因为展开的是最后一个元素，所以滚动到最大位置即可
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
     });
   }
 
@@ -330,6 +349,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   ),
                 )
                     : ListView(
+                  controller: _scrollController, // 添加滚动控制器
                   padding: EdgeInsets.only(
                     left: 12,
                     right: 12,
@@ -454,13 +474,19 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   gradient: gradient,
                   isExpanded: isExpanded,
                   isDarkMode: isDarkMode,
-                  onTap: () => setState(() {
-                    if (isExpanded) {
-                      _expandedClients.remove(group.key);
-                    } else {
-                      _expandedClients.add(group.key);
-                    }
-                  }),
+                  onTap: () {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedClients.remove(group.key);
+                      } else {
+                        _expandedClients.add(group.key);
+                        // 展开后延迟滚动，等待动画完成
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          _scrollToKey('client_${group.key}');
+                        });
+                      }
+                    });
+                  },
                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                   trailing: trailing,
                   maxTitleLength: 10,

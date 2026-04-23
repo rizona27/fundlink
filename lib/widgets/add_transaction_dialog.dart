@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
+import '../services/fund_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
@@ -44,12 +46,36 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   double? _estimatedShares; // 预估份额
   bool _hasManuallyEditedShares = false; // 用户是否手动编辑过份额
   bool _hasManuallyEditedAmount = false; // 用户是否手动编辑过金额
+  bool _isFetchingNav = false; // 是否正在获取净值
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _checkTimeAndSetNav();
+    _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+  }
+
+  Future<void> _fetchCurrentNavIfNeeded() async {
+    // 如果当前净值为0或null，尝试从API获取
+    if (widget.currentNav == null || widget.currentNav! <= 0) {
+      setState(() => _isFetchingNav = true);
+      try {
+        final fundService = FundService(_dataManager);
+        final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
+        if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+          setState(() {
+            _navController.text = fundInfo['currentNav'].toStringAsFixed(4);
+          });
+        }
+      } catch (e) {
+        debugPrint('获取基金净值失败: $e');
+      } finally {
+        if (mounted) {
+          setState(() => _isFetchingNav = false);
+        }
+      }
+    }
   }
 
   void _checkTimeAndSetNav() {
@@ -331,14 +357,18 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 ),
               ),
 
-              // 内容区
+              // 内容区 - 支持滚动
               Container(
                 padding: const EdgeInsets.all(16),
                 color: bgColor,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     // 基金信息
                     Text(
                       widget.fundName,
@@ -387,6 +417,116 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                     ],
 
+                    // 持仓信息
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '持有份额',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Text(
+                                '${widget.currentShares.toStringAsFixed(2)}份',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '持仓市值',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Text(
+                                widget.currentNav != null && widget.currentNav! > 0
+                                    ? '¥${(widget.currentShares * widget.currentNav!).toStringAsFixed(2)}'
+                                    : '-',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '累计收益',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final transactions = _dataManager.getTransactionHistory(
+                                    widget.clientId,
+                                    widget.fundCode,
+                                  );
+                                  if (transactions.isEmpty || widget.currentNav == null || widget.currentNav! <= 0) {
+                                    return Text('-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor));
+                                  }
+                                  
+                                  // 计算累计投入成本
+                                  double totalCost = 0;
+                                  for (final tx in transactions) {
+                                    if (tx.isBuy) {
+                                      totalCost += tx.amount;
+                                    } else if (tx.isSell) {
+                                      totalCost -= tx.amount;
+                                    }
+                                  }
+                                  
+                                  final marketValue = widget.currentShares * widget.currentNav!;
+                                  final profit = marketValue - totalCost;
+                                  final profitColor = profit >= 0 ? const Color(0xFF34C759) : const Color(0xFFFF3B30);
+                                  
+                                  return Text(
+                                    '${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: profitColor),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 日期选择
+                    GestureDetector(
+                      onTap: _selectDate,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              '交易日期',
+                              style: TextStyle(fontSize: 13, color: secondaryColor),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_tradeDate.year}-${_tradeDate.month.toString().padLeft(2, '0')}-${_tradeDate.day.toString().padLeft(2, '0')}',
+                              style: TextStyle(fontSize: 14, color: textColor),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(CupertinoIcons.calendar, size: 16, color: secondaryColor),
+                          ],
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // 输入框 - 买入模式
@@ -400,13 +540,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                       const SizedBox(height: 12),
                       
-                      _buildInputField(
-                        label: '成交净值',
-                        controller: _navController,
-                        hint: '用于计算份额',
-                        suffix: '',
-                        onChanged: (value) => _calculateEstimated(),
-                      ),
+                    // 成交净值输入框
+                    _buildInputField(
+                      label: '成交净值',
+                      controller: _navController,
+                      hint: _isFetchingNav ? '加载中...' : '用于计算份额',
+                      suffix: '',
+                      onChanged: (value) => _calculateEstimated(),
+                    ),
                       const SizedBox(height: 12),
                       
                       _buildInputField(
@@ -471,7 +612,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       _buildInputField(
                         label: '成交净值',
                         controller: _navController,
-                        hint: '用于计算金额',
+                        hint: _isFetchingNav ? '加载中...' : '用于计算金额',
                         suffix: '',
                         onChanged: (value) => _calculateEstimated(),
                       ),
@@ -527,35 +668,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                     ],
 
-                    const SizedBox(height: 16),
-
-                    // 日期选择
-                    GestureDetector(
-                      onTap: _selectDate,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              '交易日期',
-                              style: TextStyle(fontSize: 13, color: secondaryColor),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '${_tradeDate.year}-${_tradeDate.month.toString().padLeft(2, '0')}-${_tradeDate.day.toString().padLeft(2, '0')}',
-                              style: TextStyle(fontSize: 14, color: textColor),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(CupertinoIcons.calendar, size: 16, color: secondaryColor),
-                          ],
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 20),
 
                     // 提交按钮
@@ -582,13 +694,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+                ), // SingleChildScrollView Column
+              ), // SingleChildScrollView
+            ), // Container
+          ], // Column children
+        ), // Column
+      ), // CupertinoPopupSurface
+      ), // Container
+    ); // Center
   }
 
   Widget _buildInputField({

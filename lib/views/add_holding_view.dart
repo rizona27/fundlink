@@ -123,8 +123,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   bool _sharesError = false;
 
   String _fundName = ''; // 基金名称
-  double? _currentNav; // 当前净值
+  double? _currentNav; // 当前净值（从API获取）
   DateTime? _navDate; // 净值日期
+  double? _confirmNav; // 确认净值（用户可修改）
 
   DateTime _purchaseDate = DateTime.now();
   bool _isSaving = false;
@@ -216,6 +217,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       setState(() {
         _fundName = '';
         _currentNav = null;
+        _confirmNav = null;
       });
     }
   }
@@ -228,11 +230,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _fundName = fundInfo['fundName'] as String? ?? '';
           _currentNav = fundInfo['currentNav'] as double?;
           _navDate = fundInfo['navDate'] as DateTime?;
+          _confirmNav = _currentNav; // 默认使用API返回的净值作为确认净值
           
           // 调试信息
           print('基金代码: $fundCode');
           print('基金名称: $_fundName');
           print('当前净值: $_currentNav');
+          print('确认净值: $_confirmNav');
           print('净值日期: $_navDate');
         });
       }
@@ -241,12 +245,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     }
   }
   
-  // 根据金额、费率、净值计算份额
+  // 根据金额、费率、确认净值计算份额
   void _calculateShares() {
     final amountText = _purchaseAmountController.text.trim();
     final feeRateText = _feeRateController.text.trim();
     
-    if (amountText.isEmpty || _currentNav == null || _currentNav! <= 0) {
+    if (amountText.isEmpty || _confirmNav == null || _confirmNav! <= 0) {
       return;
     }
     
@@ -258,13 +262,46 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       return;
     }
     
-    // 份额 = 金额 / (1 + 费率%) / 净值
+    // 份额 = 金额 / (1 + 费率%) / 确认净值
     // 例如：10000 / (1 + 0/100) / 2.3361 = 4280.75
-    final shares = amount / (1 + feeRate / 100) / _currentNav!;
+    final shares = amount / (1 + feeRate / 100) / _confirmNav!;
     
     if (shares > 0) {
       // 始终更新份额，确保与金额同步
       _purchaseSharesController.text = shares.toStringAsFixed(2);
+    }
+  }
+  
+  // 根据份额、金额、费率倒推净值
+  void _calculateNavFromShares() {
+    final amountText = _purchaseAmountController.text.trim();
+    final sharesText = _purchaseSharesController.text.trim();
+    final feeRateText = _feeRateController.text.trim();
+    
+    if (amountText.isEmpty || sharesText.isEmpty) {
+      return;
+    }
+    
+    final amount = double.tryParse(amountText);
+    final shares = double.tryParse(sharesText);
+    final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
+    
+    if (amount == null || amount <= 0 || shares == null || shares <= 0) {
+      return;
+    }
+    
+    // 净值 = 金额 / (1 + 费率%) / 份额
+    final nav = amount / (1 + feeRate / 100) / shares;
+    
+    if (nav > 0) {
+      setState(() {
+        _confirmNav = nav;
+      });
+      // 更新确认净值输入框
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // 找到确认净值的TextField并更新
+        // 这里通过setState触发重建即可
+      });
     }
   }
 
@@ -394,7 +431,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;
 
-      // 创建交易记录（买入）
+      // 创建交易记录（买入）- 使用确认净值
       final transaction = TransactionRecord(
         clientId: clientId,
         clientName: clientName,
@@ -404,7 +441,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         amount: amount,
         shares: shares,
         tradeDate: _purchaseDate,
-        nav: currentNav > 0 ? currentNav : null,
+        nav: _confirmNav != null && _confirmNav! > 0 ? _confirmNav : (currentNav > 0 ? currentNav : null),
         remarks: _remarksController.text.trim(),
       );
 
@@ -578,6 +615,35 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       textColor: textColor,
                       placeholderColor: placeholderColor,
                       suffix: '%',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildRowField(
+                    label: '确认净值',
+                    required: true,
+                    child: Builder(
+                      builder: (context) {
+                        final controller = TextEditingController(
+                          text: _confirmNav != null && _confirmNav! > 0 
+                              ? _confirmNav!.toStringAsFixed(4) 
+                              : '',
+                        );
+                        return _buildAmountField(
+                          controller: controller,
+                          hint: '可修改，默认当前净值',
+                          error: false,
+                          onChanged: (value) {
+                            final nav = double.tryParse(value.trim());
+                            if (nav != null && nav > 0) {
+                              setState(() => _confirmNav = nav);
+                              _calculateShares(); // 重新计算份额
+                            }
+                          },
+                          inputBgColor: inputBgColor,
+                          textColor: textColor,
+                          placeholderColor: placeholderColor,
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 12),
