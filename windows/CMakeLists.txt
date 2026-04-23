@@ -43,6 +43,19 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
+  
+  # 使用静态链接 CRT，避免依赖 VCRUNTIME140_1.dll
+  if(MSVC)
+    # Release 和 Profile 模式使用静态链接
+    target_compile_options(${TARGET} PRIVATE 
+      $<$<CONFIG:Release>:/MT>
+      $<$<CONFIG:Profile>:/MT>
+    )
+    # Debug 模式保持动态链接（便于调试）
+    target_compile_options(${TARGET} PRIVATE 
+      $<$<CONFIG:Debug>:/MTd>
+    )
+  endif()
 endfunction()
 
 # Flutter library and tool build rules.

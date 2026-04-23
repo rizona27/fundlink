@@ -67,6 +67,7 @@ Copy-Item "build\windows\x64\runner\Release\*" -Destination "FundLink-v1.0.6-Win
 - ⚠️ 分发时必须包含所有 `.dll` 文件和 `data` 文件夹
 - ❌ 不要只复制 `fundlink.exe` 文件
 - ✅ 将整个文件夹压缩后分发给用户
+- ✅ 已使用静态链接，无需安装 Visual C++ Redistributable
 
 ------
 
