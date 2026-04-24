@@ -447,96 +447,110 @@ class _FundDetailPageState extends State<FundDetailPage> {
         ),
       );
     }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 2.8,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: _topHoldings.length,
-      itemBuilder: (context, index) {
-        final h = _topHoldings[index];
-        String fullCode = '';
-        final codeStr = h.stockCode;
-        if (codeStr.length == 5 && RegExp(r'^\d{5}$').hasMatch(codeStr)) {
-          fullCode = 'hk$codeStr';
-        } else if (codeStr.startsWith('6')) {
-          fullCode = 'sh$codeStr';
-        } else if (codeStr.startsWith('0') || codeStr.startsWith('3')) {
-          fullCode = 'sz$codeStr';
-        } else if (codeStr.startsWith('5')) {
-          fullCode = 'sz$codeStr';
-        } else {
-          fullCode = codeStr;
-        }
-        final changePercent = _stockQuotes[fullCode] ?? 0.0;
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: isDark
-                    ? CupertinoColors.white.withOpacity(0.1)
-                    : CupertinoColors.systemGrey.withOpacity(0.2)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 根据可用宽度动态计算列数
+        final double itemMinWidth = 140.0; // 每个卡片的最小宽度
+        final int crossAxisCount = (constraints.maxWidth / itemMinWidth).floor().clamp(1, 3);
+        
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 3.2, // 稍微增加宽高比，给内容更多垂直空间
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                h.stockName,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? CupertinoColors.white : CupertinoColors.black),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          itemCount: _topHoldings.length,
+          itemBuilder: (context, index) {
+            final h = _topHoldings[index];
+            String fullCode = '';
+            final codeStr = h.stockCode;
+            if (codeStr.length == 5 && RegExp(r'^\d{5}$').hasMatch(codeStr)) {
+              fullCode = 'hk$codeStr';
+            } else if (codeStr.startsWith('6')) {
+              fullCode = 'sh$codeStr';
+            } else if (codeStr.startsWith('0') || codeStr.startsWith('3')) {
+              fullCode = 'sz$codeStr';
+            } else if (codeStr.startsWith('5')) {
+              fullCode = 'sz$codeStr';
+            } else {
+              fullCode = codeStr;
+            }
+            final changePercent = _stockQuotes[fullCode] ?? 0.0;
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: isDark
+                        ? CupertinoColors.white.withOpacity(0.1)
+                        : CupertinoColors.systemGrey.withOpacity(0.2)),
               ),
-              const SizedBox(height: 4),
-              Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: changePercent > 0
-                          ? CupertinoColors.systemRed.withOpacity(0.2)
-                          : (changePercent < 0
-                          ? CupertinoColors.systemGreen.withOpacity(0.2)
-                          : CupertinoColors.systemGrey.withOpacity(0.2)),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: changePercent > 0
-                            ? CupertinoColors.systemRed
-                            : (changePercent < 0
-                            ? CupertinoColors.systemGreen
-                            : CupertinoColors.systemGrey),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Text(
-                    '占比 ${h.ratio.toStringAsFixed(2)}%',
+                    h.stockName,
                     style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? CupertinoColors.white.withOpacity(0.6)
-                            : CupertinoColors.systemGrey),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? CupertinoColors.white : CupertinoColors.black),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding:
+                          const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: changePercent > 0
+                                ? CupertinoColors.systemRed.withOpacity(0.2)
+                                : (changePercent < 0
+                                ? CupertinoColors.systemGreen.withOpacity(0.2)
+                                : CupertinoColors.systemGrey.withOpacity(0.2)),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: changePercent > 0
+                                  ? CupertinoColors.systemRed
+                                  : (changePercent < 0
+                                  ? CupertinoColors.systemGreen
+                                  : CupertinoColors.systemGrey),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          '${h.ratio.toStringAsFixed(2)}%',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? CupertinoColors.white.withOpacity(0.6)
+                                  : CupertinoColors.systemGrey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

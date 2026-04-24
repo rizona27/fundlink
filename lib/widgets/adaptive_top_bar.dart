@@ -340,7 +340,16 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   void _updateHideProgress() {
     // 如果是PC端（Windows/macOS/Linux），始终显示顶部工具栏
-    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+    // Web 平台不支持 Platform API，需要特殊处理
+    bool isDesktop = false;
+    try {
+      isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    } catch (e) {
+      // Web 平台会抛出异常，忽略即可
+      isDesktop = false;
+    }
+    
+    if (isDesktop) {
       _hideController.value = 1.0; // 始终完全显示
       return;
     }
