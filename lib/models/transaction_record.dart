@@ -36,6 +36,7 @@ extension TransactionTypeExtension on TransactionType {
   }
 }
 
+/// 交易记录模型
 class TransactionRecord {
   final String id;
   final String clientId;
@@ -46,13 +47,13 @@ class TransactionRecord {
   final double amount;
   final double shares;
   final DateTime tradeDate;
-  final double? nav; // 交易时填写的净值(可能为null)
+  final double? nav;
   final double? fee;
   final String remarks;
   final DateTime createdAt;
-  final bool isAfter1500; // 是否15:00后交易（影响净值日期选择）
-  final bool isPending; // 是否为待确认交易(当天15:00前的交易,净值尚未公布)
-  final double? confirmedNav; // 已确认的净值(T+1或T+2日后从API获取)
+  final bool isAfter1500;
+  final bool isPending;
+  final double? confirmedNav;
 
   TransactionRecord({
     String? id,
@@ -68,8 +69,8 @@ class TransactionRecord {
     this.fee,
     this.remarks = '',
     DateTime? createdAt,
-    this.isAfter1500 = false, // 默认15:00前
-    this.isPending = false, // 默认为已确认
+    this.isAfter1500 = false,
+    this.isPending = false,
     this.confirmedNav,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();

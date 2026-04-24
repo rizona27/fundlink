@@ -34,7 +34,7 @@ class DataManager extends ChangeNotifier {
   static const String _showHoldersOnSummaryCardKey = 'show_holders_on_summary_card';
   static const String _fundInfoCacheKey = 'fund_info_cache';
   static const int _valuationCacheValidSeconds = 180;
-  static const int _fundInfoCacheValidDays = 7; // 基金信息缓存有效期7天
+  static const int _fundInfoCacheValidDays = 7;
 
   List<FundHolding> _holdings = [];
   List<TransactionRecord> _transactions = [];
@@ -42,7 +42,7 @@ class DataManager extends ChangeNotifier {
   bool _isPrivacyMode = true;
   ThemeMode _themeMode = ThemeMode.system;
   Map<String, Map<String, dynamic>> _valuationCache = {};
-  Map<String, FundInfoCache> _fundInfoCache = {}; // 基金信息缓存
+  Map<String, FundInfoCache> _fundInfoCache = {};
   bool _showHoldersOnSummaryCard = true;
 
   bool _isValuationRefreshing = false;
@@ -63,12 +63,11 @@ class DataManager extends ChangeNotifier {
   bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
   bool get showHoldersOnSummaryCard => _showHoldersOnSummaryCard;
 
-  // 获取基金信息缓存
+  /// 获取基金信息缓存
   FundInfoCache? getFundInfoCache(String fundCode) {
     final cached = _fundInfoCache[fundCode];
     if (cached == null) return null;
     
-    // 检查缓存是否过期（7天）
     final now = DateTime.now();
     if (now.difference(cached.cacheTime).inDays > _fundInfoCacheValidDays) {
       _fundInfoCache.remove(fundCode);
@@ -78,10 +77,10 @@ class DataManager extends ChangeNotifier {
     return cached;
   }
 
-  // 保存基金信息缓存
+  /// 保存基金信息缓存
   void saveFundInfoCache(FundInfoCache fundInfo) {
     _fundInfoCache[fundInfo.fundCode] = fundInfo;
-    saveFundInfoCacheToPrefs(); // 异步保存到本地
+    saveFundInfoCacheToPrefs();
   }
 
   List<FundHolding> get pinnedHoldings {
@@ -99,26 +98,18 @@ class DataManager extends ChangeNotifier {
   Future<void> loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 加载持仓数据
     final holdingsJson = prefs.getStringList(_holdingsKey);
     if (holdingsJson != null) {
       _holdings = holdingsJson
           .map((json) => FundHolding.fromJson(jsonDecode(json)))
           .toList();
-      debugPrint('DataManager: 持仓数据加载成功，总数: ${_holdings.length}');
-    } else {
-      debugPrint('DataManager: 没有找到持仓数据');
     }
 
-    // 加载交易记录
     final transactionsJson = prefs.getStringList(_transactionsKey);
     if (transactionsJson != null) {
       _transactions = transactionsJson
           .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
           .toList();
-      debugPrint('DataManager: 交易记录加载成功，总数: ${_transactions.length}');
-    } else {
-      debugPrint('DataManager: 没有找到交易记录');
     }
 
     final logsJson = prefs.getStringList(_logsKey);
@@ -126,7 +117,6 @@ class DataManager extends ChangeNotifier {
       _logs = logsJson
           .map((json) => LogEntry.fromJson(jsonDecode(json)))
           .toList();
-      debugPrint('DataManager: 日志数据加载成功，总数: ${_logs.length}');
     }
 
     _isPrivacyMode = prefs.getBool(_privacyModeKey) ?? true;
@@ -190,8 +180,6 @@ class DataManager extends ChangeNotifier {
     await prefs.setBool(_privacyModeKey, _isPrivacyMode);
     await prefs.setString(_themeModeKey, _themeModeToString(_themeMode));
     await prefs.setBool(_showHoldersOnSummaryCardKey, _showHoldersOnSummaryCard);
-
-    debugPrint('DataManager: 所有数据保存成功');
   }
 
   Future<void> loadValuationCache() async {
@@ -201,9 +189,7 @@ class DataManager extends ChangeNotifier {
       try {
         final Map<String, dynamic> raw = jsonDecode(jsonStr);
         _valuationCache = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
-        debugPrint('DataManager: 估值缓存加载成功，共 ${_valuationCache.length} 条');
       } catch (e) {
-        debugPrint('DataManager: 加载估值缓存失败: $e');
       }
     }
   }
@@ -211,7 +197,6 @@ class DataManager extends ChangeNotifier {
   Future<void> saveValuationCache() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_valuationCacheKey, jsonEncode(_valuationCache));
-    debugPrint('DataManager: 估值缓存已保存');
   }
 
   // 加载基金信息缓存
@@ -226,19 +211,15 @@ class DataManager extends ChangeNotifier {
           final fundInfo = FundInfoCache.fromJson(Map<String, dynamic>.from(raw));
           _fundInfoCache[fundInfo.fundCode] = fundInfo;
         }
-        debugPrint('DataManager: 基金信息缓存加载成功，共 ${_fundInfoCache.length} 条');
       } catch (e) {
-        debugPrint('DataManager: 加载基金信息缓存失败: $e');
       }
     }
   }
 
-  // 保存基金信息缓存到本地
   Future<void> saveFundInfoCacheToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final cacheList = _fundInfoCache.values.map((info) => info.toJson()).toList();
     await prefs.setString(_fundInfoCacheKey, jsonEncode(cacheList));
-    debugPrint('DataManager: 基金信息缓存已保存，共 ${cacheList.length} 条');
   }
 
   Map<String, dynamic>? getValuation(String fundCode) {
@@ -305,7 +286,6 @@ class DataManager extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('格式化估值时间失败: $e');
     }
     return gztime;
   }
@@ -372,12 +352,10 @@ class DataManager extends ChangeNotifier {
         await addLog('估值刷新完成: 成功 $successCount, 失败 $failCount', type: LogType.success);
       }
       if (failCount > 0) {
-        debugPrint('估值刷新部分失败: 成功$successCount, 失败$failCount');
       }
 
       _currentValuationRefreshCompleter!.complete();
     } catch (e) {
-      debugPrint('估值刷新过程异常: $e');
       await addLog('估值刷新异常: $e', type: LogType.error);
       _currentValuationRefreshCompleter!.completeError(e);
     } finally {
@@ -628,7 +606,6 @@ class DataManager extends ChangeNotifier {
     }
 
     await saveData();
-    debugPrint('[${type.displayName}] $message');
     notifyListeners();
   }
 
@@ -783,7 +760,6 @@ class DataManager extends ChangeNotifier {
           }
         }
       } catch (e) {
-        debugPrint('自动确认交易失败 ${tx.id}: $e');
       }
     }
     

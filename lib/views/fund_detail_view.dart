@@ -151,7 +151,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
         _valuation = valuation;
       });
     } catch (e) {
-      debugPrint('估值刷新失败: $e');
       _dataManager?.addLog('基金 ${widget.holding.fundCode} 估值刷新失败: $e', type: LogType.error);
     }
   }

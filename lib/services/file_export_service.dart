@@ -134,14 +134,12 @@ class FileExportService {
 
         if (savedPath != null && savedPath.isNotEmpty) {
           context.showToast('文件已保存: $fileName');
-          debugPrint('导出文件已保存: $savedPath');
           _dataManager?.addLog('导出文件成功: $fileName', type: LogType.success);
         } else {
           context.showToast('已取消保存');
           _dataManager?.addLog('导出文件被取消', type: LogType.info);
         }
       } catch (e) {
-        debugPrint('保存文件失败: $e');
         context.showToast('保存文件失败: $e');
         _dataManager?.addLog('导出文件失败: $e', type: LogType.error);
       }
@@ -155,7 +153,6 @@ class FileExportService {
           await Share.shareXFiles([XFile(filePath)], text: '分享我的基金持仓数据');
           _dataManager?.addLog('分享导出文件: $fileName', type: LogType.info);
         } catch (e) {
-          debugPrint('分享文件失败: $e');
           context.showToast('分享失败: $e');
           _dataManager?.addLog('分享导出文件失败: $e', type: LogType.error);
         }

@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'transaction_record.dart';
 
+/// 基金持仓模型 - 通过交易流水计算得出
 class FundHolding {
   final String id;
   final String clientName;
@@ -8,12 +9,10 @@ class FundHolding {
   final String fundCode;
   final String fundName;
   
-  // 通过交易流水计算得出的持仓信息
-  final double totalShares;      // 当前总份额
-  final double totalCost;        // 累计投入成本
-  final double averageCost;      // 平均成本价
+  final double totalShares;
+  final double totalCost;
+  final double averageCost;
   
-  // 动态更新的净值信息
   final DateTime navDate;
   final double currentNav;
   final bool isValid;
@@ -27,7 +26,6 @@ class FundHolding {
   final double? navReturn6m;
   final double? navReturn1y;
   
-  // 关联的交易记录ID列表
   final List<String> transactionIds;
 
   FundHolding({
@@ -57,16 +55,6 @@ class FundHolding {
   double get totalValue => totalShares * currentNav;
   double get profit => totalValue - totalCost;
   double get profitRate => totalCost > 0 ? profit / totalCost * 100 : 0;
-
-  // 注意：年化收益率需要通过DataManager.calculateProfit()获取准确值
-  // 此属性已废弃，仅保留用于向后兼容
-  @Deprecated('Use DataManager.calculateProfit() instead')
-  double get annualizedProfitRate {
-    if (totalCost <= 0 || transactionIds.isEmpty) return 0;
-    // 此计算不准确，因为无法获取真实的持有天数
-    // 请使用 DataManager.calculateProfit(this).annualized 获取准确的年化收益率
-    return 0; 
-  }
 
   bool get isValidHolding {
     return clientName.isNotEmpty &&
@@ -147,18 +135,15 @@ class FundHolding {
   }
 
   factory FundHolding.fromJson(Map<String, dynamic> json) {
-    // 向后兼容：如果新字段不存在，尝试从旧字段转换
     double totalShares;
     double totalCost;
     double averageCost;
     
     if (json.containsKey('totalShares')) {
-      // 新格式
       totalShares = json['totalShares'] != null ? (json['totalShares'] as num).toDouble() : 0.0;
       totalCost = json['totalCost'] != null ? (json['totalCost'] as num).toDouble() : 0.0;
       averageCost = json['averageCost'] != null ? (json['averageCost'] as num).toDouble() : 0.0;
     } else if (json.containsKey('purchaseShares')) {
-      // 旧格式，转换为新格式
       totalShares = json['purchaseShares'] != null ? (json['purchaseShares'] as num).toDouble() : 0.0;
       totalCost = json['purchaseAmount'] != null ? (json['purchaseAmount'] as num).toDouble() : 0.0;
       averageCost = totalShares > 0 ? totalCost / totalShares : 0.0;
@@ -239,7 +224,6 @@ class FundHolding {
         totalShares += tx.shares;
         totalCost += tx.amount;
       } else if (tx.isSell) {
-        // 卖出时按比例减少成本
         if (totalShares > 0) {
           final costPerShare = totalCost / totalShares;
           totalCost -= tx.shares * costPerShare;

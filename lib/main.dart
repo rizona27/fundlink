@@ -20,21 +20,15 @@ void main() {
     statusBarIconBrightness: Brightness.light,
   ));
 
-  debugPrint('==================== 应用启动 ====================');
-
   _requestPermissionsOnStart();
 
   runApp(const MyApp());
 }
 
 Future<void> _requestPermissionsOnStart() async {
-  // Web平台不支持权限请求
   if (kIsWeb) {
-    debugPrint('Web平台跳过权限请求');
     return;
   }
-
-  debugPrint('开始请求存储权限...');
 
   try {
     PermissionStatus status;
@@ -46,14 +40,10 @@ Future<void> _requestPermissionsOnStart() async {
     }
 
     if (status.isGranted) {
-      debugPrint('✅ 存储权限已授予');
     } else if (status.isPermanentlyDenied) {
-      debugPrint('⚠️ 存储权限被永久拒绝，请前往设置中开启');
     } else {
-      debugPrint('❌ 存储权限被拒绝');
     }
   } catch (e) {
-    debugPrint('请求权限时出错: $e');
   }
 }
 

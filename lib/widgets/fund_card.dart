@@ -197,7 +197,8 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
 
   String get _reportContent {
     final profit = widget.holding.profit;
-    final annualizedReturn = widget.holding.annualizedProfitRate;
+    final dataManager = _dataManager!;
+    final annualizedReturn = dataManager.calculateProfit(widget.holding).annualized;
     final purchaseAmountFormatted = _formatPurchaseAmountForReport(widget.holding.totalCost);
     final formattedCurrentNav = widget.holding.currentNav.toStringAsFixed(4);
     final formattedAbsoluteProfit = _formatProfitAmountForReport(profit);
@@ -206,7 +207,6 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
     final navDateString = _formatDate(widget.holding.navDate);
     
     // 获取首次交易日期
-    final dataManager = _dataManager!;
     final transactions = dataManager.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
     final firstTradeDate = transactions.isNotEmpty ? transactions.last.tradeDate : DateTime.now();
     final holdingDays = DateTime.now().difference(firstTradeDate).inDays;

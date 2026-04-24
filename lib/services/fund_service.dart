@@ -31,20 +31,12 @@ class FundService {
   Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false}) async {
     if (forceRefresh) clearCache(code);
 
-    debugPrint('╔══════════════════════════════════════════════════════════════════╗');
-    debugPrint('║ [🌐 API请求] 开始获取基金数据                                      ║');
-    debugPrint('╠══════════════════════════════════════════════════════════════════╣');
-    debugPrint('║ 基金代码: $code');
-    debugPrint('║ 请求时间: ${DateTime.now()}');
-    debugPrint('╚══════════════════════════════════════════════════════════════════╝');
-
     _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
 
     // 优先检查 DataManager 的持久化缓存
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
-        debugPrint('✅ [持久化缓存命中] 基金代码 $code');
         _dataManager?.addLog('基金代码 $code: 使用持久化缓存数据', type: LogType.cache);
         return {
           'fundName': cachedInfo.fundName,
@@ -61,13 +53,11 @@ class FundService {
 
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
-      debugPrint('✅ [内存缓存命中] 基金代码 $code');
       _dataManager?.addLog('基金代码 $code: 使用内存缓存数据', type: LogType.cache);
       return cached;
     }
 
     if (_activeRequests.containsKey(code)) {
-      debugPrint('🔄 [并发请求] 基金代码 $code 已有请求进行中');
       _dataManager?.addLog('基金代码 $code: 使用进行中的请求', type: LogType.cache);
       return await _activeRequests[code]!;
     }
@@ -97,7 +87,6 @@ class FundService {
       if (!forceRefresh) _cache[code] = result;
       return result;
     } catch (e) {
-      debugPrint('❌ API失败: $e');
       _dataManager?.addLog('基金代码 $code: API请求失败 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
@@ -112,21 +101,13 @@ class FundService {
   }
 
   Future<Map<String, dynamic>> _fetchFromPingzhongdata(String code) async {
-    debugPrint('┌──────────────────────────────────────────────────────────────────┐');
-    debugPrint('│ [天天基金数据接口] 开始请求                                        │');
-    debugPrint('│ 基金代码: $code');
-    debugPrint('└──────────────────────────────────────────────────────────────────┘');
-
     try {
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
-      debugPrint('📍 请求URL: $url');
 
       final response = await http.get(url).timeout(const Duration(seconds: 15));
       final statusCode = response.statusCode;
-      debugPrint('📡 响应状态码: $statusCode');
 
       if (statusCode != 200) {
-        debugPrint('❌ 请求失败: HTTP $statusCode');
         _dataManager?.addLog('基金代码 $code: HTTP $statusCode', type: LogType.error);
         return {
           'fundName': '加载失败',
@@ -138,7 +119,6 @@ class FundService {
       }
 
       final jsString = utf8.decode(response.bodyBytes);
-      debugPrint('✅ 响应解码成功，长度: ${jsString.length}');
 
       String fundName = '未知基金';
       final namePatterns = [
@@ -155,7 +135,6 @@ class FundService {
           }
         }
       }
-      debugPrint('📈 基金名称: $fundName');
 
       double currentNav = 0.0;
       DateTime navDate = DateTime.now();
@@ -170,13 +149,10 @@ class FundService {
             currentNav = (latest['y'] as num).toDouble();
             final timestamp = latest['x'] as int;
             navDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-            debugPrint('📈 最新净值: $currentNav，日期: $navDate');
           }
         } catch (e) {
-          debugPrint('⚠️ 解析净值趋势失败: $e');
         }
       } else {
-        debugPrint('⚠️ 未找到 Data_netWorthTrend');
       }
 
       double? navReturn1w, navReturn1m, navReturn3m, navReturn6m, navReturn1y;
@@ -262,8 +238,6 @@ class FundService {
         }
       }
 
-      debugPrint('📈 收益率: 1周=$navReturn1w, 1月=$navReturn1m, 3月=$navReturn3m, 6月=$navReturn6m, 1年=$navReturn1y');
-
       final isValid = fundName != '未知基金' && currentNav > 0;
 
       if (isValid) {
@@ -285,7 +259,6 @@ class FundService {
       };
 
     } on TimeoutException catch (e) {
-      debugPrint('❌ 超时异常: $e');
       _dataManager?.addLog('基金代码 $code: 请求超时 - $e', type: LogType.error);
       return {
         'fundName': '加载失败',
@@ -295,7 +268,6 @@ class FundService {
         'error': 'Timeout: 请求超时15秒',
       };
     } catch (e) {
-      debugPrint('❌ 未知异常: $e');
       return {
         'fundName': '加载失败',
         'currentNav': 0.0,
@@ -387,7 +359,6 @@ class FundService {
   }
 
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
-    debugPrint('🔍 开始获取基金 $code 的十大重仓股...');
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
     final response = await http.get(
       url,
@@ -402,7 +373,6 @@ class FundService {
 
     final tbody = document.querySelector('tbody');
     if (tbody == null) {
-      debugPrint('❌ 未找到 tbody');
       return [];
     }
 
@@ -411,7 +381,6 @@ class FundService {
     if (thead != null) {
       final ths = thead.querySelectorAll('th');
       headers = ths.map((th) => th.text.trim()).toList();
-      debugPrint('📋 表头: $headers');
     }
 
     int ratioIndex = -1;
@@ -449,13 +418,11 @@ class FundService {
       }
       final ratio = double.tryParse(ratioRaw) ?? 0.0;
 
-      debugPrint('  解析: 代码=$stockCode, 名称=$stockName, 占比=$ratioRaw%');
       if (stockCode.isNotEmpty && stockName.isNotEmpty && ratio > 0) {
         holdings.add(TopHolding(stockCode: stockCode, stockName: stockName, ratio: ratio));
       }
     }
 
-    debugPrint('✅ 最终解析到 ${holdings.length} 条有效重仓股');
     return holdings.take(10).toList();
   }
 
@@ -471,7 +438,6 @@ class FundService {
       return code;
     }).join(',');
     final url = Uri.parse('https://qt.gtimg.cn/q=$codesParam');
-    debugPrint('📊 请求股票行情: $url');
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return {};
     String body;
@@ -493,7 +459,6 @@ class FundService {
           final lastClose = double.tryParse(parts[4]) ?? 0.0;
           final changePercent = lastClose > 0 ? ((currentPrice - lastClose) / lastClose) * 100 : 0.0;
           quoteMap[code] = changePercent;
-          debugPrint('📊 股票 $code 当前价=$currentPrice, 昨收=$lastClose, 涨跌幅=$changePercent%');
         }
       }
     }
@@ -502,24 +467,20 @@ class FundService {
 
   Future<Map<String, dynamic>?> fetchRealtimeValuation(String code) async {
     if (code.isEmpty || code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
-      debugPrint('❌ [估值请求] 无效的基金代码格式: $code');
       return null;
     }
 
     final url = Uri.parse('https://fundgz.1234567.com.cn/js/$code.js?rt=${DateTime.now().millisecondsSinceEpoch}');
-    debugPrint('📊 [估值请求] 开始获取基金 $code 的实时估值');
 
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        debugPrint('❌ [估值请求] 基金 $code 返回HTTP ${response.statusCode}');
         return null;
       }
 
       final bodyBytes = response.bodyBytes;
       if (bodyBytes.isEmpty) {
-        debugPrint('❌ [估值请求] 基金 $code 返回空内容');
         return null;
       }
 
@@ -530,20 +491,16 @@ class FundService {
         try {
           jsString = String.fromCharCodes(bodyBytes);
         } catch (e2) {
-          debugPrint('❌ [估值请求] 基金 $code 解码失败: $e2');
           return null;
         }
       }
 
       final trimmed = jsString.trim();
       if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') {
-        debugPrint('⚠️ [估值请求] 基金 $code 处于封闭期或无实时估值数据');
         return null;
       }
 
       if (!trimmed.contains('{') || !trimmed.contains('}')) {
-        debugPrint('❌ [估值请求] 基金 $code 返回内容不是有效的JSON格式');
-        debugPrint('   返回内容: ${trimmed.length > 100 ? trimmed.substring(0, 100) : trimmed}');
         return null;
       }
 
@@ -562,7 +519,6 @@ class FundService {
       }
 
       if (jsonStr.isEmpty) {
-        debugPrint('❌ [估值请求] 基金 $code 提取的JSON字符串为空');
         return null;
       }
 
@@ -570,28 +526,20 @@ class FundService {
       try {
         data = jsonDecode(jsonStr);
       } on FormatException catch (e) {
-        debugPrint('❌ [估值请求] 基金 $code JSON解析失败: $e');
-        debugPrint('   原始内容: ${trimmed.length > 200 ? trimmed.substring(0, 200) : trimmed}');
         return null;
       } catch (e) {
-        debugPrint('❌ [估值请求] 基金 $code JSON解析未知错误: $e');
         return null;
       }
 
       final returnedFundCode = data['fundcode']?.toString() ?? '';
-      if (returnedFundCode.isNotEmpty && returnedFundCode != code) {
-        debugPrint('⚠️ [估值请求] 基金 $code 返回的代码不匹配: $returnedFundCode');
-      }
 
       final fundName = data['name']?.toString() ?? '';
       if (fundName.isEmpty || fundName == 'null' || fundName == 'undefined') {
-        debugPrint('❌ [估值请求] 基金 $code 不存在或已退市');
         return null;
       }
 
       String gszStr = data['gsz']?.toString() ?? '';
       if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') {
-        debugPrint('❌ [估值请求] 基金 $code 缺少估值数据');
         return null;
       }
 
@@ -601,15 +549,9 @@ class FundService {
         gsz = double.tryParse(gszStr) ?? 0.0;
         gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
       } catch (e) {
-        debugPrint('❌ [估值请求] 基金 $code 解析数值失败: $e');
         return null;
       }
 
-      if (gsz <= 0 && gszzl == 0) {
-        debugPrint('⚠️ [估值请求] 基金 $code 当前估值为0，可能非交易时间');
-      }
-
-      debugPrint('✅ [估值请求] 基金 $code 估值成功: $fundName, 净值=$gsz, 涨跌幅=$gszzl%');
       return {
         'fundCode': code,
         'name': fundName,
@@ -620,10 +562,8 @@ class FundService {
         'jzrq': data['jzrq']?.toString() ?? '',
       };
     } on TimeoutException catch (e) {
-      debugPrint('❌ [估值请求] 基金 $code 请求超时: $e');
       return null;
     } catch (e) {
-      debugPrint('❌ [估值请求] 基金 $code 未知异常: $e');
       return null;
     }
   }

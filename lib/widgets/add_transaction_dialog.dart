@@ -84,7 +84,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         }
       }
     } catch (e) {
-      debugPrint('获取基金净值失败: $e');
       // 如果API失败，但有传入的净值，使用传入的值
       if (widget.currentNav != null && widget.currentNav! > 0) {
         if (mounted) {

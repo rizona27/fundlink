@@ -1238,7 +1238,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('无法读取文件内容');
       }
       final extension = file.extension?.toLowerCase();
-      debugPrint('开始处理导入文件: ${file.name}, 大小: ${bytes.length}字节, 扩展名: $extension');
 
       final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
       final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
@@ -1257,7 +1256,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           _headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
           _rawData = sheet.rows.skip(1).map((row) => row.map((cell) => _getCellValue(cell)).toList()).toList();
         } catch (e) {
-          debugPrint('Excel 解析失败，尝试 CSV: $e');
           try {
             final csvString = _decodeCsvBytes(bytes);
             final rows = const CsvToListConverter().convert(csvString);
@@ -1292,12 +1290,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('文件没有数据行');
       }
 
-      debugPrint('文件解析成功 - 表头: ${_headers.length}列, 数据行数: ${_rawData.length}');
-
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
     } catch (e, stack) {
-      debugPrint('解析文件失败: $e\n$stack');
       final dataManager = DataManagerProvider.of(context);
       dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
@@ -1325,14 +1320,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     try {
       return DateTime.parse(dateStr);
     } catch (_) {
-      debugPrint('日期解析失败(ISO格式): $dateStr');
     }
     final parts = dateStr.split('-');
     if (parts.length == 3) {
       try {
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       } catch (_) {
-        debugPrint('日期解析失败(yyyy-MM-dd): $dateStr');
       }
     }
     final slashParts = dateStr.split('/');
@@ -1340,7 +1333,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       try {
         return DateTime(int.parse(slashParts[0]), int.parse(slashParts[1]), int.parse(slashParts[2]));
       } catch (_) {
-        debugPrint('日期解析失败(yyyy/MM/dd): $dateStr');
       }
     }
     return null;
@@ -1405,7 +1397,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         try {
           fundInfo = await fundService.fetchFundInfo(fundCode);
         } catch (e) {
-          debugPrint('导入时获取基金$fundCode信息失败: $e');
           dataManager.addLog('导入时获取基金$fundCode信息失败: $e', type: LogType.error);
           fundInfo = {
             'fundName': '',

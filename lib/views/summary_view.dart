@@ -98,10 +98,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           orElse: () => SortOrder.descending,
         );
       } else {
-        _sortOrder = SortOrder.descending; // 默认排序顺序
+        _sortOrder = SortOrder.descending;
       }
     } catch (e) {
-      debugPrint('加载排序状态失败: $e');
     }
   }
 
@@ -111,7 +110,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       await prefs.setString(_keySortKey, _sortKey.toString());
       await prefs.setString(_keySortOrder, _sortOrder.toString());
     } catch (e) {
-      debugPrint('保存排序状态失败: $e');
     }
   }
 
@@ -217,7 +215,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('valuationRefreshInterval', seconds);
     } catch (e) {
-      debugPrint('保存刷新间隔失败: $e');
     }
   }
 
@@ -250,12 +247,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           'gztime': valuation['gztime'] ?? '',
         };
       } else {
-        debugPrint('⚠️ 基金 $code 估值数据无效: $valuation');
         await _dataManager.addLog('基金 $code 估值获取失败: 数据无效', type: LogType.error);
         return null;
       }
     } catch (e) {
-      debugPrint('❌ 基金 $code 估值获取异常: $e');
       await _dataManager.addLog('基金 $code 估值获取异常: $e', type: LogType.error);
       return null;
     }
