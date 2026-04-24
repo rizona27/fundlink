@@ -8,12 +8,20 @@ class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
   final List<NetWorthPoint> avgPoints;
   final List<NetWorthPoint> hsPoints;
+  final List<NetWorthPoint>? zz500Points; // 中证500
+  final List<NetWorthPoint>? zz1000Points; // 中证1000
+  final List<NetWorthPoint>? customFundPoints; // 用户自定义基金
+  final VoidCallback? onCustomFundConfig; // 自定义基金配置回调
 
   const FundPerformanceChart({
     super.key,
     required this.fundPoints,
     required this.avgPoints,
     required this.hsPoints,
+    this.zz500Points,
+    this.zz1000Points,
+    this.customFundPoints,
+    this.onCustomFundConfig,
   });
 
   @override
@@ -32,11 +40,17 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   };
   bool _showAverage = true;
   bool _showHs300 = true;
+  bool _showZZ500 = true; // 默认显示中证500
+  bool _showZZ1000 = true; // 默认显示中证1000
+  bool _showCustomFund = false;
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
   List<double> _sliceAvgValues = [];
   List<double> _sliceHsValues = [];
+  List<double> _sliceZZ500Values = [];
+  List<double> _sliceZZ1000Values = [];
+  List<double> _sliceCustomFundValues = [];
 
   final ValueNotifier<int> _hoverIndexNotifier = ValueNotifier(-1);
   final ValueNotifier<double> _crosshairXNotifier = ValueNotifier(0);
@@ -81,6 +95,14 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   List<NetWorthPoint> _convertToPseudoNav(List<NetWorthPoint> rawPoints, double baseRaw) {
     return rawPoints.map((p) {
       final pseudoNav = 1.0 + (p.nav - baseRaw) / 100.0;
+      return NetWorthPoint(date: p.date, nav: pseudoNav);
+    }).toList();
+  }
+
+  // 基金净值归一化（用于中证500、中证1000、自定义基金）
+  List<NetWorthPoint> _convertFundToPseudoNav(List<NetWorthPoint> rawPoints, double baseRaw) {
+    return rawPoints.map((p) {
+      final pseudoNav = baseRaw > 0 ? p.nav / baseRaw : 1.0;
       return NetWorthPoint(date: p.date, nav: pseudoNav);
     }).toList();
   }
@@ -143,19 +165,43 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         : 1000.0;
     final double hsBaseRaw = widget.hsPoints.isNotEmpty
         ? getNavOnOrBefore(widget.hsPoints, baseDate)
-        : 1000.0;
+        : 1.0;
 
     final List<NetWorthPoint> convertedAvgPoints = widget.avgPoints.isNotEmpty
         ? _convertToPseudoNav(widget.avgPoints, avgBaseRaw)
         : [];
     final List<NetWorthPoint> convertedHsPoints = widget.hsPoints.isNotEmpty
-        ? _convertToPseudoNav(widget.hsPoints, hsBaseRaw)
+        ? _convertFundToPseudoNav(widget.hsPoints, hsBaseRaw)
+        : [];
+
+    // 计算中证500、中证1000、自定义基金的基准值并转换
+    final double zz500BaseRaw = widget.zz500Points != null && widget.zz500Points!.isNotEmpty
+        ? getNavOnOrBefore(widget.zz500Points!, baseDate)
+        : 1.0;
+    final double zz1000BaseRaw = widget.zz1000Points != null && widget.zz1000Points!.isNotEmpty
+        ? getNavOnOrBefore(widget.zz1000Points!, baseDate)
+        : 1.0;
+    final double customFundBaseRaw = widget.customFundPoints != null && widget.customFundPoints!.isNotEmpty
+        ? getNavOnOrBefore(widget.customFundPoints!, baseDate)
+        : 1.0;
+
+    final List<NetWorthPoint> convertedZZ500Points = widget.zz500Points != null && widget.zz500Points!.isNotEmpty
+        ? _convertFundToPseudoNav(widget.zz500Points!, zz500BaseRaw)
+        : [];
+    final List<NetWorthPoint> convertedZZ1000Points = widget.zz1000Points != null && widget.zz1000Points!.isNotEmpty
+        ? _convertFundToPseudoNav(widget.zz1000Points!, zz1000BaseRaw)
+        : [];
+    final List<NetWorthPoint> convertedCustomFundPoints = widget.customFundPoints != null && widget.customFundPoints!.isNotEmpty
+        ? _convertFundToPseudoNav(widget.customFundPoints!, customFundBaseRaw)
         : [];
 
     _sliceDates = [];
     _sliceFundValues = [];
     _sliceAvgValues = [];
     _sliceHsValues = [];
+    _sliceZZ500Values = [];
+    _sliceZZ1000Values = [];
+    _sliceCustomFundValues = [];
 
     for (final point in fundSlice) {
       final date = point.date;
@@ -176,6 +222,27 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         _sliceHsValues.add(hsPseudoNav);
       } else {
         _sliceHsValues.add(1.0);
+      }
+
+      if (convertedZZ500Points.isNotEmpty) {
+        final zz500PseudoNav = getNavOnOrBefore(convertedZZ500Points, date);
+        _sliceZZ500Values.add(zz500PseudoNav);
+      } else {
+        _sliceZZ500Values.add(1.0);
+      }
+
+      if (convertedZZ1000Points.isNotEmpty) {
+        final zz1000PseudoNav = getNavOnOrBefore(convertedZZ1000Points, date);
+        _sliceZZ1000Values.add(zz1000PseudoNav);
+      } else {
+        _sliceZZ1000Values.add(1.0);
+      }
+
+      if (convertedCustomFundPoints.isNotEmpty) {
+        final customPseudoNav = getNavOnOrBefore(convertedCustomFundPoints, date);
+        _sliceCustomFundValues.add(customPseudoNav);
+      } else {
+        _sliceCustomFundValues.add(1.0);
       }
     }
   }
@@ -226,6 +293,24 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     });
   }
 
+  void _toggleZZ500() {
+    setState(() {
+      _showZZ500 = !_showZZ500;
+    });
+  }
+
+  void _toggleZZ1000() {
+    setState(() {
+      _showZZ1000 = !_showZZ1000;
+    });
+  }
+
+  void _toggleCustomFund() {
+    setState(() {
+      _showCustomFund = !_showCustomFund;
+    });
+  }
+
   String _getHoverDate() {
     final hoverIndex = _hoverIndexNotifier.value;
     if (hoverIndex >= 0 && hoverIndex < _sliceDates.length) {
@@ -254,6 +339,30 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final hoverIndex = _hoverIndexNotifier.value;
     if (_showHs300 && hoverIndex >= 0 && hoverIndex < _sliceHsValues.length) {
       return (_sliceHsValues[hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  double _getHoverZZ500Return() {
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (_showZZ500 && hoverIndex >= 0 && hoverIndex < _sliceZZ500Values.length) {
+      return (_sliceZZ500Values[hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  double _getHoverZZ1000Return() {
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (_showZZ1000 && hoverIndex >= 0 && hoverIndex < _sliceZZ1000Values.length) {
+      return (_sliceZZ1000Values[hoverIndex] - 1) * 100;
+    }
+    return 0.0;
+  }
+
+  double _getHoverCustomFundReturn() {
+    final hoverIndex = _hoverIndexNotifier.value;
+    if (_showCustomFund && hoverIndex >= 0 && hoverIndex < _sliceCustomFundValues.length) {
+      return (_sliceCustomFundValues[hoverIndex] - 1) * 100;
     }
     return 0.0;
   }
@@ -369,6 +478,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final transformedFundValues = _sliceFundValues.map((v) => v - 1.0).toList();
     final transformedAvgValues = _sliceAvgValues.map((v) => v - 1.0).toList();
     final transformedHsValues = _sliceHsValues.map((v) => v - 1.0).toList();
+    final transformedZZ500Values = _sliceZZ500Values.map((v) => v - 1.0).toList();
+    final transformedZZ1000Values = _sliceZZ1000Values.map((v) => v - 1.0).toList();
+    final transformedCustomFundValues = _sliceCustomFundValues.map((v) => v - 1.0).toList();
 
     final fundSpots = List.generate(transformedFundValues.length,
             (i) => FlSpot(i.toDouble(), transformedFundValues[i]));
@@ -376,6 +488,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             (i) => FlSpot(i.toDouble(), transformedAvgValues[i]));
     final hsSpots = List.generate(transformedHsValues.length,
             (i) => FlSpot(i.toDouble(), transformedHsValues[i]));
+    final zz500Spots = List.generate(transformedZZ500Values.length,
+            (i) => FlSpot(i.toDouble(), transformedZZ500Values[i]));
+    final zz1000Spots = List.generate(transformedZZ1000Values.length,
+            (i) => FlSpot(i.toDouble(), transformedZZ1000Values[i]));
+    final customFundSpots = List.generate(transformedCustomFundValues.length,
+            (i) => FlSpot(i.toDouble(), transformedCustomFundValues[i]));
 
     double minY = transformedFundValues.reduce((a, b) => a < b ? a : b);
     double maxY = transformedFundValues.reduce((a, b) => a > b ? a : b);
@@ -390,6 +508,24 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       final hsMax = transformedHsValues.reduce((a, b) => a > b ? a : b);
       minY = minY < hsMin ? minY : hsMin;
       maxY = maxY > hsMax ? maxY : hsMax;
+    }
+    if (_showZZ500 && transformedZZ500Values.isNotEmpty) {
+      final zz500Min = transformedZZ500Values.reduce((a, b) => a < b ? a : b);
+      final zz500Max = transformedZZ500Values.reduce((a, b) => a > b ? a : b);
+      minY = minY < zz500Min ? minY : zz500Min;
+      maxY = maxY > zz500Max ? maxY : zz500Max;
+    }
+    if (_showZZ1000 && transformedZZ1000Values.isNotEmpty) {
+      final zz1000Min = transformedZZ1000Values.reduce((a, b) => a < b ? a : b);
+      final zz1000Max = transformedZZ1000Values.reduce((a, b) => a > b ? a : b);
+      minY = minY < zz1000Min ? minY : zz1000Min;
+      maxY = maxY > zz1000Max ? maxY : zz1000Max;
+    }
+    if (_showCustomFund && transformedCustomFundValues.isNotEmpty) {
+      final customMin = transformedCustomFundValues.reduce((a, b) => a < b ? a : b);
+      final customMax = transformedCustomFundValues.reduce((a, b) => a > b ? a : b);
+      minY = minY < customMin ? minY : customMin;
+      maxY = maxY > customMax ? maxY : customMax;
     }
 
     final padding = (maxY - minY) * 0.1;
@@ -617,6 +753,36 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                 belowBarData: BarAreaData(show: false),
                                 aboveBarData: BarAreaData(show: false),
                               ),
+                            if (_showZZ500 && zz500Spots.isNotEmpty)
+                              LineChartBarData(
+                                spots: zz500Spots,
+                                isCurved: true,
+                                color: const Color(0xFFFF9800), // 橙色
+                                barWidth: 1.5,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(show: false),
+                                aboveBarData: BarAreaData(show: false),
+                              ),
+                            if (_showZZ1000 && zz1000Spots.isNotEmpty)
+                              LineChartBarData(
+                                spots: zz1000Spots,
+                                isCurved: true,
+                                color: const Color(0xFF9C27B0), // 紫色
+                                barWidth: 1.5,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(show: false),
+                                aboveBarData: BarAreaData(show: false),
+                              ),
+                            if (_showCustomFund && customFundSpots.isNotEmpty)
+                              LineChartBarData(
+                                spots: customFundSpots,
+                                isCurved: true,
+                                color: const Color(0xFF00BCD4), // 青色
+                                barWidth: 1.5,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(show: false),
+                                aboveBarData: BarAreaData(show: false),
+                              ),
                           ],
                         ),
                       ),
@@ -717,20 +883,35 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             ),
           ),
           const SizedBox(height: 12),
-          if (isShortRange)
-            ValueListenableBuilder<int>(
-              valueListenable: _hoverIndexNotifier,
-              builder: (context, hoverIndex, child) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildLegendItemWithValue('本基金', fundLineColor, _getHoverFundReturn(), isDark, null),
-                    _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
-                    _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
-                  ],
-                );
-              },
-            ),
+          // 所有时间维度都显示图例
+          ValueListenableBuilder<int>(
+            valueListenable: _hoverIndexNotifier,
+            builder: (context, hoverIndex, child) {
+              return Column(
+                children: [
+                  // 第一行：本基金、同类平均、沪深300
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildLegendItemWithValue('本基金', fundLineColor, _getHoverFundReturn(), isDark, null),
+                      _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
+                      _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // 第二行：中证500、中证1000、自定义基金
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), _getHoverZZ500Return(), isDark, _toggleZZ500),
+                      _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), _getHoverZZ1000Return(), isDark, _toggleZZ1000),
+                      _buildCustomFundLegendItem(isDark),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -790,9 +971,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               if (onToggle != null) ...[
                 const SizedBox(width: 4),
                 Icon(
-                  (onToggle == _toggleAverage ? _showAverage : _showHs300)
-                      ? CupertinoIcons.eye
-                      : CupertinoIcons.eye_slash,
+                  _getEyeIconState(onToggle),
                   size: 14,
                   color: isDark ? CupertinoColors.white : CupertinoColors.black,
                 ),
@@ -806,6 +985,59 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           ),
         ],
       ),
+    );
+  }
+
+  // 获取眼睛图标状态
+  IconData _getEyeIconState(VoidCallback toggle) {
+    if (toggle == _toggleAverage) return _showAverage ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
+    if (toggle == _toggleHs300) return _showHs300 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
+    if (toggle == _toggleZZ500) return _showZZ500 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
+    if (toggle == _toggleZZ1000) return _showZZ1000 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
+    if (toggle == _toggleCustomFund) return _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
+    return CupertinoIcons.eye;
+  }
+
+  // 自定义基金图例（支持点击配置）
+  Widget _buildCustomFundLegendItem(bool isDark) {
+    final value = _getHoverCustomFundReturn();
+    final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
+    final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            // 点击颜色块和文字弹出配置对话框
+            GestureDetector(
+              onTap: widget.onCustomFundConfig,
+              child: Row(
+                children: [
+                  Container(width: 12, height: 12, color: const Color(0xFF00BCD4)),
+                  const SizedBox(width: 4),
+                  Text('自定义', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            // 点击眼睛图标切换显示/隐藏
+            GestureDetector(
+              onTap: _toggleCustomFund,
+              child: Icon(
+                _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+                size: 14,
+                color: isDark ? CupertinoColors.white : CupertinoColors.black,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          valueStr,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: valueColor),
+        ),
+      ],
     );
   }
 }

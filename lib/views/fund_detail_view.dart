@@ -31,6 +31,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
   List<NetWorthPoint> _fundPoints = [];
   List<NetWorthPoint> _avgPoints = [];
   List<NetWorthPoint> _hsPoints = [];
+  List<NetWorthPoint>? _zz500Points; // 中证500
+  List<NetWorthPoint>? _zz1000Points; // 中证1000
+  List<NetWorthPoint>? _customFundPoints; // 用户自定义基金（示例：易方达沪深300ETF联接）
 
   List<NetWorthPoint>? _cachedFundPointsWithChanges;
   String? _lastFundCodeForCache;
@@ -49,6 +52,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
   int _refreshCountdown = 0;
 
   final ScrollController _mainScrollController = ScrollController();
+  
+  // 自定义基金配置
+  String _customFundCode = '007339'; // 默认：易方达沪深300ETF联接A
 
   @override
   void initState() {
@@ -106,6 +112,64 @@ class _FundDetailPageState extends State<FundDetailPage> {
         ..sort((a, b) => a.date.compareTo(b.date));
       _hsPoints = (benchmark['hs300'] as List<NetWorthPoint>)
         ..sort((a, b) => a.date.compareTo(b.date));
+
+      // 获取对比基金数据（并行加载）- 使用ETF联接基金
+      print('开始加载对比基金数据...');
+      print('沪深300 ETF联接: 460300 (华泰柏瑞沪深300ETF联接A)');
+      print('中证500 ETF联接: 004348');
+      print('中证1000 ETF联接: 011860');
+      print('自定义基金代码: $_customFundCode');
+      
+      final hs300Future = _fundService!.fetchNetWorthTrend('460300'); // 华泰柏瑞沪深300ETF联接A
+      final zz500Future = _fundService!.fetchNetWorthTrend('004348'); // 南方中证500ETF联接A
+      final zz1000Future = _fundService!.fetchNetWorthTrend('011860'); // 南方中证1000ETF联接A
+      final customFundFuture = _fundService!.fetchNetWorthTrend(_customFundCode); // 用户自定义基金
+      
+      final results = await Future.wait([
+        hs300Future.catchError((e) {
+          print('沪深300加载失败: $e');
+          return <NetWorthPoint>[];
+        }),
+        zz500Future.catchError((e) {
+          print('中证500加载失败: $e');
+          return <NetWorthPoint>[];
+        }),
+        zz1000Future.catchError((e) {
+          print('中证1000加载失败: $e');
+          return <NetWorthPoint>[];
+        }),
+        customFundFuture.catchError((e) {
+          print('自定义基金加载失败: $e');
+          return <NetWorthPoint>[];
+        }),
+      ]);
+      
+      _hsPoints = (results[0] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
+      _zz500Points = (results[1] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
+      _zz1000Points = (results[2] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
+      _customFundPoints = (results[3] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
+      
+      print('同类平均数据点数: ${_avgPoints.length}');
+      print('沪深300数据点数: ${_hsPoints.length}');
+      print('中证500数据点数: ${_zz500Points?.length ?? 0}');
+      print('中证1000数据点数: ${_zz1000Points?.length ?? 0}');
+      print('自定义基金数据点数: ${_customFundPoints?.length ?? 0}');
+      
+      if (_avgPoints.isNotEmpty) {
+        print('同类平均最新日期: ${_avgPoints.last.date}, 净值: ${_avgPoints.last.nav}');
+      }
+      if (_hsPoints.isNotEmpty) {
+        print('沪深300最新日期: ${_hsPoints.last.date}, 净值: ${_hsPoints.last.nav}');
+      }
+      if (_zz500Points != null && _zz500Points!.isNotEmpty) {
+        print('中证500最新日期: ${_zz500Points!.last.date}, 净值: ${_zz500Points!.last.nav}');
+      }
+      if (_zz1000Points != null && _zz1000Points!.isNotEmpty) {
+        print('中证1000最新日期: ${_zz1000Points!.last.date}, 净值: ${_zz1000Points!.last.nav}');
+      }
+      if (_customFundPoints != null && _customFundPoints!.isNotEmpty) {
+        print('自定义基金最新日期: ${_customFundPoints!.last.date}, 净值: ${_customFundPoints!.last.nav}');
+      }
 
       final holdings = await _fundService!.fetchTopHoldingsFromHtml(widget.holding.fundCode);
       final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
@@ -204,6 +268,74 @@ class _FundDetailPageState extends State<FundDetailPage> {
     );
   }
 
+  void _showCustomFundConfigDialog() {
+    final TextEditingController codeController = TextEditingController(text: _customFundCode);
+    
+    showCupertinoDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoAlertDialog(
+          title: const Text('配置自定义基金'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '请输入基金代码（6位数字）',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                controller: codeController,
+                placeholder: '例如: 007339',
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                padding: const EdgeInsets.all(12),
+              ),
+            ],
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('确定'),
+              onPressed: () async {
+                final newCode = codeController.text.trim();
+                if (newCode.length == 6 && RegExp(r'^\d{6}$').hasMatch(newCode)) {
+                  Navigator.of(context).pop();
+                  
+                  print('开始加载自定义基金: $newCode');
+                  context.showToast('正在加载自定义基金数据...');
+                  
+                  try {
+                    // 只重新加载自定义基金数据
+                    final customData = await _fundService!.fetchNetWorthTrend(newCode);
+                    print('自定义基金 $newCode 加载成功，数据点数: ${customData.length}');
+                    if (customData.isNotEmpty) {
+                      print('最新日期: ${customData.last.date}, 净值: ${customData.last.nav}');
+                    }
+                    setState(() {
+                      _customFundCode = newCode;
+                      _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
+                    });
+                    context.showToast('已更新自定义基金');
+                  } catch (e) {
+                    print('自定义基金加载失败: $e');
+                    context.showToast('加载失败: $e');
+                  }
+                } else {
+                  context.showToast('请输入有效的6位基金代码');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -259,13 +391,23 @@ class _FundDetailPageState extends State<FundDetailPage> {
   }
 
   Widget _buildChartSection(bool isDark) {
-    return RepaintBoundary(
-      key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
-      child: FundPerformanceChart(
-        fundPoints: _fundPointsWithChanges,
-        avgPoints: _avgPoints,
-        hsPoints: _hsPoints,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 业绩走势图
+        RepaintBoundary(
+          key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
+          child: FundPerformanceChart(
+            fundPoints: _fundPointsWithChanges,
+            avgPoints: _avgPoints,
+            hsPoints: _hsPoints,
+            zz500Points: _zz500Points,
+            zz1000Points: _zz1000Points,
+            customFundPoints: _customFundPoints,
+            onCustomFundConfig: _showCustomFundConfigDialog, // 点击自定义时弹出配置对话框
+          ),
+        ),
+      ],
     );
   }
 
@@ -497,16 +639,15 @@ class _FundDetailPageState extends State<FundDetailPage> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 根据可用宽度动态计算列数
-        final double itemMinWidth = 140.0; // 每个卡片的最小宽度
-        final int crossAxisCount = (constraints.maxWidth / itemMinWidth).floor().clamp(1, 3);
+        // 固定一行2个，根据宽度调整卡片大小
+        final int crossAxisCount = 2;
         
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            childAspectRatio: 3.2, // 稍微增加宽高比，给内容更多垂直空间
+            childAspectRatio: 4.0, // 增加宽高比，减少高度
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
@@ -541,23 +682,24 @@ class _FundDetailPageState extends State<FundDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min, // 使用最小尺寸
                 children: [
                   Text(
                     h.stockName,
                     style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 12, // 减小字体
                         fontWeight: FontWeight.w500,
                         color: isDark ? CupertinoColors.white : CupertinoColors.black),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2), // 减小间距
                   Row(
                     children: [
                       Expanded(
                         child: Container(
                           padding:
-                          const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          const EdgeInsets.symmetric(horizontal: 4, vertical: 1), // 减小内边距
                           decoration: BoxDecoration(
                             color: changePercent > 0
                                 ? CupertinoColors.systemRed.withOpacity(0.2)
@@ -569,7 +711,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
                           child: Text(
                             '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 9, // 减小字体
                               fontWeight: FontWeight.w500,
                               color: changePercent > 0
                                   ? CupertinoColors.systemRed
@@ -581,12 +723,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4), // 减小间距
                       Flexible(
                         child: Text(
                           '${h.ratio.toStringAsFixed(2)}%',
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 10, // 减小字体
                               color: isDark
                                   ? CupertinoColors.white.withOpacity(0.6)
                                   : CupertinoColors.systemGrey),

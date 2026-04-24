@@ -280,15 +280,23 @@ class FundService {
 
 
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
+    print('正在获取基金 $code 的净值趋势...');
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+    if (response.statusCode != 200) {
+      print('基金 $code HTTP错误: ${response.statusCode}');
+      throw Exception('HTTP ${response.statusCode}');
+    }
     final jsString = utf8.decode(response.bodyBytes);
     final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
     final match = trendRegex.firstMatch(jsString);
-    if (match == null) return [];
+    if (match == null) {
+      print('基金 $code 未找到Data_netWorthTrend数据');
+      return [];
+    }
     final trendArrayStr = match.group(1)!;
     final List<dynamic> trendList = jsonDecode(trendArrayStr);
+    print('基金 $code 原始数据点数: ${trendList.length}');
     
     // 解析所有净值点
     final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
@@ -302,8 +310,15 @@ class FundService {
       return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
     }).toList();
     
+    print('基金 $code 过滤后数据点数: ${confirmedPoints.length}');
+    if (confirmedPoints.isNotEmpty) {
+      print('基金 $code 最早日期: ${confirmedPoints.first.date}, 最新日期: ${confirmedPoints.last.date}');
+    }
+    
     // 如果过滤后没有数据（可能是新基金），则返回原始数据
-    return confirmedPoints.isEmpty ? allPoints : confirmedPoints;
+    final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
+    print('基金 $code 最终返回数据点数: ${result.length}');
+    return result;
   }
 
   Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {
@@ -580,5 +595,66 @@ class FundService {
     } catch (e) {
       return null;
     }
+  }
+
+  /// 获取指数K线数据（使用东方财富API）
+  /// indexCode: 指数代码，如 '000905' (中证500), '000852' (中证1000)
+  Future<List<NetWorthPoint>> fetchIndexData(String indexCode) async {
+    // 使用东方财富指数K线API
+    final url = Uri.parse(
+      'https://push2.eastmoney.com/api/qt/kline/get?'
+      'secid=1.$indexCode&'
+      'klt=101&'
+      'fqt=1&'
+      'beg=19900101&'
+      'end=20500101&'
+      'lmt=10000',
+    );
+    
+    final response = await http.get(url).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    
+    final jsonData = jsonDecode(utf8.decode(response.bodyBytes));
+    final data = jsonData['data'];
+    if (data == null || data['klines'] == null) {
+      return [];
+    }
+    
+    final klines = data['klines'] as List;
+    final points = <NetWorthPoint>[];
+    
+    for (var kline in klines) {
+      // 格式: "日期,开盘,收盘,最高,最低,成交量,成交额,..."
+      final parts = kline.split(',');
+      if (parts.length >= 3) {
+        try {
+          final dateStr = parts[0];
+          final closePrice = double.parse(parts[2]); // 收盘价
+          
+          // 解析日期: "2024-01-01"
+          final dateParts = dateStr.split('-');
+          if (dateParts.length == 3) {
+            final date = DateTime(
+              int.parse(dateParts[0]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[2]),
+            );
+            
+            points.add(NetWorthPoint(
+              date: date,
+              nav: closePrice,
+              series: 'index',
+            ));
+          }
+        } catch (e) {
+          // 跳过解析失败的行
+          continue;
+        }
+      }
+    }
+    
+    return points;
   }
 }
