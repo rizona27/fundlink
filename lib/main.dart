@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:permission_handler/permission_handler.dart';
 import 'services/data_manager.dart';
 import 'views/client_view.dart';
@@ -27,6 +28,12 @@ void main() {
 }
 
 Future<void> _requestPermissionsOnStart() async {
+  // Web平台不支持权限请求
+  if (kIsWeb) {
+    debugPrint('Web平台跳过权限请求');
+    return;
+  }
+
   debugPrint('开始请求存储权限...');
 
   try {

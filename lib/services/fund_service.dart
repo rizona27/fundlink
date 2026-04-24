@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -285,16 +284,6 @@ class FundService {
         'navReturn1y': navReturn1y,
       };
 
-    } on SocketException catch (e) {
-      debugPrint('❌ 网络异常: $e');
-      _dataManager?.addLog('基金代码 $code: 网络异常 - $e', type: LogType.error);
-      return {
-        'fundName': '加载失败',
-        'currentNav': 0.0,
-        'navDate': DateTime.now(),
-        'isValid': false,
-        'error': 'Network error: $e',
-      };
     } on TimeoutException catch (e) {
       debugPrint('❌ 超时异常: $e');
       _dataManager?.addLog('基金代码 $code: 请求超时 - $e', type: LogType.error);
@@ -630,9 +619,6 @@ class FundService {
         'gztime': data['gztime']?.toString() ?? '',
         'jzrq': data['jzrq']?.toString() ?? '',
       };
-    } on SocketException catch (e) {
-      debugPrint('❌ [估值请求] 基金 $code 网络异常: $e');
-      return null;
     } on TimeoutException catch (e) {
       debugPrint('❌ [估值请求] 基金 $code 请求超时: $e');
       return null;

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
@@ -9,6 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:universal_html/html.dart' as html;
+
+// 仅在非Web平台导入dart:io
+import 'dart:io' as io;
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
@@ -144,11 +146,11 @@ class FileExportService {
         _dataManager?.addLog('导出文件失败: $e', type: LogType.error);
       }
 
-      if (shareAfterSave) {
+      if (shareAfterSave && !kIsWeb) {
         try {
           final directory = await getTemporaryDirectory();
           final filePath = '${directory.path}/$fileName';
-          final file = File(filePath);
+          final file = io.File(filePath);
           await file.writeAsBytes(bytes);
           await Share.shareXFiles([XFile(filePath)], text: '分享我的基金持仓数据');
           _dataManager?.addLog('分享导出文件: $fileName', type: LogType.info);

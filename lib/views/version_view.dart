@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../widgets/adaptive_top_bar.dart';
 
-// 跑马灯文本组件
+// 跑马灯文本组件 - 无缝循环滚动
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle textStyle;
@@ -21,49 +21,110 @@ class _MarqueeText extends StatefulWidget {
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
-  double _textWidth = 0;
+  double _offset = 0;
   double _containerWidth = 0;
-
+  bool _animationStarted = false;
+  bool _isPaused = false;
+  
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(seconds: 10),
     );
     
-    // 计算文本宽度
+    // 启动动画 - 移除条件检查,让LayoutBuilder触发
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        final textPainter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.textStyle),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        );
-        textPainter.layout();
-        setState(() {
-          _textWidth = textPainter.width;
-        });
-        _startAnimation();
-      }
+      // 不在这里启动,等待LayoutBuilder获取宽度后启动
     });
   }
 
-  void _startAnimation() {
-    if (_textWidth <= _containerWidth) return;
+  void _startAnimation(double containerWidth) {
+    debugPrint('🎬 [跑马灯] 开始启动动画');
+    debugPrint('   - 容器宽度: $containerWidth');
     
+    if (_animationStarted) {
+      debugPrint('   - 动画已启动,跳过');
+      return; // 避免重复启动
+    }
+    
+    // 计算文本宽度
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.text, style: widget.textStyle),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    final textWidth = textPainter.width;
+    
+    debugPrint('   - 文本宽度: $textWidth');
+    
+    _containerWidth = containerWidth;
+    
+    // 计算动画持续时间
+    final totalDistance = textWidth + containerWidth;
     final duration = Duration(
-      milliseconds: ((_textWidth + _containerWidth) / widget.velocity * 1000).round(),
+      milliseconds: (totalDistance / widget.velocity * 1000).round(),
     );
     
+    debugPrint('   - 滚动距离: $totalDistance');
+    debugPrint('   - 动画时长: ${duration.inMilliseconds}ms');
+    
     _controller.duration = duration;
-    _animation = Tween<double>(
-      begin: _containerWidth,
-      end: -_textWidth,
+    
+    // 创建动画 - 从容器右侧外开始
+    final animation = Tween<double>(
+      begin: containerWidth,  // 起点:文字左边缘在容器右边界
+      end: -textWidth,        // 终点:文字完全移出左边界
     ).animate(_controller);
     
-    _controller.repeat();
+    // 监听动画值变化
+    animation.addListener(() {
+      if (mounted) {
+        setState(() {
+          _offset = animation.value;
+        });
+      }
+    });
+    
+    // 监听动画完成,重新开始
+    _controller.addStatusListener((status) {
+      debugPrint('   - 动画状态: $status');
+      if (status == AnimationStatus.completed && mounted) {
+        debugPrint('   - 动画完成,重新开始');
+        _controller.forward(from: 0);
+      }
+    });
+    
+    // 确保初始状态正确
+    setState(() {
+      _offset = containerWidth;
+      _animationStarted = true;
+    });
+    
+    debugPrint('   - 初始偏移: $_offset');
+    debugPrint('   - 开始向前播放...');
+    _controller.forward();
+    debugPrint('   - 动画是否正在播放: ${_controller.isAnimating}');
+  }
+  
+  void _pauseAnimation() {
+    if (!_isPaused && _controller.isAnimating) {
+      _controller.stop();
+      setState(() {
+        _isPaused = true;
+      });
+    }
+  }
+  
+  void _resumeAnimation() {
+    if (_isPaused && !_controller.isAnimating) {
+      _controller.forward();
+      setState(() {
+        _isPaused = false;
+      });
+    }
   }
 
   @override
@@ -76,31 +137,65 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (_containerWidth != constraints.maxWidth && mounted) {
+        final containerWidth = constraints.maxWidth;
+        debugPrint('📐 [LayoutBuilder] 容器宽度: $containerWidth, 动画已启动: $_animationStarted');
+        
+        // 首次获取容器宽度时启动动画
+        if (!_animationStarted && containerWidth > 0 && mounted) {
+          debugPrint('🚀 [LayoutBuilder] 准备启动动画...');
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _containerWidth = constraints.maxWidth;
-              });
-              _startAnimation();
+            if (mounted && !_animationStarted) {
+              debugPrint('✅ [LayoutBuilder] 调用 _startAnimation');
+              _startAnimation(containerWidth);
             }
           });
         }
         
-        return AnimatedBuilder(
-          animation: _animation,
-          builder: (context, child) {
-            return Transform.translate(
-              offset: Offset(_animation.value, 0),
-              child: Text(
-                widget.text,
-                style: widget.textStyle,
-                maxLines: 1,
-                overflow: TextOverflow.visible,
-                softWrap: false,
+        // 如果文本较短或动画未启动,居中显示
+        if (!_animationStarted) {
+          debugPrint('⏸️ [Build] 动画未启动,显示静态文本');
+          return Center(
+            child: Text(
+              widget.text,
+              style: widget.textStyle,
+              maxLines: 1,
+              softWrap: false,
+            ),
+          );
+        }
+        
+        debugPrint('🎭 [Build] 当前偏移: $_offset, 是否暂停: $_isPaused');
+        
+        return MouseRegion(
+          onEnter: (_) => _pauseAnimation(),
+          onExit: (_) => _resumeAnimation(),
+          child: GestureDetector(
+            onTapDown: (_) => _pauseAnimation(),
+            onTapUp: (_) => _resumeAnimation(),
+            onTapCancel: () => _resumeAnimation(),
+            child: SizedBox(
+              height: double.infinity,
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    left: _offset,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        widget.text,
+                        style: widget.textStyle,
+                        maxLines: 1,
+                        softWrap: false,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
