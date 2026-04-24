@@ -159,6 +159,9 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.systemGrey6,
         borderRadius: BorderRadius.circular(10),
+        border: tx.isPending 
+            ? Border.all(color: CupertinoColors.systemOrange.withOpacity(0.3), width: 1)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,6 +183,35 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
                   ),
                 ),
               ),
+              if (tx.isPending) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.clock,
+                        size: 10,
+                        color: CupertinoColors.systemOrange,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '未生效',
+                        style: TextStyle(
+                          color: CupertinoColors.systemOrange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Spacer(),
               Text(
                 _formatDate(tx.tradeDate),
@@ -233,27 +265,36 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
                   ],
                 ),
               ),
-              if (tx.nav != null)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '净值',
+                      style: TextStyle(fontSize: 10, color: secondaryTextColor),
+                    ),
+                    const SizedBox(height: 2),
+                    if (tx.isPending)
                       Text(
-                        '净值',
-                        style: TextStyle(fontSize: 10, color: secondaryTextColor),
-                      ),
-                      const SizedBox(height: 2),
+                        '待确认',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.systemOrange,
+                        ),
+                      )
+                    else
                       Text(
-                        tx.nav!.toStringAsFixed(4),
+                        (tx.confirmedNav ?? tx.nav)?.toStringAsFixed(4) ?? '-',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: textColor,
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
+              ),
             ],
           ),
         ],

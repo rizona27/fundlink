@@ -46,11 +46,13 @@ class TransactionRecord {
   final double amount;
   final double shares;
   final DateTime tradeDate;
-  final double? nav;
+  final double? nav; // 交易时填写的净值(可能为null)
   final double? fee;
   final String remarks;
   final DateTime createdAt;
   final bool isAfter1500; // 是否15:00后交易（影响净值日期选择）
+  final bool isPending; // 是否为待确认交易(当天15:00前的交易,净值尚未公布)
+  final double? confirmedNav; // 已确认的净值(T+1或T+2日后从API获取)
 
   TransactionRecord({
     String? id,
@@ -67,6 +69,8 @@ class TransactionRecord {
     this.remarks = '',
     DateTime? createdAt,
     this.isAfter1500 = false, // 默认15:00前
+    this.isPending = false, // 默认为已确认
+    this.confirmedNav,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -91,6 +95,8 @@ class TransactionRecord {
     String? remarks,
     DateTime? createdAt,
     bool? isAfter1500,
+    bool? isPending,
+    double? confirmedNav,
   }) {
     return TransactionRecord(
       id: id ?? this.id,
@@ -107,6 +113,8 @@ class TransactionRecord {
       remarks: remarks ?? this.remarks,
       createdAt: createdAt ?? this.createdAt,
       isAfter1500: isAfter1500 ?? this.isAfter1500,
+      isPending: isPending ?? this.isPending,
+      confirmedNav: confirmedNav ?? this.confirmedNav,
     );
   }
 
@@ -126,6 +134,8 @@ class TransactionRecord {
       'remarks': remarks,
       'createdAt': createdAt.toIso8601String(),
       'isAfter1500': isAfter1500,
+      'isPending': isPending,
+      'confirmedNav': confirmedNav,
     };
   }
 
@@ -145,6 +155,8 @@ class TransactionRecord {
       remarks: json['remarks'] as String? ?? '',
       createdAt: DateTime.parse(json['createdAt'] as String),
       isAfter1500: json['isAfter1500'] as bool? ?? false,
+      isPending: json['isPending'] as bool? ?? false,
+      confirmedNav: json['confirmedNav'] != null ? (json['confirmedNav'] as num).toDouble() : null,
     );
   }
 

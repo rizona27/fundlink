@@ -133,6 +133,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   DateTime _purchaseDate = DateTime.now();
   bool _isAfter1500 = false; // 是否15:00后交易
   bool _isSaving = false;
+  
+  // 判断是否为待确认交易(今天或未来)
+  bool get _isTodayTransaction {
+    return DataManager.isTransactionPending(_purchaseDate);
+  }
 
   @override
   void didChangeDependencies() {
@@ -467,6 +472,15 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final currentNav = fundInfo['currentNav'] as double? ?? 0;
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;
+      
+      // 判断是否为待确认交易(今天或未来的交易)
+      final isPending = DataManager.isTransactionPending(_purchaseDate);
+      double? confirmedNav;
+      
+      if (isPending) {
+        confirmedNav = null;
+        print('创建待确认交易(新增持仓): 今天或未来日期');
+      }
 
       // 创建交易记录（买入）- 使用确认净值
       final transaction = TransactionRecord(
@@ -479,16 +493,22 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         shares: shares,
         tradeDate: _purchaseDate,
         nav: _confirmNav != null && _confirmNav! > 0 ? _confirmNav : (currentNav > 0 ? currentNav : null),
+        fee: null,
         remarks: _remarksController.text.trim(),
         isAfter1500: _isAfter1500,
+        isPending: isPending,
+        confirmedNav: confirmedNav,
       );
 
       // 添加交易记录（会自动重建持仓）
       await _dataManager.addTransaction(transaction);
       
-      context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
-
       if (mounted) {
+        if (isPending) {
+          context.showToast(shouldMerge ? '已合并到现有持仓\n净值待T+1确认后生效' : '添加成功\n净值待T+1确认后生效');
+        } else {
+          context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
+        }
         Navigator.of(context).pop();
       }
     } catch (e) {
@@ -527,6 +547,20 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     try {
       List<NetWorthPoint> trendData;
       
+      // 计算应该使用的净值日期
+      final targetNavDate = DataManager.calculateNavDateForTrade(targetDate, _isAfter1500);
+      final isPending = DataManager.isTransactionPending(targetDate);
+      
+      // 如果是待确认交易(今天或未来),不自动填充净值
+      if (isPending) {
+        print('待确认交易(今天或未来日期),不自动填充净值');
+        setState(() {
+          _confirmNavController.clear();
+          _confirmNav = null;
+        });
+        return;
+      }
+      
       // 优先使用缓存的数据
       if (_cachedTrendData != null && _cachedTrendData!.isNotEmpty) {
         trendData = _cachedTrendData!;
@@ -542,13 +576,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
       
       if (trendData.isEmpty) return;
-      
-      // 根据15:00前后确定目标净值日期
-      // 15:00前：使用当天净值（如果当天没有，用下一个交易日）
-      // 15:00后：使用下一个交易日净值
-      DateTime targetNavDate = _isAfter1500 
-          ? targetDate.add(const Duration(days: 1)) // 15:00后，查找下一天
-          : targetDate; // 15:00前，查找当天
       
       // 查找策略：
       // 1. 首先查找等于目标净值日期的净值
@@ -787,20 +814,56 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   _buildRowField(
                     label: '确认净值',
                     required: true,
-                    child: _buildAmountField(
-                      controller: _confirmNavController,
-                      hint: '可修改，默认当前净值',
-                      error: false,
-                      onChanged: (value) {
-                        final nav = double.tryParse(value.trim());
-                        if (nav != null && nav > 0) {
-                          setState(() => _confirmNav = nav);
-                          _calculateShares(); // 重新计算份额
-                        }
-                      },
-                      inputBgColor: inputBgColor,
-                      textColor: textColor,
-                      placeholderColor: placeholderColor,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_isTodayTransaction)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemOrange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: CupertinoColors.systemOrange.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.clock,
+                                  size: 12,
+                                  color: CupertinoColors.systemOrange,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '待确认 - T+1日自动更新',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: CupertinoColors.systemOrange,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        _buildAmountField(
+                          controller: _confirmNavController,
+                          hint: _isTodayTransaction ? 'T+1日自动更新' : '可修改，默认当前净值',
+                          error: false,
+                          onChanged: (value) {
+                            final nav = double.tryParse(value.trim());
+                            if (nav != null && nav > 0) {
+                              setState(() => _confirmNav = nav);
+                              _calculateShares(); // 重新计算份额
+                            }
+                          },
+                          inputBgColor: inputBgColor,
+                          textColor: textColor,
+                          placeholderColor: placeholderColor,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),

@@ -10,6 +10,7 @@ import 'version_view.dart';
 import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
+import 'pending_transactions_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -141,6 +142,19 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const ManageHoldingsView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.clock_fill,
+          title: '待确认交易',
+          subtitle: '查看和管理待确认交易',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const PendingTransactionsView()),
             );
           },
         ),

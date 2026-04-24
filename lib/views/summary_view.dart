@@ -122,6 +122,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _dataManager.removeListener(_dataListener);
     _dataManager.addListener(_dataListener);
     _fundService = FundService(_dataManager);
+    
+    // 启动时自动确认已过期的待确认交易
+    _autoConfirmPendingTransactions();
   }
 
   @override
@@ -190,6 +193,23 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       _restartValuationTimer();
     }
     if (mounted) setState(() {});
+  }
+  
+  /// 自动确认已过期的待确认交易
+  Future<void> _autoConfirmPendingTransactions() async {
+    try {
+      final pendingCount = _dataManager.getPendingTransactions().length;
+      if (pendingCount == 0) return;
+      
+      print('发现 $pendingCount 笔待确认交易，尝试自动确认...');
+      final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);
+      
+      if (confirmedCount > 0 && mounted) {
+        context.showToast('已自动确认 $confirmedCount 笔交易');
+      }
+    } catch (e) {
+      print('自动确认交易失败: $e');
+    }
   }
 
   Future<void> _saveValuationRefreshInterval(int seconds) async {

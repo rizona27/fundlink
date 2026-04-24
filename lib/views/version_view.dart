@@ -3,10 +3,114 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../widgets/adaptive_top_bar.dart';
 
+// 跑马灯文本组件
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle textStyle;
+  final double velocity;
+
+  const _MarqueeText({
+    required this.text,
+    required this.textStyle,
+    this.velocity = 30.0,
+  });
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  double _textWidth = 0;
+  double _containerWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+    
+    // 计算文本宽度
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final textPainter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.textStyle),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+        setState(() {
+          _textWidth = textPainter.width;
+        });
+        _startAnimation();
+      }
+    });
+  }
+
+  void _startAnimation() {
+    if (_textWidth <= _containerWidth) return;
+    
+    final duration = Duration(
+      milliseconds: ((_textWidth + _containerWidth) / widget.velocity * 1000).round(),
+    );
+    
+    _controller.duration = duration;
+    _animation = Tween<double>(
+      begin: _containerWidth,
+      end: -_textWidth,
+    ).animate(_controller);
+    
+    _controller.repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (_containerWidth != constraints.maxWidth && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _containerWidth = constraints.maxWidth;
+              });
+              _startAnimation();
+            }
+          });
+        }
+        
+        return AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) {
+            return Transform.translate(
+              offset: Offset(_animation.value, 0),
+              child: Text(
+                widget.text,
+                style: widget.textStyle,
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                softWrap: false,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
-  static const String appVersion = 'v1.0.6';
+  static const String appVersion = 'v1.0.7';
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +273,9 @@ class VersionView extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
+                        // 致谢跑马灯
+                        _buildAcknowledgmentMarquee(isDarkMode),
+                        const SizedBox(height: 24),
                         Align(
                           alignment: Alignment.centerRight,
                           child: Row(
@@ -304,6 +411,51 @@ class VersionView extends StatelessWidget {
           height: 1.4,
         ),
       ),
+    );
+  }
+
+  Widget _buildAcknowledgmentMarquee(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '致谢',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E).withOpacity(0.6)
+                : CupertinoColors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.1)
+                  : CupertinoColors.systemGrey.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: _MarqueeText(
+              text: '感谢参与测试的小伙伴：miner2011m、qiu_kw、naniezy  |愿大家一基暴富～！',
+              textStyle: TextStyle(
+                fontSize: 13,
+                color: isDarkMode
+                    ? CupertinoColors.white.withOpacity(0.8)
+                    : CupertinoColors.systemGrey.withOpacity(0.9),
+              ),
+              velocity: 30.0, // 滚动速度（像素/秒）
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

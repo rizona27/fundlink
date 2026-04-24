@@ -641,10 +641,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         disabled: false,
       ));
     }
-    if (widget.showRefresh) {
-      if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
-      children.add(_buildRefreshButton());
-    }
+    // 刷新按钮已移至右侧
     if (widget.showSort) {
       if (children.isNotEmpty) children.add(SizedBox(width: widget.buttonSpacing));
       children.add(_buildSortButton(disabled: !_hasData));
@@ -654,6 +651,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRightGroup() {
     final children = <Widget>[];
+    
+    // 刷新按钮放在最右侧
+    if (widget.showRefresh) {
+      children.add(_buildRefreshButton());
+    }
+    
     if (widget.showValuationRefresh && widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) {
       children.add(
         Padding(

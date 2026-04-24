@@ -49,6 +49,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   bool _hasManuallyEditedAmount = false; // 用户是否手动编辑过金额
   bool _isFetchingNav = false; // 是否正在获取净值
   bool _isAfter1500 = false; // 是否15:00后交易
+  
+  // 判断是否为待确认交易(今天或未来)
+  bool get _isTodayTransaction {
+    return DataManager.isTransactionPending(_tradeDate);
+  }
 
   @override
   void didChangeDependencies() {
@@ -203,10 +208,18 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     try {
       final fundService = FundService(_dataManager);
       
-      // 根据15:00前后确定目标净值日期
-      DateTime targetNavDate = _isAfter1500 
-          ? _tradeDate.add(const Duration(days: 1)) // 15:00后，查找下一天
-          : _tradeDate; // 15:00前，查找当天
+      // 计算应该使用的净值日期
+      final targetNavDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
+      final isPending = DataManager.isTransactionPending(_tradeDate);
+      
+      // 如果是待确认交易(今天或未来),不自动填充净值
+      if (isPending) {
+        print('待确认交易(今天或未来日期),不自动填充净值');
+        setState(() {
+          _navController.clear();
+        });
+        return;
+      }
       
       final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
       if (trendData.isEmpty) return;
@@ -345,6 +358,15 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       return;
     }
 
+    // 判断是否为待确认交易(今天或未来的交易)
+    final isPending = DataManager.isTransactionPending(_tradeDate);
+    double? confirmedNav;
+    
+    if (isPending) {
+      confirmedNav = null;
+      print('创建待确认交易: 今天或未来日期');
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -358,8 +380,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         shares: shares,
         tradeDate: _tradeDate,
         nav: nav,
+        fee: feeRate > 0 ? feeRate : null,
         remarks: '',
         isAfter1500: _isAfter1500,
+        isPending: isPending,
+        confirmedNav: confirmedNav,
       );
 
       await _dataManager.addTransaction(transaction);
@@ -367,7 +392,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       
       if (mounted) {
         Navigator.pop(context);
-        context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功');
+        if (isPending) {
+          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功\n净值待T+1确认后生效');
+        } else {
+          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -683,12 +712,49 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       const SizedBox(height: 12),
                       
                     // 成交净值输入框
-                    _buildInputField(
-                      label: '成交净值',
-                      controller: _navController,
-                      hint: _isFetchingNav ? '加载中...' : '用于计算份额',
-                      suffix: '',
-                      onChanged: (value) => _calculateEstimated(),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '成交净值',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
+                              ),
+                            ),
+                            if (_isTodayTransaction)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: CupertinoColors.systemOrange.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '待确认',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: CupertinoColors.systemOrange,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _buildInputField(
+                          label: '',
+                          controller: _navController,
+                          hint: _isTodayTransaction 
+                              ? 'T+1日自动更新'
+                              : (_isFetchingNav ? '加载中...' : '用于计算份额'),
+                          suffix: '',
+                          onChanged: (value) => _calculateEstimated(),
+                        ),
+                      ],
                     ),
                       const SizedBox(height: 12),
                       
@@ -754,7 +820,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       _buildInputField(
                         label: '成交净值',
                         controller: _navController,
-                        hint: _isFetchingNav ? '加载中...' : '用于计算金额',
+                        hint: _isTodayTransaction 
+                            ? 'T+1日自动更新'
+                            : (_isFetchingNav ? '加载中...' : '用于计算金额'),
                         suffix: '',
                         onChanged: (value) => _calculateEstimated(),
                       ),

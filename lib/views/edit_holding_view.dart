@@ -436,11 +436,13 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDarkMode 
-              ? CupertinoColors.white.withOpacity(0.05)
-              : CupertinoColors.black.withOpacity(0.05),
-        ),
+        border: tx.isPending
+            ? Border.all(color: CupertinoColors.systemOrange.withOpacity(0.3), width: 1)
+            : Border.all(
+                color: isDarkMode 
+                    ? CupertinoColors.white.withOpacity(0.05)
+                    : CupertinoColors.black.withOpacity(0.05),
+              ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -462,6 +464,35 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ),
                 ),
               ),
+              if (tx.isPending) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.clock,
+                        size: 10,
+                        color: CupertinoColors.systemOrange,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '未生效',
+                        style: TextStyle(
+                          color: CupertinoColors.systemOrange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Spacer(),
               Text(
                 _formatDate(tx.tradeDate),
@@ -494,19 +525,25 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ],
                 ),
               ),
-              if (tx.nav != null) ...[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('净值', style: TextStyle(fontSize: 9, color: secondaryTextColor)),
-                      const SizedBox(height: 2),
-                      Text(tx.nav!.toStringAsFixed(4), 
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('净值', style: TextStyle(fontSize: 9, color: secondaryTextColor)),
+                    const SizedBox(height: 2),
+                    if (tx.isPending)
+                      Text('待确认', 
+                          style: TextStyle(
+                            fontSize: 13, 
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.systemOrange,
+                          ))
+                    else
+                      Text((tx.confirmedNav ?? tx.nav)?.toStringAsFixed(4) ?? '-', 
                           style: TextStyle(fontSize: 13, color: textColor)),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
               CupertinoButton(
                 padding: EdgeInsets.zero,
                 minSize: 0,

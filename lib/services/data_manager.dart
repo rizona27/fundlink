@@ -713,6 +713,163 @@ class DataManager extends ChangeNotifier {
     });
     return sorted;
   }
+  
+  /// 获取所有待确认的交易
+  List<TransactionRecord> getPendingTransactions() {
+    return _transactions.where((tx) => tx.isPending).toList();
+  }
+  
+  /// 确认待确认交易(当净值可用时)
+  Future<void> confirmPendingTransaction(String transactionId, double confirmedNav) async {
+    final index = _transactions.indexWhere((tx) => tx.id == transactionId);
+    if (index == -1) {
+      throw Exception('交易记录不存在');
+    }
+    
+    final transaction = _transactions[index];
+    if (!transaction.isPending) {
+      throw Exception('该交易已经确认');
+    }
+    
+    // 更新交易记录
+    final updatedTransaction = transaction.copyWith(
+      isPending: false,
+      confirmedNav: confirmedNav,
+    );
+    
+    _transactions[index] = updatedTransaction;
+    
+    // 重新计算持仓
+    await _rebuildHolding(transaction.clientId, transaction.fundCode);
+    
+    await saveData();
+    
+    // 记录详细的确认日志
+    final confirmDate = DateTime.now();
+    await addLog(
+      '✅ 确认交易: ${transaction.fundName}(${transaction.fundCode})\n'
+      '客户: ${transaction.clientName}(${transaction.clientId})\n'
+      '类型: ${transaction.type.displayName}\n'
+      '交易日期: ${transaction.tradeDate.year}-${transaction.tradeDate.month.toString().padLeft(2, '0')}-${transaction.tradeDate.day.toString().padLeft(2, '0')}\n'
+      '金额: ${transaction.amount.toStringAsFixed(2)}元 | 份额: ${transaction.shares.toStringAsFixed(2)}份\n'
+      '确认净值: $confirmedNav\n'
+      '确认时间: ${confirmDate.year}-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')} ${confirmDate.hour.toString().padLeft(2, '0')}:${confirmDate.minute.toString().padLeft(2, '0')}',
+      type: LogType.success,
+    );
+    
+    notifyListeners();
+  }
+  
+  /// 批量确认已过期的待确认交易
+  Future<int> autoConfirmPendingTransactions(FundService fundService) async {
+    final pendingTransactions = getPendingTransactions();
+    if (pendingTransactions.isEmpty) return 0;
+    
+    int confirmedCount = 0;
+    final now = DateTime.now();
+    
+    for (final tx in pendingTransactions) {
+      try {
+        // 计算该交易何时可以确认
+        final canConfirmDate = calculateConfirmDate(tx.tradeDate, tx.isAfter1500);
+        
+        // 如果当前日期 >= 可确认日期,则尝试获取净值并确认
+        if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
+          // 获取该基金的最新净值
+          final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
+          if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+            await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
+            confirmedCount++;
+          }
+        }
+      } catch (e) {
+        debugPrint('自动确认交易失败 ${tx.id}: $e');
+      }
+    }
+    
+    if (confirmedCount > 0) {
+      await addLog('自动确认 $confirmedCount 笔待确认交易', type: LogType.success);
+    }
+    
+    return confirmedCount;
+  }
+  
+  /// 判断是否为工作日(周一到周五,不考虑节假日)
+  static bool isWeekday(DateTime date) {
+    final weekday = date.weekday; // 1=Monday, 7=Sunday
+    return weekday >= DateTime.monday && weekday <= DateTime.friday;
+  }
+  
+  /// 获取下一个工作日
+  static DateTime getNextWeekday(DateTime from) {
+    DateTime next = from.add(const Duration(days: 1));
+    while (!isWeekday(next)) {
+      next = next.add(const Duration(days: 1));
+    }
+    return next;
+  }
+  
+  /// 计算交易应该使用的净值日期
+  /// - 过去日期: 直接使用该日期
+  /// - 今天或未来: 
+  ///   * 15:00前: 使用T日(当天)的净值,在T+1日公布
+  ///   * 15:00后: 使用T+1日(下一个工作日)的净值,在T+2日公布
+  static DateTime calculateNavDateForTrade(DateTime tradeDate, bool isAfter1500) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    
+    // 过去的交易,直接使用交易日期
+    if (tradeDay.isBefore(today)) {
+      return tradeDay;
+    }
+    
+    // 今天或未来的交易
+    if (isAfter1500) {
+      // 15:00后,使用下一个工作日的净值(T+1日)
+      return getNextWeekday(tradeDay);
+    } else {
+      // 15:00前,使用当天的净值(T日),如果是周末则用下一个工作日
+      return isWeekday(tradeDay) ? tradeDay : getNextWeekday(tradeDay);
+    }
+  }
+  
+  /// 计算交易净值何时可以确认(净值公布时间)
+  /// - 过去日期: 已确认
+  /// - 今天或未来:
+  ///   * 15:00前: T+1日可确认
+  ///   * 15:00后: T+2日可确认
+  static DateTime calculateConfirmDate(DateTime tradeDate, bool isAfter1500) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    
+    // 过去的交易,已经确认
+    if (tradeDay.isBefore(today)) {
+      return tradeDay;
+    }
+    
+    // 今天或未来的交易
+    if (isAfter1500) {
+      // 15:00后,T+2日可确认
+      return getNextWeekday(getNextWeekday(tradeDay));
+    } else {
+      // 15:00前,T+1日可确认
+      return getNextWeekday(tradeDay);
+    }
+  }
+  
+  /// 判断交易是否为待确认状态
+  /// - 过去日期: 已确认
+  /// - 今天或未来: 待确认
+  static bool isTransactionPending(DateTime tradeDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    
+    // 今天或未来的交易都是待确认
+    return !tradeDay.isBefore(today);
+  }
 }
 
 class DataManagerProvider extends InheritedWidget {
