@@ -289,7 +289,21 @@ class FundService {
     if (match == null) return [];
     final trendArrayStr = match.group(1)!;
     final List<dynamic> trendList = jsonDecode(trendArrayStr);
-    return trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
+    
+    // 解析所有净值点
+    final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
+    
+    // 过滤掉今天及未来的数据，只保留已确认的净值
+    // 使用昨天的日期作为截止点（因为今天的净值通常还没出来）
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final cutoffDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
+    
+    final confirmedPoints = allPoints.where((point) {
+      return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
+    }).toList();
+    
+    // 如果过滤后没有数据（可能是新基金），则返回原始数据
+    return confirmedPoints.isEmpty ? allPoints : confirmedPoints;
   }
 
   Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {

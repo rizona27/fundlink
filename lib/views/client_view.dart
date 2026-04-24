@@ -42,6 +42,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   bool _isPinnedSectionExpanded = false;
   double _scrollOffset = 0;
   bool _autoFixTriggered = false;
+  DateTime? _lastAutoFixTime; // 记录上次自动修复的时间
   Timer? _debounceTimer;
   Timer? _scrollThrottleTimer;
   late AnimationController _scrollAnimationController;
@@ -64,24 +65,38 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   Future<void> _checkAndFixGarbledFundNames() async {
     if (_autoFixTriggered) return;
+      
+    // 如果距离上次自动修复不足5分钟，不再重复尝试
+    if (_lastAutoFixTime != null && 
+        DateTime.now().difference(_lastAutoFixTime!).inMinutes < 5) {
+      return;
+    }
+      
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
-
+  
+    // 只检测真正的乱码，不包括"加载失败"(网络问题)
     bool hasGarbled = false;
     for (final holding in _dataManager.holdings) {
       final name = holding.fundName;
-      if (name.contains('�') || name.contains('\\ufffd') || name.isEmpty || name == '加载失败') {
+      // 只检测真正的乱码字符，不检测"加载失败"
+      if (name.contains('') || name.contains('\ufffd')) {
         hasGarbled = true;
         break;
       }
     }
+      
     if (hasGarbled && mounted) {
       _autoFixTriggered = true;
-      context.showToast('检测到乱码，正在自动修复...', duration: const Duration(seconds: 2));
-      await _dataManager.refreshAllHoldingsForce(_fundService, null);
-      if (mounted) {
-        setState(() {});
-        context.showToast('修复完成');
+      _lastAutoFixTime = DateTime.now();
+      try {
+        await _dataManager.refreshAllHoldingsForce(_fundService, null);
+        if (mounted) {
+          setState(() {});
+          // 静默修复，不显示Toast
+        }
+      } catch (e) {
+        // 网络错误时也不显示提示，避免骚扰用户
       }
     }
   }

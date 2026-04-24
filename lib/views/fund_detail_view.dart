@@ -10,6 +10,8 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../widgets/fund_performance_chart.dart';
 import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/adaptive_top_bar.dart';
 import 'history_view.dart';
 
 class FundDetailPage extends StatefulWidget {
@@ -207,33 +209,50 @@ class _FundDetailPageState extends State<FundDetailPage> {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(widget.holding.fundName),
-        previousPageTitle: null,
-        leading: _buildBackButton(isDark),
-        automaticallyImplyLeading: false,
-      ),
       child: SafeArea(
-        child: _loading
-            ? const Center(child: CupertinoActivityIndicator())
-            : _error != null
-            ? Center(child: Text('加载失败: $_error'))
-            : SingleChildScrollView(
-          controller: _mainScrollController,
-          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildValuationCard(isDark),
-              const SizedBox(height: 24),
-              _buildChartSection(isDark),
-              const SizedBox(height: 24),
-              _buildTopHoldingsSection(isDark),
-              const SizedBox(height: 24),
-              _buildHistoryEntry(isDark),
-              const SizedBox(height: 8),
-            ],
-          ),
+        child: Column(
+          children: [
+            // 使用AdaptiveTopBar作为顶部栏
+            AdaptiveTopBar(
+              scrollOffset: 0,
+              showBack: true,
+              onBack: () => Navigator.of(context).pop(),
+              showRefresh: false,
+              showExpandCollapse: false,
+              showSearch: false,
+              showReset: false,
+              showFilter: false,
+              showSort: false,
+              backgroundColor: Colors.transparent,
+              iconColor: CupertinoTheme.of(context).primaryColor,
+              iconSize: 24,
+              buttonSpacing: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CupertinoActivityIndicator())
+                  : _error != null
+                  ? _buildErrorView(isDark)
+                  : SingleChildScrollView(
+                      controller: _mainScrollController,
+                      padding: const EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 40),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildValuationCard(isDark),
+                          const SizedBox(height: 24),
+                          _buildChartSection(isDark),
+                          const SizedBox(height: 24),
+                          _buildTopHoldingsSection(isDark),
+                          const SizedBox(height: 24),
+                          _buildHistoryEntry(isDark),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -250,26 +269,56 @@ class _FundDetailPageState extends State<FundDetailPage> {
     );
   }
 
-  Widget _buildBackButton(bool isDark) {
-    return GestureDetector(
-      onTap: () => Navigator.of(context).pop(),
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
-              : CupertinoColors.white.withOpacity(0.85),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+
+  Widget _buildErrorView(bool isDark) {
+    final bool isNetworkError = _error!.contains('ClientException') || 
+                                 _error!.contains('SocketException') ||
+                                 _error!.contains('Failed host lookup');
+    
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isNetworkError ? CupertinoIcons.wifi_slash : CupertinoIcons.exclamationmark_triangle,
+              size: 64,
+              color: isNetworkError 
+                  ? CupertinoColors.systemOrange 
+                  : CupertinoColors.systemRed,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isNetworkError ? '网络连接失败' : '加载失败',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? CupertinoColors.white : CupertinoColors.black,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isNetworkError 
+                  ? '请检查网络连接后重试' 
+                  : '数据加载出现错误',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark 
+                    ? CupertinoColors.white.withOpacity(0.6)
+                    : CupertinoColors.systemGrey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            GlassButton(
+              label: isNetworkError ? '重新连接' : '重试',
+              icon: CupertinoIcons.refresh,
+              onPressed: _loadDetailData,
+              isPrimary: true,
             ),
           ],
         ),
-        child: const Icon(CupertinoIcons.back, size: 20),
       ),
     );
   }

@@ -653,12 +653,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         : CupertinoColors.systemGrey;
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false,
-        leading: const SizedBox.shrink(),
-        middle: const Text(''), // 去掉标题
-        backgroundColor: Colors.transparent,
-      ),
       child: SafeArea(
         child: _isSaving
             ? const Center(child: CupertinoActivityIndicator(radius: 20))

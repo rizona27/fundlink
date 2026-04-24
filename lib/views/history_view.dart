@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../models/net_worth_point.dart';
 import '../services/fund_service.dart';
 import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';
 
 class HistoryDialog extends StatefulWidget {
   final String fundCode;
@@ -109,6 +110,60 @@ class _HistoryDialogState extends State<HistoryDialog> {
       });
     }
     setState(() => _loadingMore = false);
+  }
+
+  Widget _buildErrorView(bool isDark) {
+    final bool isNetworkError = _error!.contains('ClientException') || 
+                                 _error!.contains('SocketException') ||
+                                 _error!.contains('Failed host lookup');
+    
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isNetworkError ? CupertinoIcons.wifi_slash : CupertinoIcons.exclamationmark_triangle,
+              size: 48,
+              color: isNetworkError 
+                  ? CupertinoColors.systemOrange 
+                  : CupertinoColors.systemRed,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isNetworkError ? '网络连接失败' : '加载失败',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? CupertinoColors.white : CupertinoColors.black,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isNetworkError 
+                  ? '请检查网络连接后重试' 
+                  : '数据加载出现错误',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark 
+                    ? CupertinoColors.white.withOpacity(0.6)
+                    : CupertinoColors.systemGrey,
+              ),
+            ),
+            const SizedBox(height: 16),
+            GlassButton(
+              label: isNetworkError ? '重新连接' : '重试',
+              icon: CupertinoIcons.refresh,
+              onPressed: _loadData,
+              isPrimary: true,
+              height: 40,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -220,7 +275,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
                 child: _loading
                     ? const Center(child: CupertinoActivityIndicator())
                     : _error != null
-                    ? Center(child: Text('加载失败: $_error'))
+                    ? _buildErrorView(isDark)
                     : _displayList.isEmpty
                     ? const Center(child: Text('暂无历史净值数据'))
                     : ListView.builder(

@@ -4,6 +4,7 @@ import '../services/data_manager.dart';
 import '../models/net_worth_point.dart';
 import '../models/fund_holding.dart';
 import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';
 
 /// 基金业绩详情弹窗
 /// 展示多个周期的业绩表现
@@ -32,6 +33,8 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   
   // 存储各周期的业绩数据
   Map<String, double?> _performanceData = {};
+  // 标记哪些是计算数据(非API数据)
+  Set<String> _calculatedPeriods = {};
   // 存储各周期的日期区间说明
   Map<String, String> _periodDateRanges = {};
   DateTime? _fundEstablishDate; // 基金成立日期
@@ -83,8 +86,15 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
       // 获取数据截止日期（最新的数据日期）
       _dataEndDate = historyPoints.last.date;
       
-      // 优先使用API返回的收益率数据
-      if (widget.holding != null) {
+      // 优先从 DataManager 缓存读取 API 返回的收益率数据
+      final cachedInfo = widget.dataManager?.getFundInfoCache(widget.fundCode);
+      if (cachedInfo != null) {
+        _performanceData['近1月'] = cachedInfo.navReturn1m;
+        _performanceData['近3月'] = cachedInfo.navReturn3m;
+        _performanceData['近6月'] = cachedInfo.navReturn6m;
+        _performanceData['近1年'] = cachedInfo.navReturn1y;
+      } else if (widget.holding != null) {
+        // 如果没有缓存，尝试从 holding 中获取
         final h = widget.holding!;
         _performanceData['近1月'] = h.navReturn1m;
         _performanceData['近3月'] = h.navReturn3m;
@@ -92,9 +102,10 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         _performanceData['近1年'] = h.navReturn1y;
       }
       
-      // 计算各周期业绩（只计算API没有提供的周期）
-      final now = DateTime.now();
+      // 计算各周期业绩（只计算没有API数据的周期）
+      // 使用最新净值日期作为基准，而不是当前日期
       final latestPoint = historyPoints.last;
+      final latestDate = latestPoint.date;
       
       for (var period in _periods) {
         final label = period['label'] as String;
@@ -108,27 +119,55 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         DateTime? endDate;
         
         if (period['special'] == 'ytd') {
-          // 今年来：从今年1月1日到现在
-          startDate = DateTime(now.year, 1, 1);
-          endDate = latestPoint.date;
+          // 今年来：从今年1月1日到最新净值日期
+          startDate = DateTime(latestDate.year, 1, 1);
+          endDate = latestDate;
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate, endDate);
+          _calculatedPeriods.add(label); // 标记为计算数据
         } else if (period['special'] == 'inception') {
-          // 成立来：从成立日到现在
+          // 成立来：从成立日到最新净值日期
           startDate = _fundEstablishDate!;
-          endDate = latestPoint.date;
+          endDate = latestDate;
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate, endDate);
+          _calculatedPeriods.add(label); // 标记为计算数据
         } else {
-          // 固定天数周期
+          // 固定天数周期：从最新净值日期往前推N天
           final days = period['days'] as int;
-          startDate = now.subtract(Duration(days: days));
-          endDate = now;
+          
+          // 检查基金成立时间是否足够
+          final fundAgeDays = latestDate.difference(_fundEstablishDate!).inDays;
+          if (fundAgeDays < days) {
+            // 基金成立时间不足该周期，显示--
+            _performanceData[label] = null;
+            _periodDateRanges[label] = '基金成立不足${_getPeriodText(days)}';
+            continue;
+          }
+          
+          // 计算起始日期（自然日）
+          final targetStartDate = latestDate.subtract(Duration(days: days));
+          
+          // 找到targetStartDate之前最后一个有净值的交易日作为起点
+          NetWorthPoint? actualStartPoint;
+          for (int i = historyPoints.length - 1; i >= 0; i--) {
+            if (historyPoints[i].date.isBefore(targetStartDate) || 
+                historyPoints[i].date.isAtSameMomentAs(targetStartDate)) {
+              actualStartPoint = historyPoints[i];
+              break;
+            }
+          }
+          
+          // 如果找不到，使用最早的点
+          startDate = actualStartPoint?.date ?? historyPoints.first.date;
+          endDate = latestDate;
+          
           _performanceData[label] = 
-            _calculateReturn(historyPoints, startDate, endDate);
+            _calculateReturn(historyPoints, startDate!, endDate!);
+          _calculatedPeriods.add(label); // 标记为计算数据
         }
         
-        // 保存日期区间说明
+        // 保存日期区间说明（显示实际使用的净值日期）
         if (startDate != null && endDate != null) {
           _periodDateRanges[label] = '${_formatDate(startDate)} ~ ${_formatDate(endDate)}';
         }
@@ -191,6 +230,19 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// 将天数转换为易读的周期文本
+  String _getPeriodText(int days) {
+    if (days < 30) {
+      return '${days}天';
+    } else if (days < 365) {
+      final months = (days / 30).round();
+      return '${months}个月';
+    } else {
+      final years = (days / 365).round();
+      return '${years}年';
+    }
   }
 
   Color _getReturnColor(double? value) {
@@ -290,6 +342,10 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   }
 
   Widget _buildErrorView(bool isDark) {
+    final bool isNetworkError = _error!.contains('ClientException') || 
+                                 _error!.contains('SocketException') ||
+                                 _error!.contains('Failed host lookup');
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -297,13 +353,15 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              CupertinoIcons.exclamationmark_triangle,
+              isNetworkError ? CupertinoIcons.wifi_slash : CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemOrange,
+              color: isNetworkError 
+                  ? CupertinoColors.systemOrange 
+                  : CupertinoColors.systemRed,
             ),
             const SizedBox(height: 16),
             Text(
-              '加载失败',
+              isNetworkError ? '网络连接失败' : '加载失败',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -312,7 +370,9 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? '未知错误',
+              isNetworkError 
+                  ? '请检查网络连接后重试' 
+                  : '数据加载出现错误',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -322,9 +382,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            CupertinoButton(
+            GlassButton(
+              label: isNetworkError ? '重新连接' : '重试',
+              icon: CupertinoIcons.refresh,
               onPressed: _loadPerformanceData,
-              child: const Text('重试'),
+              isPrimary: true,
+              height: 40,
             ),
           ],
         ),
@@ -335,15 +398,19 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   Widget _buildPerformanceList(bool isDark) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _periods.length + 2, // +2 for establishment date and data end date
+      itemCount: _periods.length + 3, // +3 for establishment date, data end date, and disclaimer
       itemBuilder: (context, index) {
-        // 倒数第二行显示基金成立日期
+        // 倒数第三行显示基金成立日期
         if (index == _periods.length) {
           return _buildEstablishmentDateRow(isDark);
         }
-        // 最后一行显示数据截止日期
+        // 倒数第二行显示数据截止日期
         if (index == _periods.length + 1) {
           return _buildDataEndDateRow(isDark);
+        }
+        // 最后一行显示免责声明
+        if (index == _periods.length + 2) {
+          return _buildDisclaimerRow(isDark);
         }
 
         final period = _periods[index];
@@ -358,6 +425,7 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   Widget _buildPerformanceRow(String label, double? value, bool isDark) {
     final dateRange = _periodDateRanges[label];
     final showDateRange = dateRange != null && dateRange.isNotEmpty;
+    final isCalculated = _calculatedPeriods.contains(label);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -377,12 +445,30 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                      ),
+                    ),
+                    if (isCalculated)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          '*',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark 
+                                ? CupertinoColors.systemGrey.withOpacity(0.5)
+                                : CupertinoColors.systemGrey.withOpacity(0.6),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 if (showDateRange)
                   Padding(
@@ -500,6 +586,47 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: isDark ? CupertinoColors.white : CupertinoColors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerRow(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? CupertinoColors.systemOrange.withOpacity(0.1)
+            : CupertinoColors.systemOrange.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark
+              ? CupertinoColors.systemOrange.withOpacity(0.3)
+              : CupertinoColors.systemOrange.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.info_circle,
+            size: 14,
+            color: isDark 
+                ? CupertinoColors.systemOrange 
+                : CupertinoColors.systemOrange,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '带*号为估算数据，仅供参考，实际收益以基金公司公布为准',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark 
+                    ? CupertinoColors.systemOrange.withOpacity(0.9)
+                    : CupertinoColors.systemOrange,
+              ),
             ),
           ),
         ],
