@@ -641,12 +641,15 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             key: _chartContainerKey,
             child: SizedBox(
               height: 240,
-              child: Listener(
-                onPointerDown: _handlePointerEvent,
-                onPointerMove: _handlePointerEvent,
-                onPointerHover: _handlePointerEvent,
-                onPointerUp: (_) => _clearHover(),
-                child: Stack(
+              child: MouseRegion(
+                onExit: (_) => _clearHover(),
+                child: Listener(
+                  onPointerDown: _handlePointerEvent,
+                  onPointerMove: _handlePointerEvent,
+                  onPointerHover: _handlePointerEvent,
+                  onPointerUp: (_) => _clearHover(),
+                  onPointerCancel: (_) => _clearHover(),
+                  child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Container(
@@ -829,7 +832,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                     ),
                                     if (crossX > 0 && crossX < _chartWidth)
                                       Positioned(
-                                        left: crossX - 40,
+                                        left: crossX < 80 ? crossX : (crossX > _chartWidth - 80 ? _chartWidth - 80 : crossX - 40),
                                         bottom: 0,
                                         child: IgnorePointer(
                                           child: Container(
@@ -849,7 +852,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                     if (crossY > 0 && crossY < _chartHeight)
                                       Positioned(
                                         left: 0,
-                                        top: crossY - 12,
+                                        top: crossY < 24 ? crossY : (crossY > _chartHeight - 24 ? _chartHeight - 24 : crossY - 12),
                                         child: IgnorePointer(
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -899,6 +902,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               ),
             ),
           ),
+        ),
           const SizedBox(height: 12),
           // 所有时间维度都显示图例
           ValueListenableBuilder<int>(
@@ -937,6 +941,19 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 ],
               );
             },
+          ),
+          const SizedBox(height: 8),
+          // ETF联接基金说明
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              '*因API接口关系，宽基指数采用跟踪ETF联接基金(沪深300-460300|中证500-004348|中证1000-011860)，实际指数可能存在细微跟踪误差。',
+              style: TextStyle(
+                fontSize: 9,
+                color: isDark ? Colors.white38 : Colors.black38,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           ),
         ],
       ),
