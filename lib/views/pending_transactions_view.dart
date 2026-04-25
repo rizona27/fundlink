@@ -307,8 +307,14 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                     Text('份额', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                     const SizedBox(height: 2),
                     Text(
-                      '${tx.shares.toStringAsFixed(2)}份',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+                      tx.shares > 0 
+                          ? '${tx.shares.toStringAsFixed(2)}份'
+                          : '待计算',
+                      style: TextStyle(
+                        fontSize: 13, 
+                        fontWeight: FontWeight.w600, 
+                        color: tx.shares > 0 ? textColor : CupertinoColors.systemOrange,
+                      ),
                     ),
                   ],
                 ),

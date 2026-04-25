@@ -176,6 +176,16 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   }
 
   bool get _isFormValid {
+    // 如果是待确认交易，只需要客户姓名、基金代码和交易金额
+    if (_isTodayTransaction) {
+      return !_clientNameError &&
+          !_fundCodeError &&
+          !_amountError &&
+          _clientNameController.text.trim().isNotEmpty &&
+          _fundCodeController.text.trim().isNotEmpty &&
+          _purchaseAmountController.text.trim().isNotEmpty;
+    }
+    // 如果不是待确认交易，所有字段都是必填的
     return !_clientNameError &&
         !_fundCodeError &&
         !_amountError &&
@@ -213,6 +223,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   }
 
   void _validateShares(String value) {
+    // 如果是待确认交易，份额不是必填项
+    if (_isTodayTransaction) {
+      setState(() => _sharesError = false);
+      return;
+    }
+    
     final trimmed = value.trim();
     bool error = false;
     if (trimmed.isNotEmpty) {
@@ -256,11 +272,20 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _fundName = fundInfo['fundName'] as String? ?? '';
           _currentNav = fundInfo['currentNav'] as double?;
           _navDate = fundInfo['navDate'] as DateTime?;
-          _confirmNav = _currentNav; // 默认使用API返回的净值作为确认净值
           
-          // 更新确认净值输入框
-          if (_confirmNav != null && _confirmNav! > 0) {
-            _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+          // 只有在非待确认交易时才自动填充净值
+          if (!_isTodayTransaction) {
+            _confirmNav = _currentNav; // 默认使用API返回的净值作为确认净值
+            
+            // 更新确认净值输入框
+            if (_confirmNav != null && _confirmNav! > 0) {
+              _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+            }
+          } else {
+            // 待确认交易时，不自动填充净值
+            _confirmNav = null;
+            _confirmNavController.clear();
+            print('待确认交易，不自动填充净值');
           }
           
           // 调试信息
@@ -269,6 +294,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           print('当前净值: $_currentNav');
           print('确认净值: $_confirmNav');
           print('净值日期: $_navDate');
+          print('是否待确认: $_isTodayTransaction');
         });
         
         // 后台缓存净值趋势数据，用于后续根据日期查找
@@ -296,6 +322,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   
   // 根据金额、费率、确认净值计算份额
   void _calculateShares() {
+    // 如果是待确认交易，不自动计算份额
+    if (_isTodayTransaction) {
+      print('待确认交易，不自动计算份额');
+      return;
+    }
+    
     final amountText = _purchaseAmountController.text.trim();
     final feeRateText = _feeRateController.text.trim();
     
@@ -492,10 +524,15 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       // 判断是否为待确认交易(今天或未来的交易)
       final isPending = DataManager.isTransactionPending(_purchaseDate);
       double? confirmedNav;
+      double transactionShares = shares; // 默认使用用户输入的份额
       
       if (isPending) {
         confirmedNav = null;
-        print('创建待确认交易(新增持仓): 今天或未来日期');
+        // 待确认交易：如果用户没有输入份额，则设为0，等待后续确认时计算
+        if (_purchaseSharesController.text.trim().isEmpty) {
+          transactionShares = 0;
+        }
+        print('创建待确认交易(新增持仓): 今天或未来日期, 份额: $transactionShares');
       }
 
       // 创建交易记录（买入）- 使用确认净值
@@ -506,7 +543,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         fundName: fundName,
         type: TransactionType.buy,
         amount: amount,
-        shares: shares,
+        shares: transactionShares,
         tradeDate: _purchaseDate,
         nav: _confirmNav != null && _confirmNav! > 0 ? _confirmNav : (currentNav > 0 ? currentNav : null),
         fee: null,
@@ -823,7 +860,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   const SizedBox(height: 12),
                   _buildRowField(
                     label: '确认净值',
-                    required: true,
+                    required: !_isTodayTransaction, // 待确认交易时不是必填
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -866,7 +903,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                             final nav = double.tryParse(value.trim());
                             if (nav != null && nav > 0) {
                               setState(() => _confirmNav = nav);
-                              _calculateShares(); // 重新计算份额
+                              // 只有非待确认交易才自动计算份额
+                              if (!_isTodayTransaction) {
+                                _calculateShares();
+                              }
                             }
                           },
                           inputBgColor: inputBgColor,
@@ -879,14 +919,17 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   const SizedBox(height: 12),
                   _buildRowField(
                     label: '交易份额',
-                    required: true,
+                    required: !_isTodayTransaction, // 待确认交易时不是必填
                     child: _buildAmountField(
                       controller: _purchaseSharesController,
-                      hint: '请输入买入份额',
+                      hint: _isTodayTransaction ? '选填，待确认后可自动计算' : '请输入买入份额',
                       error: _sharesError,
                       onChanged: (value) {
                         _validateShares(value);
-                        _calculateNavFromShares(); // 根据份额反推净值
+                        // 只有非待确认交易才根据份额反推净值
+                        if (!_isTodayTransaction) {
+                          _calculateNavFromShares();
+                        }
                       },
                       inputBgColor: inputBgColor,
                       textColor: textColor,

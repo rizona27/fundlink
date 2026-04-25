@@ -64,6 +64,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 
   Future<void> _fetchCurrentNavIfNeeded() async {
+    // 如果是待确认交易，不自动填充净值
+    if (_isTodayTransaction) {
+      print('待确认交易，不自动填充净值');
+      setState(() => _isFetchingNav = false);
+      return;
+    }
+    
     // 总是尝试获取最新净值，无论是否有缓存
     setState(() => _isFetchingNav = true);
     try {
@@ -115,9 +122,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       });
     }
 
-    // 如果有当前净值，自动填充
-    if (widget.currentNav != null && widget.currentNav! > 0) {
-      _navController.text = widget.currentNav!.toStringAsFixed(4);
+    // 只有在非待确认交易时才自动填充净值
+    if (!_isTodayTransaction) {
+      if (widget.currentNav != null && widget.currentNav! > 0) {
+        _navController.text = widget.currentNav!.toStringAsFixed(4);
+      }
+    } else {
+      print('待确认交易，_checkTimeAndSetNav 不自动填充净值');
     }
   }
 
@@ -132,6 +143,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
   // 计算预估份额（买入）或预估金额（卖出）
   void _calculateEstimated() {
+    // 如果是待确认交易，不自动计算份额
+    if (_isTodayTransaction) {
+      print('待确认交易，不自动计算份额');
+      return;
+    }
+    
     final amountText = _amountController.text.trim();
     final navText = _navController.text.trim();
     final feeText = _feeController.text.trim();
@@ -341,14 +358,34 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     }
 
     // 最终验证
-    if (shares == null || shares <= 0) {
-      context.showToast('无法计算份额，请输入净值或份额');
-      return;
+    // 对于待确认交易，根据买入/卖出有不同的处理
+    if (widget.type == TransactionType.buy) {
+      // 买入：待确认时可以只输入金额，份额等待确认时计算
+      if (shares == null || shares <= 0) {
+        if (_isTodayTransaction && amount != null && amount > 0) {
+          shares = 0; // 待确认买入时份额可以为0
+        } else {
+          context.showToast('无法计算份额，请输入净值或份额');
+          return;
+        }
+      }
+    } else {
+      // 卖出：待确认时必须输入份额，金额可以等待确认时计算
+      if (shares == null || shares <= 0) {
+        context.showToast('卖出时必须输入份额');
+        return;
+      }
     }
 
+    // 金额验证
     if (amount == null || amount <= 0) {
-      context.showToast('无法计算金额，请输入净值或金额');
-      return;
+      // 对于待确认的卖出交易，金额可以为0，等待确认时计算
+      if (widget.type == TransactionType.sell && _isTodayTransaction) {
+        amount = 0; // 待确认卖出时金额可以为0
+      } else {
+        context.showToast('无法计算金额，请输入净值或金额');
+        return;
+      }
     }
 
     // 卖出时检查份额

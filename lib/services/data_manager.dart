@@ -380,8 +380,15 @@ class DataManager extends ChangeNotifier {
   /// 添加交易记录并自动更新持仓
   Future<void> addTransaction(TransactionRecord transaction) async {
     // 验证交易数据
-    if (transaction.amount <= 0 || transaction.shares <= 0) {
-      await addLog('添加交易失败: 金额和份额必须大于0', type: LogType.error);
+    // 对于待确认交易，份额可以为0，等待后续确认时计算
+    if (transaction.amount <= 0) {
+      await addLog('添加交易失败: 金额必须大于0', type: LogType.error);
+      throw Exception('无效的交易数据');
+    }
+    
+    // 非待确认交易必须有份额
+    if (!transaction.isPending && transaction.shares <= 0) {
+      await addLog('添加交易失败: 已确认交易必须有份额', type: LogType.error);
       throw Exception('无效的交易数据');
     }
 
@@ -708,10 +715,36 @@ class DataManager extends ChangeNotifier {
       throw Exception('该交易已经确认');
     }
     
+    // 根据交易类型计算缺失的值
+    double calculatedShares = transaction.shares;
+    double calculatedAmount = transaction.amount;
+    
+    if (transaction.type == TransactionType.buy) {
+      // 买入：如果份额为0，根据金额和净值计算份额
+      if (transaction.shares <= 0 && transaction.amount > 0 && confirmedNav > 0) {
+        // 使用内扣法计算份额：份额 = 金额 / (1 + 费率%) / 净值
+        // 注意：这里假设费率为0，因为待确认交易时可能没有输入费率
+        // TODO: 如果需要支持费率，需要在交易记录中保存费率信息
+        calculatedShares = transaction.amount / confirmedNav;
+        print('确认买入交易时计算份额: 金额=${transaction.amount}, 净值=$confirmedNav, 份额=$calculatedShares');
+      }
+    } else {
+      // 卖出：如果金额为0，根据份额和净值计算金额
+      if (transaction.amount <= 0 && transaction.shares > 0 && confirmedNav > 0) {
+        // 金额 = 份额 * 净值 * (1 - 费率%)
+        // 注意：这里假设费率为0
+        // TODO: 如果需要支持费率，需要在交易记录中保存费率信息
+        calculatedAmount = transaction.shares * confirmedNav;
+        print('确认卖出交易时计算金额: 份额=${transaction.shares}, 净值=$confirmedNav, 金额=$calculatedAmount');
+      }
+    }
+    
     // 更新交易记录
     final updatedTransaction = transaction.copyWith(
       isPending: false,
       confirmedNav: confirmedNav,
+      shares: calculatedShares,
+      amount: calculatedAmount,
     );
     
     _transactions[index] = updatedTransaction;
@@ -728,7 +761,7 @@ class DataManager extends ChangeNotifier {
       '客户: ${transaction.clientName}(${transaction.clientId})\n'
       '类型: ${transaction.type.displayName}\n'
       '交易日期: ${transaction.tradeDate.year}-${transaction.tradeDate.month.toString().padLeft(2, '0')}-${transaction.tradeDate.day.toString().padLeft(2, '0')}\n'
-      '金额: ${transaction.amount.toStringAsFixed(2)}元 | 份额: ${transaction.shares.toStringAsFixed(2)}份\n'
+      '金额: ${calculatedAmount.toStringAsFixed(2)}元 | 份额: ${calculatedShares.toStringAsFixed(2)}份\n'
       '确认净值: $confirmedNav\n'
       '确认时间: ${confirmDate.year}-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')} ${confirmDate.hour.toString().padLeft(2, '0')}:${confirmDate.minute.toString().padLeft(2, '0')}',
       type: LogType.success,
@@ -817,9 +850,9 @@ class DataManager extends ChangeNotifier {
   /// 计算交易净值何时可以确认(净值公布时间)
   /// - 过去日期: 已确认
   /// - 今天或未来:
-  ///   * 工作日15:00前: T+1日可确认
-  ///   * 工作日15:00后: T+2日可确认
-  ///   * 非工作日: 统一按下一个工作日的15:00前处理，T+2日可确认
+  ///   * 工作日15:00前: T+1日可确认（使用T日净值）
+  ///   * 工作日15:00后: T+2日可确认（使用T+1日净值）
+  ///   * 非工作日: 统一按下一个工作日的15:00前处理，T+1日可确认（使用下一个工作日净值）
   static DateTime calculateConfirmDate(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -835,11 +868,13 @@ class DataManager extends ChangeNotifier {
     final effectiveIsAfter1500 = isWeekday(tradeDay) ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
-      // 15:00后,T+2日可确认
-      return getNextWeekday(getNextWeekday(tradeDay));
+      // 15:00后，使用T+1日净值，T+2日可确认
+      final navDate = getNextWeekday(tradeDay); // T+1日（净值日期）
+      return getNextWeekday(navDate); // T+2日（确认日期）
     } else {
-      // 15:00前,T+1日可确认
-      return getNextWeekday(tradeDay);
+      // 15:00前，使用T日净值，T+1日可确认
+      final navDate = isWeekday(tradeDay) ? tradeDay : getNextWeekday(tradeDay); // T日（净值日期）
+      return getNextWeekday(navDate); // T+1日（确认日期）
     }
   }
   
