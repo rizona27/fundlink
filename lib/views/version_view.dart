@@ -5,10 +5,11 @@ import '../widgets/adaptive_top_bar.dart';
 
 // ==================== 版本信息配置区 ====================
 /// 应用版本号
-const String APP_VERSION = 'v1.0.8';
+const String APP_VERSION = 'v1.0.9';
 
 /// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
+  'v1.0.9 - 顶部工具栏优化',
   'v1.0.8 - 优化基金对比图表，支持渐变填充效果；修复自定义基金配置对话框输入问题',
   'v1.0.7 - 新增SummaryView展开时"更多"按钮，点击跳转基金详情；优化展开/折叠动画效果',
   'v1.0.6 - 新增自定义基金对比功能；优化图例显示规则，支持动态显示/隐藏指标',

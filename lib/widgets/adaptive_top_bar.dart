@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
@@ -305,6 +305,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   late AnimationController _hideController;
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
+  Timer? _autoCloseTimer; // 自动关闭定时器
   bool _isRefreshing = false;
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
@@ -325,6 +326,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     _internalFocusNode.addListener(() {
       if (_internalFocusNode.hasFocus && !_currentSearchVisible && mounted) {
         _setSearchVisible(true);
+      }
+      // 失去焦点时重置自动关闭定时器
+      if (!_internalFocusNode.hasFocus) {
+        _resetAutoCloseTimer();
       }
     });
   }
@@ -390,6 +395,35 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     } else {
       setState(() => _internalSearchVisible = visible);
     }
+    // 搜索框状态改变时，管理自动关闭定时器
+    if (visible) {
+      _startAutoCloseTimer();
+    } else {
+      _cancelAutoCloseTimer();
+    }
+  }
+
+  // 启动自动关闭定时器（5秒后自动关闭）
+  void _startAutoCloseTimer() {
+    _cancelAutoCloseTimer();
+    _autoCloseTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
+        _setSearchVisible(false);
+      }
+    });
+  }
+
+  // 取消自动关闭定时器
+  void _cancelAutoCloseTimer() {
+    _autoCloseTimer?.cancel();
+    _autoCloseTimer = null;
+  }
+
+  // 重置自动关闭定时器
+  void _resetAutoCloseTimer() {
+    if (_currentSearchVisible) {
+      _startAutoCloseTimer();
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -399,6 +433,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       setState(() => _internalSearchText = value);
       widget.onSearchChanged?.call(value);
     }
+    // 每次输入时重置自动关闭定时器
+    _resetAutoCloseTimer();
   }
 
   void _onSearchClear() {
@@ -613,7 +649,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       ));
     }
 
-    if (menuItems.isNotEmpty) {
+    if (menuItems.isNotEmpty && _hasData) {
       children.add(_GlassPopupMenuButton(
         items: menuItems,
         icon: Icon(
@@ -621,7 +657,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           size: widget.iconSize,
           color: widget.iconColor,
         ),
-        disabled: !_hasData,
+        disabled: false,
       ));
     }
 
@@ -937,6 +973,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   @override
   void dispose() {
     _scrollTimer?.cancel();
+    _autoCloseTimer?.cancel(); // 清理自动关闭定时器
     _hideController.dispose();
     _internalSearchController.dispose();
     _internalFocusNode.dispose();
@@ -980,25 +1017,23 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                     ),
                   ),
                 ),
-                Opacity(
-                  opacity: progress,
-                  child: Transform.translate(
-                    offset: Offset(0, -8 * (1 - progress)),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: _currentSearchVisible ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
                     child: Container(
-                      height: _currentSearchVisible ? 52 * progress : 0,
+                      height: _currentSearchVisible ? 52 : 0,
                       child: SingleChildScrollView(
                         physics: const NeverScrollableScrollPhysics(),
-                        child: AnimatedCrossFade(
-                          duration: const Duration(milliseconds: 200),
-                          crossFadeState: _currentSearchVisible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                          firstChild: Search(
-                            controller: _internalSearchController,
-                            focusNode: _internalFocusNode,
-                            onChanged: _onSearchChanged,
-                            onClear: _onSearchClear,
-                            placeholder: widget.searchPlaceholder,
-                          ),
-                          secondChild: const SizedBox.shrink(),
+                        child: Search(
+                          controller: _internalSearchController,
+                          focusNode: _internalFocusNode,
+                          onChanged: _onSearchChanged,
+                          onClear: _onSearchClear,
+                          placeholder: widget.searchPlaceholder,
                         ),
                       ),
                     ),
@@ -1033,8 +1068,23 @@ class _GlassPopupMenuButton extends StatefulWidget {
 
 class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with SingleTickerProviderStateMixin {
   final GlobalKey _buttonKey = GlobalKey();
+  final GlobalKey<_AnimatedButtonGroupState> _menuKey = GlobalKey();
   OverlayEntry? _overlayEntry;
   bool _isShowing = false;
+  Timer? _autoCloseTimer;
+
+  void _startAutoCloseTimer() {
+    _autoCloseTimer?.cancel();
+    _autoCloseTimer = Timer(const Duration(seconds: 5), () {
+      if (_isShowing) {
+        _hideMenu();
+      }
+    });
+  }
+
+  void _cancelAutoCloseTimer() {
+    _autoCloseTimer?.cancel();
+  }
 
   void _showMenu() {
     if (widget.disabled || _isShowing) return;
@@ -1044,21 +1094,116 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
     final Size size = renderBox.size;
 
     _overlayEntry = OverlayEntry(
-      builder: (context) => _buildButtonGroupOverlay(offset, size),
+      builder: (context) => Stack(
+        children: [
+          // 透明背景，点击关闭（但不拦截菜单内的点击）
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                // 点击背景时，触发菜单项的_close方法
+                // 通过找到_AnimatedButtonGroup的state来调用
+                _hideMenuWithAnimation();
+              },
+              behavior: HitTestBehavior.translucent,
+            ),
+          ),
+          // 菜单内容
+          Positioned(
+            top: offset.dy + size.height + 8,
+            right: MediaQuery.of(context).size.width - (offset.dx + size.width),
+            child: MouseRegion(
+              onEnter: (_) => _cancelAutoCloseTimer(),
+              onExit: (_) => _startAutoCloseTimer(),
+              child: Material(
+                color: Colors.transparent,
+                child: _AnimatedButtonGroup(
+                  key: _menuKey,
+                  items: widget.items,
+                  onHide: _removeOverlay, // 动画完成后移除
+                  showAbove: false,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
     Overlay.of(context).insert(_overlayEntry!);
+    _startAutoCloseTimer();
   }
 
-  void _hideMenu() {
+  // 带淡出动画的关闭
+  void _hideMenuWithAnimation() {
     if (!_isShowing) return;
+    _cancelAutoCloseTimer();
+    _isShowing = false;
+    
+    // 通过GlobalKey调用_AnimatedButtonGroupState的_close方法
+    _menuKey.currentState?._close();
+  }
+
+  // 直接移除overlay（动画完成后调用）
+  void _removeOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
     _isShowing = false;
   }
 
+  void _hideMenu() {
+    _removeOverlay();
+  }
+
+  @override
+  void dispose() {
+    _autoCloseTimer?.cancel();
+    super.dispose();
+  }
+
   Widget _buildButtonGroupOverlay(Offset buttonOffset, Size buttonSize) {
-    final menuTop = buttonOffset.dy + buttonSize.height + 8;
-    final menuRight = MediaQuery.of(context).size.width - (buttonOffset.dx + buttonSize.width);
+    final screenSize = MediaQuery.of(context).size;
+    final menuHeight = widget.items.length * 48.0 + 16.0; // 每个按钮约48px + padding
+    // PC端使用较小宽度（仅图标），移动端使用较大宽度（图标+文字）
+    final menuWidth = kIsWeb ? 50.0 : 120.0;
+    
+    // 计算可用空间
+    final spaceBelow = screenSize.height - (buttonOffset.dy + buttonSize.height);
+    final spaceAbove = buttonOffset.dy;
+    final spaceRight = screenSize.width - (buttonOffset.dx + buttonSize.width);
+    
+    double menuTop;
+    double? menuLeft;
+    double? menuRight;
+    bool showAbove = false;
+    
+    // 子菜单右对齐按钮（确保不超出屏幕右边界）
+    if (spaceRight >= menuWidth) {
+      // 右侧空间充足，右对齐按钮
+      menuLeft = null;
+      menuRight = screenSize.width - (buttonOffset.dx + buttonSize.width);
+    } else {
+      // 右侧空间不足，左对齐到屏幕右边距
+      menuLeft = null;
+      menuRight = 8; // 距离右边界8px
+    }
+    
+    // 判断向上还是向下弹出
+    if (spaceBelow >= menuHeight || spaceBelow > spaceAbove) {
+      // 向下弹出
+      showAbove = false;
+      menuTop = buttonOffset.dy + buttonSize.height + 8;
+      // 确保不超出屏幕底部
+      if (menuTop + menuHeight > screenSize.height - 8) {
+        menuTop = screenSize.height - menuHeight - 8;
+      }
+    } else {
+      // 向上弹出
+      showAbove = true;
+      menuTop = buttonOffset.dy - menuHeight - 8;
+      // 确保不超出屏幕顶部
+      if (menuTop < 8) {
+        menuTop = 8;
+      }
+    }
 
     return GestureDetector(
       onTap: _hideMenu,
@@ -1068,10 +1213,12 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
           Positioned.fill(child: Container(color: Colors.transparent)),
           Positioned(
             top: menuTop,
+            left: menuLeft,
             right: menuRight,
             child: _AnimatedButtonGroup(
               items: widget.items,
               onHide: _hideMenu,
+              showAbove: showAbove,
             ),
           ),
         ],
@@ -1108,40 +1255,97 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
 class _AnimatedButtonGroup extends StatefulWidget {
   final List<_MenuItem> items;
   final VoidCallback onHide;
-  const _AnimatedButtonGroup({required this.items, required this.onHide});
+  final bool showAbove;
+  final VoidCallback? onAnimationComplete; // 动画完成回调
+  const _AnimatedButtonGroup({
+    super.key,
+    required this.items,
+    required this.onHide,
+    this.showAbove = false,
+    this.onAnimationComplete,
+  });
 
   @override
   State<_AnimatedButtonGroup> createState() => _AnimatedButtonGroupState();
 }
 
-class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with SingleTickerProviderStateMixin {
+class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnimation;
   late Animation<Offset> _slideAnimation;
+  List<AnimationController> _itemControllers = [];
+  List<Animation<double>> _itemAnimations = [];
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
     _opacityAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, -0.1), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    
+    // 根据弹出方向调整滑动动画
+    Offset slideOffset;
+    if (widget.showAbove) {
+      // 向上弹出：从下往上滑入
+      slideOffset = const Offset(0, 0.1);
+    } else {
+      // 向下弹出：从上往下滑入
+      slideOffset = const Offset(0, -0.1);
+    }
+    
+    _slideAnimation = Tween<Offset>(begin: slideOffset, end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic)
+    );
+    
+    // 为每个菜单项创建独立的动画控制器
+    for (int i = 0; i < widget.items.length; i++) {
+      final itemController = AnimationController(
+        duration: const Duration(milliseconds: 250),
+        vsync: this,
+      );
+      final itemAnimation = CurvedAnimation(
+        parent: itemController,
+        curve: Curves.easeOutCubic,
+      );
+      _itemControllers.add(itemController);
+      _itemAnimations.add(itemAnimation);
+      
+      // 依次延迟启动动画（每个间隔100ms）
+      Future.delayed(Duration(milliseconds: 50 + i * 100), () {
+        if (mounted) {
+          itemController.forward();
+        }
+      });
+    }
+    
     _controller.forward();
   }
 
   @override
   void dispose() {
+    for (var controller in _itemControllers) {
+      controller.dispose();
+    }
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _close() async {
+  Future<void> close() async {
+    // 先依次关闭每个菜单项（从后往前）
+    for (int i = _itemControllers.length - 1; i >= 0; i--) {
+      await _itemControllers[i].reverse();
+    }
+    // 然后反向播放整体动画
     await _controller.reverse();
     if (mounted) {
       widget.onHide();
     }
+  }
+
+  Future<void> _close() async {
+    await close();
   }
 
   @override
@@ -1155,17 +1359,28 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with SingleT
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end, // 右对齐
               children: widget.items.asMap().entries.map((entry) {
                 final index = entry.key;
                 final item = entry.value;
                 final isLast = index == widget.items.length - 1;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildMenuItemButton(item),
-                    if (!isLast) const SizedBox(height: 8),
-                  ],
+                return AnimatedBuilder(
+                  animation: _itemAnimations[index],
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _itemAnimations[index].value,
+                      child: child,
+                    );
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end, // 右对齐
+                    children: [
+                      _buildMenuItemButton(item),
+                      if (!isLast) const SizedBox(height: 8),
+                    ],
+                  ),
                 );
               }).toList(),
             ),
@@ -1176,42 +1391,218 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with SingleT
   }
 
   Widget _buildMenuItemButton(_MenuItem item) {
-    if (item.onLongPress != null) {
-      return GestureDetector(
+    return _HoverableMenuItem(
+      item: item,
+      onClose: _close,
+    );
+  }
+}
+
+// PC端悬停显示文字的菜单项组件
+class _HoverableMenuItem extends StatefulWidget {
+  final _MenuItem item;
+  final Future<void> Function() onClose;
+  
+  const _HoverableMenuItem({
+    required this.item,
+    required this.onClose,
+  });
+
+  @override
+  State<_HoverableMenuItem> createState() => _HoverableMenuItemState();
+}
+
+class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTickerProviderStateMixin {
+  bool _isHovered = false;
+  late AnimationController _animationController;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _opacityAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final buttonColor = isDark 
+        ? const Color(0xFF2C2C2E).withOpacity(0.9)
+        : CupertinoColors.white.withOpacity(0.9);
+    final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
+    
+    // 移动端：始终显示图标+文字
+    // PC端（Web和Windows）：通过动画控制文字显示和宽度扩展
+    Widget buttonChild;
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) {
+      // PC端：使用Row布局，图标固定，文字动态显示
+      buttonChild = Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          // 图标（始终显示）
+          Icon(
+            widget.item.icon,
+            size: 16,
+            color: textColor,
+          ),
+          // 文字区域（使用IntrinsicWidth自适应宽度）
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            switchInCurve: Curves.easeInOut,
+            switchOutCurve: Curves.easeInOut,
+            child: _isHovered
+                ? Padding(
+                    key: const ValueKey('text'),
+                    padding: const EdgeInsets.only(left: 4),
+                    child: FadeTransition(
+                      opacity: _opacityAnimation,
+                      child: Text(
+                        widget.item.label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('empty')),
+          ),
+        ],
+      );
+    } else {
+      // 移动端：直接显示图标+文字
+      buttonChild = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            widget.item.icon,
+            size: 16,
+            color: textColor,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            widget.item.label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+            ),
+          ),
+        ],
+      );
+    }
+    
+    Widget buttonWidget;
+    if (widget.item.onLongPress != null) {
+      buttonWidget = GestureDetector(
         onLongPress: () {
-          _close();
-          item.onLongPress!();
+          // 先执行功能，再关闭菜单
+          widget.item.onLongPress!();
+          // 延迟关闭，让功能先执行
+          Future.delayed(const Duration(milliseconds: 50), () {
+            widget.onClose();
+          });
         },
-        child: GlassButton(
-          label: item.label,
-          icon: item.icon,
-          onPressed: () {
-            _close();
-            item.onTap();
-          },
-          isPrimary: false,
-          height: 40,
-          borderRadius: 20,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          expand: false,
-          minWidth: 80,
+        onTap: () {
+          // 先执行功能，再关闭菜单
+          widget.item.onTap();
+          // 延迟关闭，让功能先执行
+          Future.delayed(const Duration(milliseconds: 50), () {
+            widget.onClose();
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          padding: kIsWeb
+              ? EdgeInsets.symmetric(
+                  horizontal: _isHovered ? 16 : 12,
+                  vertical: 10,
+                )
+              : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: buttonColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: buttonChild,
         ),
       );
     } else {
-      return GlassButton(
-        label: item.label,
-        icon: item.icon,
-        onPressed: () {
-          _close();
-          item.onTap();
+      buttonWidget = GestureDetector(
+        onTap: () {
+          // 先执行功能，再关闭菜单
+          widget.item.onTap();
+          // 延迟关闭，让功能先执行
+          Future.delayed(const Duration(milliseconds: 50), () {
+            widget.onClose();
+          });
         },
-        isPrimary: false,
-        height: 40,
-        borderRadius: 20,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        expand: false,
-        minWidth: 80,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          padding: kIsWeb
+              ? EdgeInsets.symmetric(
+                  horizontal: _isHovered ? 16 : 12,
+                  vertical: 10,
+                )
+              : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: buttonColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: buttonChild,
+        ),
       );
     }
+    
+    // PC端添加MouseRegion实现悬停效果
+    if (kIsWeb) {
+      return MouseRegion(
+        onEnter: (_) {
+          setState(() {
+            _isHovered = true;
+          });
+          _animationController.forward();
+        },
+        onExit: (_) {
+          setState(() {
+            _isHovered = false;
+          });
+          _animationController.reverse();
+        },
+        child: buttonWidget,
+      );
+    }
+    
+    return buttonWidget;
   }
 }
