@@ -12,6 +12,8 @@ class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint>? zz1000Points; // 中证1000
   final List<NetWorthPoint>? customFundPoints; // 用户自定义基金
   final VoidCallback? onCustomFundConfig; // 自定义基金配置回调
+  final String? fundCode; // 本基金代码
+  final String? customFundCode; // 自定义基金代码
 
   const FundPerformanceChart({
     super.key,
@@ -22,6 +24,8 @@ class FundPerformanceChart extends StatefulWidget {
     this.zz1000Points,
     this.customFundPoints,
     this.onCustomFundConfig,
+    this.fundCode,
+    this.customFundCode,
   });
 
   @override
@@ -893,7 +897,13 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildLegendItemWithValue('本基金', fundLineColor, _getHoverFundReturn(), isDark, null),
+                      _buildLegendItemWithValue(
+                        widget.fundCode != null ? '本基金(${widget.fundCode})' : '本基金',
+                        fundLineColor,
+                        _getHoverFundReturn(),
+                        isDark,
+                        null,
+                      ),
                       _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
                       _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), _getHoverZZ500Return(), isDark, _toggleZZ500),
                     ],
@@ -1004,6 +1014,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final value = _getHoverCustomFundReturn();
     final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
     final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
+    final displayLabel = widget.customFundCode != null ? '自定义(${widget.customFundCode})' : '自定义';
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1017,7 +1028,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 children: [
                   Container(width: 12, height: 12, color: const Color(0xFF00BCD4)),
                   const SizedBox(width: 4),
-                  Text('自定义', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                  Text(displayLabel, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
                 ],
               ),
             ),

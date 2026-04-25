@@ -84,10 +84,11 @@ lib/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入，自动计算预估数据
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值，间隔可设置
+    ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，弹出式页面，支持基金代码验证和存在性检查
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供“交易记录”入口
-    ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用
+    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供"交易记录"入口
+    ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用，支持多指标对比（本基金/同类平均/沪深300/中证500/中证1000/自定义基金）
     ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现（近1周~成立来），优先使用API数据，自动计算补充周期
     ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题

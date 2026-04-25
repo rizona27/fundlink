@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
@@ -12,6 +13,7 @@ import '../widgets/fund_performance_chart.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../widgets/custom_fund_config_dialog.dart';
 import 'history_view.dart';
 
 class FundDetailPage extends StatefulWidget {
@@ -54,7 +56,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   final ScrollController _mainScrollController = ScrollController();
   
   // 自定义基金配置
-  String _customFundCode = '007339'; // 默认：易方达沪深300ETF联接A
+  String _customFundCode = ''; // 默认为空
 
   @override
   void initState() {
@@ -269,68 +271,44 @@ class _FundDetailPageState extends State<FundDetailPage> {
   }
 
   void _showCustomFundConfigDialog() {
-    final TextEditingController codeController = TextEditingController(text: _customFundCode);
-    
     showCupertinoDialog(
       context: context,
       builder: (BuildContext context) {
-        return CupertinoAlertDialog(
-          title: const Text('配置自定义基金'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '请输入基金代码（6位数字）',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              CupertinoTextField(
-                controller: codeController,
-                placeholder: '例如: 007339',
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                padding: const EdgeInsets.all(12),
-              ),
-            ],
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('取消'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('确定'),
-              onPressed: () async {
-                final newCode = codeController.text.trim();
-                if (newCode.length == 6 && RegExp(r'^\d{6}$').hasMatch(newCode)) {
-                  Navigator.of(context).pop();
-                  
-                  print('开始加载自定义基金: $newCode');
-                  context.showToast('正在加载自定义基金数据...');
-                  
-                  try {
-                    // 只重新加载自定义基金数据
-                    final customData = await _fundService!.fetchNetWorthTrend(newCode);
-                    print('自定义基金 $newCode 加载成功，数据点数: ${customData.length}');
-                    if (customData.isNotEmpty) {
-                      print('最新日期: ${customData.last.date}, 净值: ${customData.last.nav}');
-                    }
-                    setState(() {
-                      _customFundCode = newCode;
-                      _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
-                    });
-                    context.showToast('已更新自定义基金');
-                  } catch (e) {
-                    print('自定义基金加载失败: $e');
-                    context.showToast('加载失败: $e');
-                  }
-                } else {
-                  context.showToast('请输入有效的6位基金代码');
+        return CustomFundConfigDialog(
+          currentCode: _customFundCode,
+          onConfirm: (newCode) async {
+            setState(() {
+              _customFundCode = newCode;
+              _loading = true;
+            });
+            
+            try {
+              final customData = await _fundService!.fetchNetWorthTrend(newCode);
+              if (customData.isNotEmpty) {
+                setState(() {
+                  _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
+                  _loading = false;
+                });
+                
+                // 强制刷新图表
+                if (mounted) {
+                  setState(() {});
                 }
-              },
-            ),
-          ],
+                
+                context.showToast('已更新');
+              } else {
+                setState(() {
+                  _loading = false;
+                });
+                context.showToast('基金数据为空');
+              }
+            } catch (e) {
+              setState(() {
+                _loading = false;
+              });
+              context.showToast('加载失败');
+            }
+          },
         );
       },
     );
@@ -405,6 +383,8 @@ class _FundDetailPageState extends State<FundDetailPage> {
             zz1000Points: _zz1000Points,
             customFundPoints: _customFundPoints,
             onCustomFundConfig: _showCustomFundConfigDialog, // 点击自定义时弹出配置对话框
+            fundCode: widget.holding.fundCode, // 本基金代码
+            customFundCode: _customFundCode.isNotEmpty ? _customFundCode : null, // 自定义基金代码
           ),
         ),
       ],
