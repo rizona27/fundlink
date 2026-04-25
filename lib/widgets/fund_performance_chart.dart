@@ -304,6 +304,27 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   }
 
   void _toggleCustomFund() {
+    // 如果没有配置自定义基金代码，点击眼睛时提示用户
+    if (!_showCustomFund && (widget.customFundCode == null || widget.customFundCode!.isEmpty)) {
+      // 使用CupertinoAlertDialog提示用户
+      showCupertinoDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return CupertinoAlertDialog(
+            title: const Text('提示'),
+            content: const Text('请先点击"自定义"文字配置基金代码'),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('确定'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+    
     setState(() {
       _showCustomFund = !_showCustomFund;
     });

@@ -170,191 +170,200 @@ class _HistoryDialogState extends State<HistoryDialog> {
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        constraints: BoxConstraints(
-          maxWidth: 500,
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
-        child: CupertinoPopupSurface(
-          isSurfacePainted: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '历史净值',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                      ),
+    return GestureDetector(
+      // 点击弹窗外部关闭
+      onTap: () => Navigator.of(context).pop(),
+      behavior: HitTestBehavior.translucent,
+      child: Center(
+        child: GestureDetector(
+          // 阻止事件冒泡，防止点击弹窗内容时关闭
+          onTap: () {},
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            constraints: BoxConstraints(
+              maxWidth: 500,
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+            ),
+            child: CupertinoPopupSurface(
+              isSurfacePainted: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? CupertinoColors.systemGrey.withOpacity(0.3)
-                              : CupertinoColors.systemGrey.withOpacity(0.2),
-                          shape: BoxShape.circle,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '历史净值',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                          ),
                         ),
-                        child: Icon(
-                          CupertinoIcons.xmark,
-                          size: 16,
-                          color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? CupertinoColors.systemGrey.withOpacity(0.3)
+                                  : CupertinoColors.systemGrey.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              CupertinoIcons.xmark,
+                              size: 16,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: isDark
-                          ? CupertinoColors.white.withOpacity(0.1)
-                          : CupertinoColors.black.withOpacity(0.1),
+                      ],
                     ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        '日期',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isDark
+                              ? CupertinoColors.white.withOpacity(0.1)
+                              : CupertinoColors.black.withOpacity(0.1),
                         ),
                       ),
                     ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '单位净值',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '日涨幅',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: _loading
-                    ? const Center(child: CupertinoActivityIndicator())
-                    : _error != null
-                    ? _buildErrorView(isDark)
-                    : _displayList.isEmpty
-                    ? const Center(child: Text('暂无历史净值数据'))
-                    : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: _displayList.length + (_loadingMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _displayList.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CupertinoActivityIndicator()),
-                      );
-                    }
-                    final point = _displayList[index];
-                    final growth = point.growth ?? 0.0;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.05)
-                                : CupertinoColors.black.withOpacity(0.05),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '日期',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
                           ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              _formatDate(point.date),
-                              style: TextStyle(
-                                fontSize: 12,
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '单位净值',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '日涨幅',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: _loading
+                        ? const Center(child: CupertinoActivityIndicator())
+                        : _error != null
+                        ? _buildErrorView(isDark)
+                        : _displayList.isEmpty
+                        ? const Center(child: Text('暂无历史净值数据'))
+                        : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: _displayList.length + (_loadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _displayList.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: CupertinoActivityIndicator()),
+                          );
+                        }
+                        final point = _displayList[index];
+                        final growth = point.growth ?? 0.0;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
                                 color: isDark
-                                    ? CupertinoColors.white
-                                    : CupertinoColors.black,
+                                    ? CupertinoColors.white.withOpacity(0.05)
+                                    : CupertinoColors.black.withOpacity(0.05),
                               ),
                             ),
                           ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              point.nav.toStringAsFixed(4),
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark
-                                    ? CupertinoColors.white
-                                    : CupertinoColors.black,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  _formatDate(point.date),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? CupertinoColors.white
+                                        : CupertinoColors.black,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              growth == 0
-                                  ? '--'
-                                  : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: growth > 0
-                                    ? CupertinoColors.systemRed
-                                    : (growth < 0
-                                    ? CupertinoColors.systemGreen
-                                    : null),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  point.nav.toStringAsFixed(4),
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? CupertinoColors.white
+                                        : CupertinoColors.black,
+                                  ),
+                                ),
                               ),
-                            ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  growth == 0
+                                      ? '--'
+                                      : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}%',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: growth > 0
+                                        ? CupertinoColors.systemRed
+                                        : (growth < 0
+                                        ? CupertinoColors.systemGreen
+                                        : null),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

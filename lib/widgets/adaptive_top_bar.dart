@@ -1077,7 +1077,7 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
     _autoCloseTimer?.cancel();
     _autoCloseTimer = Timer(const Duration(seconds: 5), () {
       if (_isShowing) {
-        _hideMenu();
+        _hideMenuWithAnimation(); // 使用带动画的关闭方法
       }
     });
   }
@@ -1333,9 +1333,13 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
   }
 
   Future<void> close() async {
-    // 先依次关闭每个菜单项（从后往前）
+    // 先依次关闭每个菜单项（从后往前），每个间隔100ms
     for (int i = _itemControllers.length - 1; i >= 0; i--) {
       await _itemControllers[i].reverse();
+      // 添加短暂延迟，让消失效果更明显
+      if (i > 0) {
+        await Future.delayed(const Duration(milliseconds: 80));
+      }
     }
     // 然后反向播放整体动画
     await _controller.reverse();
@@ -1584,8 +1588,8 @@ class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTicke
       );
     }
     
-    // PC端添加MouseRegion实现悬停效果
-    if (kIsWeb) {
+    // PC端（Web和Windows）添加MouseRegion实现悬停效果
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) {
       return MouseRegion(
         onEnter: (_) {
           setState(() {

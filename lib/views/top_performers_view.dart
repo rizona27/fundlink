@@ -56,6 +56,18 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   final ScrollController _scrollController = ScrollController();
 
+  // 筛选框焦点节点
+  final FocusNode _minAmountFocusNode = FocusNode();
+  final FocusNode _maxAmountFocusNode = FocusNode();
+  final FocusNode _minProfitFocusNode = FocusNode();
+  final FocusNode _maxProfitFocusNode = FocusNode();
+  final FocusNode _minProfitRateFocusNode = FocusNode();
+  final FocusNode _maxProfitRateFocusNode = FocusNode();
+  final FocusNode _minDaysFocusNode = FocusNode();
+  final FocusNode _maxDaysFocusNode = FocusNode();
+  
+  Timer? _filterAutoCollapseTimer; // 筛选框自动关闭定时器
+
   static const Duration _debounceDelay = Duration(milliseconds: 500);
   static const Duration _animationDuration = Duration(milliseconds: 400);
   static const Curve _animationCurve = Curves.easeOutCubic;
@@ -114,6 +126,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   void dispose() {
     _scrollThrottleTimer?.cancel();
     _filterDebounceTimer?.cancel();
+    _filterAutoCollapseTimer?.cancel(); // 清理自动关闭定时器
     _scrollController.dispose();
     _minAmountController.dispose();
     _maxAmountController.dispose();
@@ -123,6 +136,17 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     _maxProfitRateController.dispose();
     _minDaysController.dispose();
     _maxDaysController.dispose();
+    
+    // 释放焦点节点
+    _minAmountFocusNode.dispose();
+    _maxAmountFocusNode.dispose();
+    _minProfitFocusNode.dispose();
+    _maxProfitFocusNode.dispose();
+    _minProfitRateFocusNode.dispose();
+    _maxProfitRateFocusNode.dispose();
+    _minDaysFocusNode.dispose();
+    _maxDaysFocusNode.dispose();
+    
     if (_isInitialized) {
       _dataManager.removeListener(_dataListener);
     }
@@ -335,6 +359,56 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     });
     if (_showFilter) {
       _autoCollapseEnabled = true;
+      _startFilterAutoCollapseTimer(); // 启动自动关闭定时器
+    } else {
+      _cancelFilterAutoCollapseTimer(); // 取消自动关闭定时器
+    }
+  }
+  
+  // 启动筛选框自动关闭定时器（5秒后自动关闭）
+  void _startFilterAutoCollapseTimer() {
+    _cancelFilterAutoCollapseTimer();
+    _filterAutoCollapseTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && _showFilter) {
+        // 检查是否有任何输入框有焦点或有内容
+        final hasFocus = _minAmountFocusNode.hasFocus ||
+            _maxAmountFocusNode.hasFocus ||
+            _minProfitFocusNode.hasFocus ||
+            _maxProfitFocusNode.hasFocus ||
+            _minProfitRateFocusNode.hasFocus ||
+            _maxProfitRateFocusNode.hasFocus ||
+            _minDaysFocusNode.hasFocus ||
+            _maxDaysFocusNode.hasFocus;
+        
+        final hasContent = _minAmountController.text.isNotEmpty ||
+            _maxAmountController.text.isNotEmpty ||
+            _minProfitController.text.isNotEmpty ||
+            _maxProfitController.text.isNotEmpty ||
+            _minProfitRateController.text.isNotEmpty ||
+            _maxProfitRateController.text.isNotEmpty ||
+            _minDaysController.text.isNotEmpty ||
+            _maxDaysController.text.isNotEmpty;
+        
+        // 如果没有焦点且没有内容，则自动关闭
+        if (!hasFocus && !hasContent) {
+          setState(() {
+            _showFilter = false;
+          });
+        }
+      }
+    });
+  }
+  
+  // 取消筛选框自动关闭定时器
+  void _cancelFilterAutoCollapseTimer() {
+    _filterAutoCollapseTimer?.cancel();
+    _filterAutoCollapseTimer = null;
+  }
+  
+  // 重置筛选框自动关闭定时器
+  void _resetFilterAutoCollapseTimer() {
+    if (_showFilter) {
+      _startFilterAutoCollapseTimer();
     }
   }
 
@@ -513,6 +587,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   title: '金额',
                   minController: _minAmountController,
                   maxController: _maxAmountController,
+                  minFocusNode: _minAmountFocusNode,
+                  maxFocusNode: _maxAmountFocusNode,
                   unit: '万',
                   isDarkMode: isDarkMode,
                 ),
@@ -523,6 +599,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   title: '收益',
                   minController: _minProfitController,
                   maxController: _maxProfitController,
+                  minFocusNode: _minProfitFocusNode,
+                  maxFocusNode: _maxProfitFocusNode,
                   unit: '万',
                   isDarkMode: isDarkMode,
                 ),
@@ -538,6 +616,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   title: '收益率',
                   minController: _minProfitRateController,
                   maxController: _maxProfitRateController,
+                  minFocusNode: _minProfitRateFocusNode,
+                  maxFocusNode: _maxProfitRateFocusNode,
                   unit: '%',
                   isDarkMode: isDarkMode,
                 ),
@@ -548,6 +628,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   title: '持有天数',
                   minController: _minDaysController,
                   maxController: _maxDaysController,
+                  minFocusNode: _minDaysFocusNode,
+                  maxFocusNode: _maxDaysFocusNode,
                   unit: '天',
                   isDarkMode: isDarkMode,
                 ),
@@ -563,6 +645,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     required String title,
     required TextEditingController minController,
     required TextEditingController maxController,
+    required FocusNode minFocusNode,
+    required FocusNode maxFocusNode,
     required String unit,
     required bool isDarkMode,
   }) {
@@ -583,6 +667,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
             Expanded(
               child: CupertinoTextField(
                 controller: minController,
+                focusNode: minFocusNode,
                 placeholder: '下限',
                 placeholderStyle: TextStyle(
                   fontSize: 12,
@@ -602,6 +687,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _scheduleFilterApply(),
+                onTap: () => _resetFilterAutoCollapseTimer(), // 点击时重置定时器
               ),
             ),
             Container(
@@ -617,6 +703,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
             Expanded(
               child: CupertinoTextField(
                 controller: maxController,
+                focusNode: maxFocusNode,
                 placeholder: '上限',
                 placeholderStyle: TextStyle(
                   fontSize: 12,
@@ -636,6 +723,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _scheduleFilterApply(),
+                onTap: () => _resetFilterAutoCollapseTimer(), // 点击时重置定时器
               ),
             ),
             const SizedBox(width: 4),
