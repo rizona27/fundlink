@@ -32,3 +32,6 @@ android/.kotlin/errors/errors-1775973091001.log
 /FundLink_Windows
 *.zip
 /test
+build_windows_release.bat
+build_windows_release.ps1
+BUILD_WINDOWS_GUIDE.md
