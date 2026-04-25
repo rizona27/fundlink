@@ -42,7 +42,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   bool _showHs300 = true;
   bool _showZZ500 = true; // 默认显示中证500
   bool _showZZ1000 = true; // 默认显示中证1000
-  bool _showCustomFund = false;
+  bool _showCustomFund = false; // 默认关闭
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
@@ -272,11 +272,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       _hoverIndexNotifier.value = -1;
       _dotPositionNotifier.value = null;
       if (['1y', '3y', 'all'].contains(newRange)) {
-        _showAverage = false;
-        _showHs300 = false;
+        _showAverage = false; // 长周期不显示同类平均
       } else {
-        _showAverage = true;
-        _showHs300 = true;
+        _showAverage = true; // 短周期显示同类平均
       }
     });
   }
@@ -887,25 +885,28 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           ValueListenableBuilder<int>(
             valueListenable: _hoverIndexNotifier,
             builder: (context, hoverIndex, child) {
+              final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
+              
               return Column(
                 children: [
-                  // 第一行：本基金、同类平均、沪深300
+                  // 第一行：本基金、沪深300、中证500
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildLegendItemWithValue('本基金', fundLineColor, _getHoverFundReturn(), isDark, null),
-                      _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
                       _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
+                      _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), _getHoverZZ500Return(), isDark, _toggleZZ500),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // 第二行：中证500、中证1000、自定义基金
+                  // 第二行：中证1000、自定义、同类平均（仅短周期）
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), _getHoverZZ500Return(), isDark, _toggleZZ500),
                       _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), _getHoverZZ1000Return(), isDark, _toggleZZ1000),
                       _buildCustomFundLegendItem(isDark),
+                      if (isShortRange)
+                        _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
                     ],
                   ),
                 ],
