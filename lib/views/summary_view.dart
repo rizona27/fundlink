@@ -13,6 +13,7 @@ import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 import '../widgets/fund_performance_dialog.dart';
 import 'add_holding_view.dart';
+import 'fund_detail_view.dart';
 
 class SummaryView extends StatefulWidget {
   const SummaryView({super.key});
@@ -848,6 +849,32 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         );
                       }
 
+                      // 如果展开，添加"更多"按钮
+                      final Widget? moreButton = isExpanded
+                          ? GestureDetector(
+                              onTap: () {
+                                // 跳转到基金详情页
+                                Navigator.of(context).push(
+                                  CupertinoPageRoute(
+                                    builder: (context) => FundDetailPage(
+                                      holding: first, // 使用第一个持仓作为代表
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  CupertinoIcons.ellipsis_circle,
+                                  size: 18,
+                                  color: isDark
+                                      ? CupertinoColors.white.withOpacity(0.6)
+                                      : CupertinoColors.systemGrey,
+                                ),
+                              ),
+                            )
+                          : null;
+
                       return Column(
                         key: ValueKey('fund_$fundCode'), // 添加key用于滚动定位
                         children: [
@@ -859,7 +886,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             onTap: () => _toggleExpand(fundCode),
                             isDarkMode: isDark,
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: trailing,
+                            trailing: moreButton ?? trailing,
                             maxTitleLength: 6,
                           ),
                           AnimatedSize(
