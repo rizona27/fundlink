@@ -20,7 +20,6 @@ class FundHolding {
   final String remarks;
   final bool isPinned;
   final DateTime? pinnedTimestamp;
-  final double? navReturn1w;  // 近1周收益率
   final double? navReturn1m;
   final double? navReturn3m;
   final double? navReturn6m;
@@ -43,7 +42,6 @@ class FundHolding {
     this.remarks = '',
     this.isPinned = false,
     this.pinnedTimestamp,
-    this.navReturn1w,
     this.navReturn1m,
     this.navReturn3m,
     this.navReturn6m,
@@ -78,7 +76,6 @@ class FundHolding {
     String? remarks,
     bool? isPinned,
     DateTime? pinnedTimestamp,
-    double? navReturn1w,
     double? navReturn1m,
     double? navReturn3m,
     double? navReturn6m,
@@ -100,7 +97,6 @@ class FundHolding {
       remarks: remarks ?? this.remarks,
       isPinned: isPinned ?? this.isPinned,
       pinnedTimestamp: pinnedTimestamp ?? this.pinnedTimestamp,
-      navReturn1w: navReturn1w ?? this.navReturn1w,
       navReturn1m: navReturn1m ?? this.navReturn1m,
       navReturn3m: navReturn3m ?? this.navReturn3m,
       navReturn6m: navReturn6m ?? this.navReturn6m,
@@ -125,7 +121,6 @@ class FundHolding {
       'remarks': remarks,
       'isPinned': isPinned,
       'pinnedTimestamp': pinnedTimestamp?.toIso8601String(),
-      'navReturn1w': navReturn1w,
       'navReturn1m': navReturn1m,
       'navReturn3m': navReturn3m,
       'navReturn6m': navReturn6m,
@@ -170,7 +165,6 @@ class FundHolding {
       pinnedTimestamp: json['pinnedTimestamp'] != null
           ? DateTime.parse(json['pinnedTimestamp'] as String)
           : null,
-      navReturn1w: json['navReturn1w'] as double?,
       navReturn1m: json['navReturn1m'] as double?,
       navReturn3m: json['navReturn3m'] as double?,
       navReturn6m: json['navReturn6m'] as double?,
@@ -210,7 +204,6 @@ class FundHolding {
     String remarks = '',
     bool isPinned = false,
     DateTime? pinnedTimestamp,
-    double? navReturn1w,
     double? navReturn1m,
     double? navReturn3m,
     double? navReturn6m,
@@ -249,7 +242,6 @@ class FundHolding {
       remarks: remarks,
       isPinned: isPinned,
       pinnedTimestamp: pinnedTimestamp,
-      navReturn1w: navReturn1w,
       navReturn1m: navReturn1m,
       navReturn3m: navReturn3m,
       navReturn6m: navReturn6m,

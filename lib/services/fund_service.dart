@@ -155,24 +155,7 @@ class FundService {
       } else {
       }
 
-      double? navReturn1w, navReturn1m, navReturn3m, navReturn6m, navReturn1y;
-
-      // 尝试获取近1周收益率 (syl_1z)
-      final ret1wPatterns = [
-        RegExp(r'syl_1z\s*=\s*"([^"]*)"'),
-        RegExp(r"syl_1z\s*=\s*'([^']*)'"),
-        RegExp(r'syl_1z\s*=\s*([^;]+)'),
-      ];
-      for (final pattern in ret1wPatterns) {
-        final match = pattern.firstMatch(jsString);
-        if (match != null) {
-          final val = match.group(1)!.trim();
-          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
-            navReturn1w = double.tryParse(val);
-            if (navReturn1w != null) break;
-          }
-        }
-      }
+      double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
 
       final ret1mPatterns = [
         RegExp(r'syl_1y\s*=\s*"([^"]*)"'),
@@ -251,7 +234,6 @@ class FundService {
         'currentNav': currentNav,
         'navDate': navDate,
         'isValid': isValid,
-        'navReturn1w': navReturn1w,
         'navReturn1m': navReturn1m,
         'navReturn3m': navReturn3m,
         'navReturn6m': navReturn6m,
@@ -631,7 +613,7 @@ class FundService {
       if (parts.length >= 3) {
         try {
           final dateStr = parts[0];
-          final closePrice = double.parse(parts[2]); // 收盘价
+          final closePrice = double.parse(parts[2]);
           
           // 解析日期: "2024-01-01"
           final dateParts = dateStr.split('-');

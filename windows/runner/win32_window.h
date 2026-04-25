@@ -52,6 +52,9 @@ class Win32Window {
   // If true, closing this window will quit the application.
   void SetQuitOnClose(bool quit_on_close);
 
+  // Set minimum window size
+  void SetMinimumSize(unsigned int width, unsigned int height);
+
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
@@ -91,6 +94,10 @@ class Win32Window {
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+
+  // Minimum window size
+  unsigned int min_width_ = 0;
+  unsigned int min_height_ = 0;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

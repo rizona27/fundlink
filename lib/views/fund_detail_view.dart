@@ -33,9 +33,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
   List<NetWorthPoint> _fundPoints = [];
   List<NetWorthPoint> _avgPoints = [];
   List<NetWorthPoint> _hsPoints = [];
-  List<NetWorthPoint>? _zz500Points; // 中证500
-  List<NetWorthPoint>? _zz1000Points; // 中证1000
-  List<NetWorthPoint>? _customFundPoints; // 用户自定义基金（示例：易方达沪深300ETF联接）
+  List<NetWorthPoint>? _zz500Points;
+  List<NetWorthPoint>? _zz1000Points;
+  List<NetWorthPoint>? _customFundPoints;
 
   List<NetWorthPoint>? _cachedFundPointsWithChanges;
   String? _lastFundCodeForCache;
@@ -56,7 +56,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   final ScrollController _mainScrollController = ScrollController();
   
   // 自定义基金配置
-  String _customFundCode = ''; // 默认为空
+  String _customFundCode = '';
 
   @override
   void initState() {
@@ -122,10 +122,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
       print('中证1000 ETF联接: 011860');
       print('自定义基金代码: $_customFundCode');
       
-      final hs300Future = _fundService!.fetchNetWorthTrend('460300'); // 华泰柏瑞沪深300ETF联接A
-      final zz500Future = _fundService!.fetchNetWorthTrend('004348'); // 南方中证500ETF联接A
-      final zz1000Future = _fundService!.fetchNetWorthTrend('011860'); // 南方中证1000ETF联接A
-      final customFundFuture = _fundService!.fetchNetWorthTrend(_customFundCode); // 用户自定义基金
+      final hs300Future = _fundService!.fetchNetWorthTrend('460300');
+      final zz500Future = _fundService!.fetchNetWorthTrend('004348');
+      final zz1000Future = _fundService!.fetchNetWorthTrend('011860');
+      final customFundFuture = _fundService!.fetchNetWorthTrend(_customFundCode);
       
       final results = await Future.wait([
         hs300Future.catchError((e) {
@@ -322,7 +322,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
       child: SafeArea(
         child: Column(
           children: [
-            // 使用AdaptiveTopBar作为顶部栏
             AdaptiveTopBar(
               scrollOffset: 0,
               showBack: true,
@@ -382,9 +381,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
             zz500Points: _zz500Points,
             zz1000Points: _zz1000Points,
             customFundPoints: _customFundPoints,
-            onCustomFundConfig: _showCustomFundConfigDialog, // 点击自定义时弹出配置对话框
-            fundCode: widget.holding.fundCode, // 本基金代码
-            customFundCode: _customFundCode.isNotEmpty ? _customFundCode : null, // 自定义基金代码
+            onCustomFundConfig: _showCustomFundConfigDialog,
+            fundCode: widget.holding.fundCode,
+            customFundCode: _customFundCode.isNotEmpty ? _customFundCode : null,
           ),
         ),
       ],

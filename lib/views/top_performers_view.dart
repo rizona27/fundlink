@@ -103,7 +103,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+    // 优化：增加节流时间到16ms（约60fps），减少setState频率
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
         setState(() {
           _scrollOffset = offset;

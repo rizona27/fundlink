@@ -42,11 +42,11 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   bool _isPinnedSectionExpanded = false;
   double _scrollOffset = 0;
   bool _autoFixTriggered = false;
-  DateTime? _lastAutoFixTime; // 记录上次自动修复的时间
+  DateTime? _lastAutoFixTime;
   Timer? _debounceTimer;
   Timer? _scrollThrottleTimer;
   late AnimationController _scrollAnimationController;
-  final ScrollController _scrollController = ScrollController(); // 添加滚动控制器
+  final ScrollController _scrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
@@ -93,10 +93,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         await _dataManager.refreshAllHoldingsForce(_fundService, null);
         if (mounted) {
           setState(() {});
-          // 静默修复，不显示Toast
         }
       } catch (e) {
-        // 网络错误时也不显示提示，避免骚扰用户
       }
     }
   }
@@ -105,7 +103,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+    // 优化：增加节流时间到16ms（约60fps），减少setState频率
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted && _scrollOffset != offset) {
         setState(() {
           _scrollOffset = offset;
@@ -120,7 +119,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _scrollThrottleTimer?.cancel();
     _debounceTimer?.cancel();
     _scrollAnimationController.dispose();
-    _scrollController.dispose(); // 释放滚动控制器
+    _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
@@ -232,22 +231,17 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         Column(children: [
           Container(
             margin: const EdgeInsets.only(left: 16),
-            child: _FadeInWidget(
-              key: ValueKey('fade_pinned_${pinned[i].id}'),
-              delay: Duration(milliseconds: 100 + i * 80),
-              duration: const Duration(milliseconds: 400),
-              child: FundCard(
-                key: ValueKey('pinned_${pinned[i].id}'),
-                holding: pinned[i],
-                hideClientInfo: false,
-                onCopyClientId: () {
-                  _dataManager.addLog('复制客户号: ${pinned[i].clientId}', type: LogType.info);
-                  context.showToast('客户号已复制');
-                },
-                onGenerateReport: () => _dataManager.addLog('生成报告: ${pinned[i].clientName} - ${pinned[i].fundName}', type: LogType.info),
-                onShowToast: context.showToast,
-                onPinToggle: () => _dataManager.togglePinStatus(pinned[i].id),
-              ),
+            child: FundCard(
+              key: ValueKey('pinned_${pinned[i].id}'),
+              holding: pinned[i],
+              hideClientInfo: false,
+              onCopyClientId: () {
+                _dataManager.addLog('复制客户号: ${pinned[i].clientId}', type: LogType.info);
+                context.showToast('客户号已复制');
+              },
+              onGenerateReport: () => _dataManager.addLog('生成报告: ${pinned[i].clientName} - ${pinned[i].fundName}', type: LogType.info),
+              onShowToast: context.showToast,
+              onPinToggle: () => _dataManager.togglePinStatus(pinned[i].id),
             ),
           ),
           if (i < pinned.length - 1) const SizedBox(height: 8),
@@ -362,7 +356,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   ),
                 )
                     : ListView(
-                  controller: _scrollController, // 添加滚动控制器
+                  controller: _scrollController,
                   padding: EdgeInsets.only(
                     left: 12,
                     right: 12,
@@ -514,7 +508,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   child: isExpanded
                       ? Container(
                     margin: const EdgeInsets.only(top: 8),
-                    child: Column(children: _buildAnimatedFundCards(group.holdings, i)),
+                    child: Column(children: _buildFundCards(group.holdings)),
                   )
                       : const SizedBox.shrink(),
                 ),
@@ -527,29 +521,23 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     return result;
   }
 
-  List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings, int groupIndex) {
+  List<Widget> _buildFundCards(List<FundHolding> holdings) {
     final cards = <Widget>[];
     for (int i = 0; i < holdings.length; i++) {
       final holding = holdings[i];
       cards.add(
         RepaintBoundary(
-          key: ValueKey('repaint_${holding.id}'),
-          child: _FadeInWidget(
-            key: ValueKey('fade_${holding.id}'),
-            delay: Duration(milliseconds: 100 + (groupIndex * 50) + (i * 80)), // 根据组索引增加延迟
-            duration: const Duration(milliseconds: 400),
-            child: FundCard(
-              key: ValueKey('card_${holding.id}'),
-              holding: holding,
-              hideClientInfo: true,
-              onCopyClientId: () {
-                _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-                context.showToast('客户号已复制');
-              },
-              onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
-              onShowToast: context.showToast,
-              onPinToggle: () => _dataManager.togglePinStatus(holding.id),
-            ),
+          key: ValueKey('card_${holding.id}'),
+          child: FundCard(
+            holding: holding,
+            hideClientInfo: true,
+            onCopyClientId: () {
+              _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+              context.showToast('客户号已复制');
+            },
+            onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
+            onShowToast: context.showToast,
+            onPinToggle: () => _dataManager.togglePinStatus(holding.id),
           ),
         ),
       );
@@ -557,38 +545,5 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     }
     if (holdings.isNotEmpty) cards.add(const SizedBox(height: 8));
     return cards;
-  }
-}
-
-class _FadeInWidget extends StatefulWidget {
-  final Widget child;
-  final Duration delay;
-  final Duration duration;
-  const _FadeInWidget({super.key, required this.child, required this.delay, required this.duration});
-
-  @override
-  State<_FadeInWidget> createState() => _FadeInWidgetState();
-}
-
-class _FadeInWidgetState extends State<_FadeInWidget> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(duration: widget.duration, vsync: this);
-    _opacityAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    Future.delayed(widget.delay, () { if (mounted) _controller.forward(); });
-  }
-
-  @override
-  void dispose() { _controller.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(opacity: _opacityAnimation, child: SlideTransition(position: _slideAnimation, child: widget.child));
   }
 }

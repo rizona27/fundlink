@@ -43,7 +43,8 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
 
   void _startTimer() {
     if (_isDisposed) return;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    // 优化：每2秒更新一次，减少setState频率
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (widget.isRefreshing) return;
 
       final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;

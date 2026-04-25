@@ -557,7 +557,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             ),
           ),
           SizedBox(
-            width: 160,  // 强制缩短横向长度（如 80 或 100）
+            width: 160,
             height: 28,
             child: FittedBox(
               fit: BoxFit.fill,

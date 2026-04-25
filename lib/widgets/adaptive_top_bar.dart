@@ -345,18 +345,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   void _updateHideProgress() {
     // 如果是PC端（Windows/macOS/Linux）或Web平台，始终显示顶部工具栏
-    bool isDesktop = kIsWeb; // Web平台始终显示
-    
-    if (!isDesktop) {
-      // 非Web平台才检查Platform
-      try {
-        // 这里需要导入dart:io，但为了Web兼容性，我们只在非Web时使用
-        // 由于移除了dart:io导入，这里简化处理：移动端隐藏，其他显示
-        isDesktop = false; // 默认按移动端处理
-      } catch (e) {
-        isDesktop = false;
-      }
-    }
+    bool isDesktop = kIsWeb || 
+                     defaultTargetPlatform == TargetPlatform.windows ||
+                     defaultTargetPlatform == TargetPlatform.macOS ||
+                     defaultTargetPlatform == TargetPlatform.linux;
     
     if (isDesktop) {
       _hideController.value = 1.0; // 始终完全显示
@@ -364,7 +356,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     }
 
     _scrollTimer?.cancel();
-    _scrollTimer = Timer(const Duration(milliseconds: 8), () {
+    // 优化：增加节流时间到16ms（约60fps），减少setState频率
+    _scrollTimer = Timer(const Duration(milliseconds: 16), () {
       if (!mounted) return;
       final hasText = _currentSearchText.isNotEmpty;
       if (hasText && !_currentSearchVisible) {

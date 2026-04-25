@@ -216,6 +216,20 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_GETMINMAXINFO: {
+      auto min_max_info = reinterpret_cast<MINMAXINFO*>(lparam);
+      if (min_width_ > 0 && min_height_ > 0) {
+        // Convert client size to window size (including borders and title bar)
+        RECT window_rect = {0, 0, static_cast<LONG>(min_width_), static_cast<LONG>(min_height_)};
+        DWORD style = GetWindowLong(hwnd, GWL_STYLE);
+        DWORD ex_style = GetWindowLong(hwnd, GWL_EXSTYLE);
+        AdjustWindowRectEx(&window_rect, style, FALSE, ex_style);
+        min_max_info->ptMinTrackSize.x = window_rect.right - window_rect.left;
+        min_max_info->ptMinTrackSize.y = window_rect.bottom - window_rect.top;
+      }
+      return 0;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
@@ -261,6 +275,11 @@ HWND Win32Window::GetHandle() {
 
 void Win32Window::SetQuitOnClose(bool quit_on_close) {
   quit_on_close_ = quit_on_close;
+}
+
+void Win32Window::SetMinimumSize(unsigned int width, unsigned int height) {
+  min_width_ = width;
+  min_height_ = height;
 }
 
 bool Win32Window::OnCreate() {

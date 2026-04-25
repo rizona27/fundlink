@@ -358,6 +358,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                     key: ValueKey(_dataVersion),
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
                     itemCount: _sortedKeys.length,
+                    cacheExtent: 500,
                     itemBuilder: (context, index) {
                       final key = _sortedKeys[index];
                       final holdings = _filteredGroupedHoldings[key];
@@ -431,12 +432,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                   final cardIndex = entry.key;
                                   return Column(
                                     children: [
-                                      _FadeInCard(
-                                        key: ValueKey('fade_${holding.id}_$cardIndex'),
-                                        delay: Duration(milliseconds: 100 + (index * 50) + (cardIndex * 50)), // 根据组索引增加延迟
-                                        duration: const Duration(milliseconds: 400),
-                                        child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
-                                      ),
+                                      _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
                                       if (cardIndex < holdings.length - 1) const SizedBox(height: 4),
                                     ],
                                   );
@@ -524,60 +520,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _FadeInCard extends StatefulWidget {
-  final Widget child;
-  final Duration delay;
-  final Duration duration;
-
-  const _FadeInCard({
-    super.key,
-    required this.child,
-    required this.delay,
-    required this.duration,
-  });
-
-  @override
-  State<_FadeInCard> createState() => _FadeInCardState();
-}
-
-class _FadeInCardState extends State<_FadeInCard> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-
-    Future.delayed(widget.delay, () {
-      if (mounted) {
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacityAnimation,
-      child: widget.child,
     );
   }
 }

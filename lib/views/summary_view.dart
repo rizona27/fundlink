@@ -67,7 +67,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 8), () {
+    // 优化：增加节流时间到16ms（约60fps），减少setState频率
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted && _scrollOffset != offset) {
         setState(() {
           _scrollOffset = offset;
@@ -748,6 +749,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       bottom: totalBottomPadding,
                     ),
                     itemCount: sortedCodes.length,
+                    // 添加缓存机制，减少重建
+                    cacheExtent: 500,
                     itemBuilder: (context, index) {
                       final fundCode = sortedCodes[index];
                       final holdings = groups[fundCode]!;
@@ -894,12 +897,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             curve: Curves.easeOutCubic,
                             child: isExpanded
                                 ? ClipRect(
-                              child: AnimatedOpacity(
-                                opacity: isExpanded ? 1.0 : 0.0,
-                                duration: Duration(milliseconds: 250 + (index * 50)), // 逐个延迟
-                                curve: Curves.easeIn,
-                                child: _buildExpandedContent(first, holdings, isDark),
-                              ),
+                              child: _buildExpandedContent(first, holdings, isDark),
                             )
                                 : const SizedBox.shrink(),
                           ),

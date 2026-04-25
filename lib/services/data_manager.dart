@@ -444,7 +444,6 @@ class DataManager extends ChangeNotifier {
       isValid: existingHolding.isValid,
       isPinned: existingHolding.isPinned,
       pinnedTimestamp: existingHolding.pinnedTimestamp,
-      navReturn1w: existingHolding.navReturn1w,
       navReturn1m: existingHolding.navReturn1m,
       navReturn3m: existingHolding.navReturn3m,
       navReturn6m: existingHolding.navReturn6m,
@@ -468,7 +467,7 @@ class DataManager extends ChangeNotifier {
     return _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
         .toList()
-      ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate)); // 按时间倒序
+      ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate));
   }
 
   /// 删除交易记录并重新计算持仓
@@ -588,7 +587,6 @@ class DataManager extends ChangeNotifier {
         final index = _holdings.indexWhere((h) => h.id == holding.id);
         if (index != -1) {
           final updated = _holdings[index].copyWith(
-            navReturn1w: fetched['navReturn1w'],
             navReturn1m: fetched['navReturn1m'],
             navReturn3m: fetched['navReturn3m'],
             navReturn6m: fetched['navReturn6m'],
@@ -671,7 +669,7 @@ class DataManager extends ChangeNotifier {
       return ProfitResult(absolute: absoluteProfit, annualized: 0.0);
     }
     
-    final firstTradeDate = relatedTransactions.last.tradeDate; // 因为是倒序，最后一条是最早的
+    final firstTradeDate = relatedTransactions.last.tradeDate;
     final days = DateTime.now().difference(firstTradeDate).inDays;
 
     if (days <= 0) {
@@ -723,19 +721,17 @@ class DataManager extends ChangeNotifier {
       // 买入：如果份额为0，根据金额和净值计算份额
       if (transaction.shares <= 0 && transaction.amount > 0 && confirmedNav > 0) {
         // 使用内扣法计算份额：份额 = 金额 / (1 + 费率%) / 净值
-        // 注意：这里假设费率为0，因为待确认交易时可能没有输入费率
-        // TODO: 如果需要支持费率，需要在交易记录中保存费率信息
-        calculatedShares = transaction.amount / confirmedNav;
-        print('确认买入交易时计算份额: 金额=${transaction.amount}, 净值=$confirmedNav, 份额=$calculatedShares');
+        final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
+        calculatedShares = transaction.amount / (1 + feeRate / 100) / confirmedNav;
+        print('确认买入交易时计算份额: 金额=${transaction.amount}, 费率=$feeRate%, 净值=$confirmedNav, 份额=$calculatedShares');
       }
     } else {
       // 卖出：如果金额为0，根据份额和净值计算金额
       if (transaction.amount <= 0 && transaction.shares > 0 && confirmedNav > 0) {
         // 金额 = 份额 * 净值 * (1 - 费率%)
-        // 注意：这里假设费率为0
-        // TODO: 如果需要支持费率，需要在交易记录中保存费率信息
-        calculatedAmount = transaction.shares * confirmedNav;
-        print('确认卖出交易时计算金额: 份额=${transaction.shares}, 净值=$confirmedNav, 金额=$calculatedAmount');
+        final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
+        calculatedAmount = transaction.shares * confirmedNav * (1 - feeRate / 100);
+        print('确认卖出交易时计算金额: 份额=${transaction.shares}, 费率=$feeRate%, 净值=$confirmedNav, 金额=$calculatedAmount');
       }
     }
     
