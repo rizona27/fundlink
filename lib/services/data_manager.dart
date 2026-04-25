@@ -788,8 +788,9 @@ class DataManager extends ChangeNotifier {
   /// 计算交易应该使用的净值日期
   /// - 过去日期: 直接使用该日期
   /// - 今天或未来: 
-  ///   * 15:00前: 使用T日(当天)的净值,在T+1日公布
-  ///   * 15:00后: 使用T+1日(下一个工作日)的净值,在T+2日公布
+  ///   * 工作日15:00前: 使用T日(当天)的净值,在T+1日公布
+  ///   * 工作日15:00后: 使用T+1日(下一个工作日)的净值,在T+2日公布
+  ///   * 非工作日: 统一按下一个工作日的15:00前处理，使用下一个工作日的净值
   static DateTime calculateNavDateForTrade(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -801,7 +802,10 @@ class DataManager extends ChangeNotifier {
     }
     
     // 今天或未来的交易
-    if (isAfter1500) {
+    // 如果是非工作日，统一视为下一个工作日的15:00前
+    final effectiveIsAfter1500 = isWeekday(tradeDay) ? isAfter1500 : false;
+    
+    if (effectiveIsAfter1500) {
       // 15:00后,使用下一个工作日的净值(T+1日)
       return getNextWeekday(tradeDay);
     } else {
@@ -813,8 +817,9 @@ class DataManager extends ChangeNotifier {
   /// 计算交易净值何时可以确认(净值公布时间)
   /// - 过去日期: 已确认
   /// - 今天或未来:
-  ///   * 15:00前: T+1日可确认
-  ///   * 15:00后: T+2日可确认
+  ///   * 工作日15:00前: T+1日可确认
+  ///   * 工作日15:00后: T+2日可确认
+  ///   * 非工作日: 统一按下一个工作日的15:00前处理，T+2日可确认
   static DateTime calculateConfirmDate(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -826,7 +831,10 @@ class DataManager extends ChangeNotifier {
     }
     
     // 今天或未来的交易
-    if (isAfter1500) {
+    // 如果是非工作日，统一视为下一个工作日的15:00前
+    final effectiveIsAfter1500 = isWeekday(tradeDay) ? isAfter1500 : false;
+    
+    if (effectiveIsAfter1500) {
       // 15:00后,T+2日可确认
       return getNextWeekday(getNextWeekday(tradeDay));
     } else {

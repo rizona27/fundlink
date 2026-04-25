@@ -138,6 +138,22 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   bool get _isTodayTransaction {
     return DataManager.isTransactionPending(_purchaseDate);
   }
+  
+  // 计算待确认交易的提示文本
+  String get _pendingTransactionHint {
+    if (!_isTodayTransaction) return '可修改，默认当前净值';
+    
+    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysToConfirm = confirmDate.difference(today).inDays;
+    
+    if (daysToConfirm <= 0) {
+      return 'T+${_isAfter1500 ? '2' : '1'}日自动更新';
+    } else {
+      return '待确认 - T+$daysToConfirm日自动更新';
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -505,7 +521,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       
       if (mounted) {
         if (isPending) {
-          context.showToast(shouldMerge ? '已合并到现有持仓\n净值待T+1确认后生效' : '添加成功\n净值待T+1确认后生效');
+          context.showToast(shouldMerge ? '已合并到现有持仓\n$_pendingTransactionHint' : '添加成功\n$_pendingTransactionHint');
         } else {
           context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
         }
@@ -832,7 +848,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '待确认 - T+1日自动更新',
+                                  _pendingTransactionHint,
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: CupertinoColors.systemOrange,
@@ -844,7 +860,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                           ),
                         _buildAmountField(
                           controller: _confirmNavController,
-                          hint: _isTodayTransaction ? 'T+1日自动更新' : '可修改，默认当前净值',
+                          hint: _pendingTransactionHint,
                           error: false,
                           onChanged: (value) {
                             final nav = double.tryParse(value.trim());

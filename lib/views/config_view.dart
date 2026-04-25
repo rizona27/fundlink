@@ -237,7 +237,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
           title: '版本信息',
-          subtitle: VersionView.appVersion,
+          subtitle: APP_VERSION,
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(

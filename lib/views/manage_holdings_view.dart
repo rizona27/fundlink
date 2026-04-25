@@ -433,7 +433,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                     children: [
                                       _FadeInCard(
                                         key: ValueKey('fade_${holding.id}_$cardIndex'),
-                                        delay: Duration(milliseconds: 100 + (cardIndex * 50)),
+                                        delay: Duration(milliseconds: 100 + (index * 50) + (cardIndex * 50)), // 根据组索引增加延迟
                                         duration: const Duration(milliseconds: 400),
                                         child: _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
                                       ),

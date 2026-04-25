@@ -472,46 +472,90 @@ class _FundDetailPageState extends State<FundDetailPage> {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 左侧：基金名称和代码
               Expanded(
+                flex: 3,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('估算净值',
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.7)
-                                : CupertinoColors.systemGrey)),
-                    const SizedBox(height: 4),
+                    Text(
+                      widget.holding.fundName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.holding.fundCode,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.5)
+                            : CupertinoColors.systemGrey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 中间：估算净值
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '估算净值',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.5)
+                            : CupertinoColors.systemGrey,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       gsz.toStringAsFixed(4),
                       style: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              
+              // 右侧：估算涨幅
               Expanded(
+                flex: 2,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('估算涨幅',
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.7)
-                                : CupertinoColors.systemGrey)),
-                    const SizedBox(height: 4),
+                    Text(
+                      '估算涨幅',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? CupertinoColors.white.withOpacity(0.5)
+                            : CupertinoColors.systemGrey,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: changeColor,
                       ),
@@ -522,16 +566,20 @@ class _FundDetailPageState extends State<FundDetailPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              Text('估值时间: ${_formatGzTime(gztime)}',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? CupertinoColors.white.withOpacity(0.5)
-                          : CupertinoColors.systemGrey)),
+              Text(
+                '估值时间: ${_formatGzTime(gztime)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? CupertinoColors.white.withOpacity(0.5)
+                      : CupertinoColors.systemGrey,
+                ),
+              ),
+              const SizedBox(width: 8),
               _buildRefreshButton(isDark),
             ],
           ),

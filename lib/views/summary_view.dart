@@ -894,7 +894,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             curve: Curves.easeOutCubic,
                             child: isExpanded
                                 ? ClipRect(
-                              child: _buildExpandedContent(first, holdings, isDark),
+                              child: AnimatedOpacity(
+                                opacity: isExpanded ? 1.0 : 0.0,
+                                duration: Duration(milliseconds: 250 + (index * 50)), // 逐个延迟
+                                curve: Curves.easeIn,
+                                child: _buildExpandedContent(first, holdings, isDark),
+                              ),
                             )
                                 : const SizedBox.shrink(),
                           ),

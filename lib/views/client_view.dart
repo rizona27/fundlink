@@ -514,7 +514,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   child: isExpanded
                       ? Container(
                     margin: const EdgeInsets.only(top: 8),
-                    child: Column(children: _buildAnimatedFundCards(group.holdings)),
+                    child: Column(children: _buildAnimatedFundCards(group.holdings, i)),
                   )
                       : const SizedBox.shrink(),
                 ),
@@ -527,7 +527,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     return result;
   }
 
-  List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings) {
+  List<Widget> _buildAnimatedFundCards(List<FundHolding> holdings, int groupIndex) {
     final cards = <Widget>[];
     for (int i = 0; i < holdings.length; i++) {
       final holding = holdings[i];
@@ -536,7 +536,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
           key: ValueKey('repaint_${holding.id}'),
           child: _FadeInWidget(
             key: ValueKey('fade_${holding.id}'),
-            delay: Duration(milliseconds: 100 + i * 80),
+            delay: Duration(milliseconds: 100 + (groupIndex * 50) + (i * 80)), // 根据组索引增加延迟
             duration: const Duration(milliseconds: 400),
             child: FundCard(
               key: ValueKey('card_${holding.id}'),

@@ -42,11 +42,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     '3y': '近3年',
     'all': '成立来',
   };
-  bool _showAverage = true;
-  bool _showHs300 = true;
-  bool _showZZ500 = true; // 默认显示中证500
-  bool _showZZ1000 = true; // 默认显示中证1000
-  bool _showCustomFund = false; // 默认关闭
+  bool _showAverage = false; // 默认不显示同类平均
+  bool _showHs300 = false; // 默认不显示沪深300
+  bool _showZZ500 = false; // 默认不显示中证500
+  bool _showZZ1000 = false; // 默认不显示中证1000
+  bool _showCustomFund = false; // 默认不显示自定义基金
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
@@ -275,11 +275,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       _updateSliceAndNormalize();
       _hoverIndexNotifier.value = -1;
       _dotPositionNotifier.value = null;
-      if (['1y', '3y', 'all'].contains(newRange)) {
-        _showAverage = false; // 长周期不显示同类平均
-      } else {
-        _showAverage = true; // 短周期显示同类平均
-      }
+      // 不再根据时间周期自动切换显示状态，保持用户的选择
     });
   }
 
@@ -551,6 +547,25 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         ? CupertinoColors.systemRed.withOpacity(0.15)
         : CupertinoColors.systemGreen.withOpacity(0.15);
 
+    // 渐变填充颜色：从基准线到净值曲线的柔和渐变
+    final gradientFillColor = rangeReturn >= 0
+        ? LinearGradient(
+            colors: [
+              CupertinoColors.systemRed.withOpacity(isDark ? 0.3 : 0.2),
+              CupertinoColors.systemRed.withOpacity(isDark ? 0.05 : 0.02),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          )
+        : LinearGradient(
+            colors: [
+              CupertinoColors.systemGreen.withOpacity(isDark ? 0.3 : 0.2),
+              CupertinoColors.systemGreen.withOpacity(isDark ? 0.05 : 0.02),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          );
+
     final morandiColor = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF8A8A8A);
 
     return Container(
@@ -724,13 +739,13 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               dotData: const FlDotData(show: false),
                               belowBarData: BarAreaData(
                                 show: true,
-                                color: fillColor,
+                                gradient: gradientFillColor,
                                 cutOffY: 0,
                                 applyCutOffY: true,
                               ),
                               aboveBarData: BarAreaData(
                                 show: true,
-                                color: fillColor,
+                                gradient: gradientFillColor,
                                 cutOffY: 0,
                                 applyCutOffY: true,
                               ),
