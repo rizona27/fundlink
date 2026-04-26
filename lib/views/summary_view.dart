@@ -376,12 +376,31 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     return map;
   }
 
+  // 性能优化：缓存排序后的基金代码列表
+  List<String>? _cachedSortedFundCodes;
+  String? _lastSearchText;
+  SortKey? _lastSortKey;
+  SortOrder? _lastSortOrder;
+
   List<String> get _sortedFundCodes {
+    // 检查缓存是否有效
+    if (_cachedSortedFundCodes != null &&
+        _lastSearchText == _searchText &&
+        _lastSortKey == _sortKey &&
+        _lastSortOrder == _sortOrder) {
+      return _cachedSortedFundCodes!;
+    }
+
     final codes = _filteredGroupedFunds.keys.toList();
     if (_sortKey == SortKey.none) {
       codes.sort();
+      _cachedSortedFundCodes = codes;
+      _lastSearchText = _searchText;
+      _lastSortKey = _sortKey;
+      _lastSortOrder = _sortOrder;
       return codes;
     }
+    
     codes.sort((a, b) {
       final fundsA = _filteredGroupedFunds[a]!;
       final fundsB = _filteredGroupedFunds[b]!;
@@ -408,6 +427,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         return valueB.compareTo(valueA);
       }
     });
+    
+    // 更新缓存
+    _cachedSortedFundCodes = codes;
+    _lastSearchText = _searchText;
+    _lastSortKey = _sortKey;
+    _lastSortOrder = _sortOrder;
+    
     return codes;
   }
 

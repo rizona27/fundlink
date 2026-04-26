@@ -355,68 +355,84 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   ),
                 )
-                    : ListView(
+                    : CustomScrollView(
                   controller: _scrollController,
-                  padding: EdgeInsets.only(
-                    left: 12,
-                    right: 12,
-                    top: 8,
-                    bottom: totalBottomPadding,
-                  ),
-                  children: [
-                    if (hasPinned) ...[
-                      GradientCard(
-                        title: '置顶',
-                        gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
-                        isExpanded: _isPinnedSectionExpanded,
-                        isDarkMode: isDarkMode,
-                        onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '数量: ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.2,
-                                color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            Text(
-                              '${_filteredPinnedHoldings.length}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                fontStyle: FontStyle.italic,
-                                height: 1.2,
-                                color: _colorForHoldingCount(_filteredPinnedHoldings.length),
-                              ),
-                            ),
-                            Text(
-                              '支',
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.2,
-                                color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                          ],
+                  // 性能优化：使用SliverList实现懒加载
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.only(
+                        left: 12,
+                        right: 12,
+                        top: 8,
+                        bottom: totalBottomPadding,
+                      ),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            // 置顶区域
+                            if (hasPinned && index == 0) {
+                              return Column(
+                                children: [
+                                  GradientCard(
+                                    title: '置顶',
+                                    gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+                                    isExpanded: _isPinnedSectionExpanded,
+                                    isDarkMode: isDarkMode,
+                                    onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
+                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '数量: ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.2,
+                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${_filteredPinnedHoldings.length}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            fontStyle: FontStyle.italic,
+                                            height: 1.2,
+                                            color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                                          ),
+                                        ),
+                                        Text(
+                                          '支',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.2,
+                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (_isPinnedSectionExpanded) ...[
+                                    const SizedBox(height: 8),
+                                    ..._buildPinnedCards(),
+                                    const SizedBox(height: 16),
+                                  ],
+                                ],
+                              );
+                            }
+                            
+                            // 客户分组
+                            final groupIndex = hasPinned ? index - 1 : index;
+                            if (groupIndex >= 0 && groupIndex < groups.length) {
+                              return _buildClientGroupWidget(groups[groupIndex], isDarkMode);
+                            }
+                            
+                            return const SizedBox.shrink();
+                          },
+                          childCount: (hasPinned ? 1 : 0) + groups.length,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOutCubic,
-                        child: _isPinnedSectionExpanded
-                            ? Column(children: _buildPinnedCards())
-                            : const SizedBox.shrink(),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (hasGroups) ...[
-                      ..._buildClientGroups(groups),
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -519,6 +535,93 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       );
     }
     return result;
+  }
+
+  // 性能优化：单独构建客户分组Widget，用于CustomScrollView
+  Widget _buildClientGroupWidget(_ClientGroup group, bool isDarkMode) {
+    final isExpanded = _expandedClients.contains(group.key);
+    final gradient = _getGradientForOriginalName(group.holdings.first.clientName);
+
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '持仓数: ',
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.2,
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+          ),
+        ),
+        Text(
+          '${group.holdings.length}',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            fontStyle: FontStyle.italic,
+            height: 1.2,
+            color: _colorForHoldingCount(group.holdings.length),
+          ),
+        ),
+        Text(
+          '支',
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.2,
+            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+          ),
+        ),
+      ],
+    );
+
+    return RepaintBoundary(
+      key: ValueKey('repaint_${group.key}'),
+      child: Container(
+        key: ValueKey('client_${group.key}'),
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          children: [
+            GradientCard(
+              title: group.displayName,
+              clientId: group.clientId.isNotEmpty ? group.clientId : null,
+              gradient: gradient,
+              isExpanded: isExpanded,
+              isDarkMode: isDarkMode,
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedClients.remove(group.key);
+                  } else {
+                    _expandedClients.add(group.key);
+                    
+                    // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                    final groups = _clientGroups;
+                    if (groups.isNotEmpty && group.key == groups.last.key) {
+                      Future.delayed(const Duration(milliseconds: 100), () {
+                        _scrollToBottom();
+                      });
+                    }
+                  }
+                });
+              },
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              trailing: trailing,
+              maxTitleLength: 10,
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              child: isExpanded
+                  ? Container(
+                margin: const EdgeInsets.only(top: 8),
+                child: Column(children: _buildFundCards(group.holdings)),
+              )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> _buildFundCards(List<FundHolding> holdings) {

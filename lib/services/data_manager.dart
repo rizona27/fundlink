@@ -52,6 +52,14 @@ class DataManager extends ChangeNotifier {
   bool _isValuationRefreshInProgress = false;
   Completer<void>? _currentValuationRefreshCompleter;
 
+  // 性能优化：选择性通知标志，避免不必要的全局重建
+  bool _shouldNotifyListeners = true;
+  
+  // 性能优化：计算结果缓存
+  final Map<String, ProfitResult> _profitCache = {};
+  final Map<String, List<TransactionRecord>> _transactionHistoryCache = {};
+  static const int _maxCacheSize = 500; // LRU缓存最大大小
+
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<TransactionRecord> get transactions => List.unmodifiable(_transactions);
   List<LogEntry> get logs => List.unmodifiable(_logs);
@@ -462,12 +470,30 @@ class DataManager extends ChangeNotifier {
     }
   }
 
-  /// 获取指定客户和基金的交易历史
+  /// 获取指定客户和基金的交易历史（带缓存优化）
   List<TransactionRecord> getTransactionHistory(String clientId, String fundCode) {
-    return _transactions
+    final cacheKey = '${clientId}_$fundCode';
+    
+    // 检查缓存
+    if (_transactionHistoryCache.containsKey(cacheKey)) {
+      return _transactionHistoryCache[cacheKey]!;
+    }
+    
+    // 计算并缓存
+    final result = _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
         .toList()
       ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate));
+    
+    // LRU缓存管理
+    if (_transactionHistoryCache.length >= _maxCacheSize) {
+      // 移除最旧的缓存项
+      final oldestKey = _transactionHistoryCache.keys.first;
+      _transactionHistoryCache.remove(oldestKey);
+    }
+    
+    _transactionHistoryCache[cacheKey] = result;
+    return result;
   }
 
   /// 删除交易记录并重新计算持仓
@@ -505,7 +531,7 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 更新持仓的净值信息（不改变交易记录）
+  /// 更新持仓的净值信息（不改变交易记录）- 优化版，支持批量更新
   Future<void> updateHoldingNav(String clientId, String fundCode, double currentNav, DateTime navDate) async {
     final index = _holdings.indexWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
     if (index == -1) return;
@@ -518,6 +544,11 @@ class DataManager extends ChangeNotifier {
     );
 
     _holdings[index] = updatedHolding;
+    // 不在这里保存和通知，由调用者决定何时批量保存
+  }
+
+  /// 批量保存并通知（用于refreshAllHoldingsForce等批量操作）
+  Future<void> commitBatchUpdates() async {
     await saveData();
     notifyListeners();
   }
@@ -535,8 +566,18 @@ class DataManager extends ChangeNotifier {
   Future<void> clearAllHoldings() async {
     final count = _holdings.length;
     _holdings = [];
+    // 清空缓存
+    _profitCache.clear();
+    _transactionHistoryCache.clear();
     await saveData();
     await addLog('清空所有持仓数据，共删除 $count 条记录', type: LogType.warning);
+    notifyListeners();
+  }
+
+  /// 批量更新持仓（减少notifyListeners调用次数）
+  Future<void> batchUpdateHoldings(List<FundHolding> newHoldings) async {
+    _holdings = newHoldings;
+    await saveData();
     notifyListeners();
   }
 
@@ -599,7 +640,8 @@ class DataManager extends ChangeNotifier {
       }
       onProgress?.call(i + 1, total);
     }
-    await saveData();
+    // 优化：批量保存和通知，减少I/O和重建次数
+    await commitBatchUpdates();
   }
 
   Future<void> addLog(String message, {LogType type = LogType.info}) async {
@@ -656,8 +698,18 @@ class DataManager extends ChangeNotifier {
   }
 
   ProfitResult calculateProfit(FundHolding holding) {
+    // 使用缓存键
+    final cacheKey = '${holding.clientId}_${holding.fundCode}_${holding.totalShares}_${holding.totalCost}_${holding.currentNav}';
+    
+    // 检查缓存
+    if (_profitCache.containsKey(cacheKey)) {
+      return _profitCache[cacheKey]!;
+    }
+    
     if (holding.totalShares <= 0 || holding.currentNav <= 0 || holding.totalCost <= 0) {
-      return const ProfitResult(absolute: 0.0, annualized: 0.0);
+      const result = ProfitResult(absolute: 0.0, annualized: 0.0);
+      _profitCache[cacheKey] = result;
+      return result;
     }
 
     final currentMarketValue = holding.currentNav * holding.totalShares;
@@ -666,19 +718,31 @@ class DataManager extends ChangeNotifier {
     // 计算持有天数：从首次买入到现在
     final relatedTransactions = getTransactionHistory(holding.clientId, holding.fundCode);
     if (relatedTransactions.isEmpty) {
-      return ProfitResult(absolute: absoluteProfit, annualized: 0.0);
+      final result = ProfitResult(absolute: absoluteProfit, annualized: 0.0);
+      _profitCache[cacheKey] = result;
+      return result;
     }
     
     final firstTradeDate = relatedTransactions.last.tradeDate;
     final days = DateTime.now().difference(firstTradeDate).inDays;
 
     if (days <= 0) {
-      return ProfitResult(absolute: absoluteProfit, annualized: 0.0);
+      final result = ProfitResult(absolute: absoluteProfit, annualized: 0.0);
+      _profitCache[cacheKey] = result;
+      return result;
     }
 
     final annualizedReturn = (absoluteProfit / holding.totalCost) / days * 365 * 100;
-
-    return ProfitResult(absolute: absoluteProfit, annualized: annualizedReturn);
+    final result = ProfitResult(absolute: absoluteProfit, annualized: annualizedReturn);
+    
+    // LRU缓存管理
+    if (_profitCache.length >= _maxCacheSize) {
+      final oldestKey = _profitCache.keys.first;
+      _profitCache.remove(oldestKey);
+    }
+    
+    _profitCache[cacheKey] = result;
+    return result;
   }
 
   List<FundHolding> getPinnedSortedHoldings() {

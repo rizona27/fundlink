@@ -191,6 +191,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final holdings = _dataManager.holdings;
     final validHoldings = <FundHolding>[];
 
+    // 性能优化：批量计算，减少重复调用
     for (final h in holdings) {
       if (h.isValid && h.currentNav > 0) {
         validHoldings.add(h);
@@ -199,62 +200,78 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
     var filtered = List<FundHolding>.from(validHoldings);
 
+    // 性能优化：先过滤再计算，减少不必要的计算
     if (_minAmount != null) {
       filtered = filtered.where((h) => h.totalCost >= _minAmount!).toList();
     }
     if (_maxAmount != null) {
       filtered = filtered.where((h) => h.totalCost <= _maxAmount!).toList();
     }
+    
+    // 性能优化：缓存交易历史和利润计算结果
+    final profitCache = <String, ProfitResult>{};
+    final daysCache = <String, int>{};
+    
+    if (_minProfit != null || _maxProfit != null || _minProfitRate != null || _maxProfitRate != null || _minDays != null || _maxDays != null) {
+      for (final h in filtered) {
+        final cacheKey = '${h.clientId}_${h.fundCode}';
+        if (!profitCache.containsKey(cacheKey)) {
+          profitCache[cacheKey] = _dataManager.calculateProfit(h);
+          final transactions = _dataManager.getTransactionHistory(h.clientId, h.fundCode);
+          daysCache[cacheKey] = transactions.isNotEmpty 
+              ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+              : 0;
+        }
+      }
+    }
+
     if (_minProfit != null) {
       filtered = filtered.where((h) {
-        final profit = _dataManager.calculateProfit(h);
+        final profit = profitCache['${h.clientId}_${h.fundCode}']!;
         return profit.absolute >= _minProfit!;
       }).toList();
     }
     if (_maxProfit != null) {
       filtered = filtered.where((h) {
-        final profit = _dataManager.calculateProfit(h);
+        final profit = profitCache['${h.clientId}_${h.fundCode}']!;
         return profit.absolute <= _maxProfit!;
       }).toList();
     }
     if (_minProfitRate != null) {
       filtered = filtered.where((h) {
-        final profit = _dataManager.calculateProfit(h);
+        final profit = profitCache['${h.clientId}_${h.fundCode}']!;
         return profit.annualized >= _minProfitRate!;
       }).toList();
     }
     if (_maxProfitRate != null) {
       filtered = filtered.where((h) {
-        final profit = _dataManager.calculateProfit(h);
+        final profit = profitCache['${h.clientId}_${h.fundCode}']!;
         return profit.annualized <= _maxProfitRate!;
       }).toList();
     }
     if (_minDays != null) {
       filtered = filtered.where((h) {
-        final transactions = _dataManager.getTransactionHistory(h.clientId, h.fundCode);
-        final days = transactions.isNotEmpty 
-            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
-            : 0;
+        final days = daysCache['${h.clientId}_${h.fundCode}']!;
         return days >= _minDays!;
       }).toList();
     }
     if (_maxDays != null) {
       filtered = filtered.where((h) {
-        final transactions = _dataManager.getTransactionHistory(h.clientId, h.fundCode);
-        final days = transactions.isNotEmpty 
-            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
-            : 0;
+        final days = daysCache['${h.clientId}_${h.fundCode}']!;
         return days <= _maxDays!;
       }).toList();
     }
 
     final items = <_RankItem>[];
     for (final holding in filtered) {
-      final profit = _dataManager.calculateProfit(holding);
-      final transactions = _dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
-      final days = transactions.isNotEmpty 
-          ? DateTime.now().difference(transactions.last.tradeDate).inDays 
-          : 0;
+      final cacheKey = '${holding.clientId}_${holding.fundCode}';
+      final profit = profitCache[cacheKey] ?? _dataManager.calculateProfit(holding);
+      final days = daysCache[cacheKey] ?? (() {
+        final transactions = _dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
+        return transactions.isNotEmpty 
+            ? DateTime.now().difference(transactions.last.tradeDate).inDays 
+            : 0;
+      })();
       items.add(_RankItem(holding: holding, profit: profit, daysHeld: days));
     }
 
