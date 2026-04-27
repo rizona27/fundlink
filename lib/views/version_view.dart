@@ -561,42 +561,65 @@ class VersionView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '更新记录',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '更新记录',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
+            ),
+            Text(
+              '点击暂停',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDarkMode
+                    ? CupertinoColors.white.withOpacity(0.4)
+                    : CupertinoColors.systemGrey.withOpacity(0.6),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
-        Container(
-          height: 120,
-          decoration: BoxDecoration(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E).withOpacity(0.6)
-                : CupertinoColors.white.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.1)
-                  : CupertinoColors.systemGrey.withOpacity(0.2),
-              width: 1,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(9),
-            child: _VerticalMarqueeText(
-              items: updateLogs,
-              itemTextStyle: TextStyle(
-                fontSize: 12,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.8)
-                    : CupertinoColors.systemGrey.withOpacity(0.9),
+        // 根据内容数量动态计算高度，最少120，最多300
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // 每行大约20像素高度（文本12px + 间距8px）
+            final estimatedHeight = updateLogs.length * 20.0;
+            final containerHeight = estimatedHeight.clamp(120.0, 300.0);
+            
+            return Container(
+              height: containerHeight,
+              decoration: BoxDecoration(
+                color: isDarkMode 
+                    ? const Color(0xFF2C2C2E).withOpacity(0.6)
+                    : CupertinoColors.white.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.1)
+                      : CupertinoColors.systemGrey.withOpacity(0.2),
+                  width: 1,
+                ),
               ),
-              velocity: 25.0, // 滚动速度（像素/秒）
-            ),
-          ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: _VerticalMarqueeText(
+                  items: updateLogs,
+                  itemTextStyle: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.8)
+                        : CupertinoColors.systemGrey.withOpacity(0.9),
+                  ),
+                  velocity: 15.0, // 进一步降低滚动速度
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -631,6 +654,7 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     
     _containerHeight = containerHeight;
     final totalDistance = totalTextHeight + containerHeight;
+    // 降低速度，确保用户可以阅读完所有内容
     final duration = Duration(milliseconds: (totalDistance / widget.velocity * 1000).round());
     
     _controller.duration = duration;
@@ -641,7 +665,12 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        _controller.forward(from: 0);
+        // 完成后等待2秒再重新开始，给用户更多时间
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && !_controller.isAnimating) {
+            _controller.forward(from: 0);
+          }
+        });
       }
     });
     

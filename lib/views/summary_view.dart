@@ -57,7 +57,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _dataListener = () {
-      if (mounted) setState(() {});
+      if (mounted) {
+        // 如果当前是按最新估值排序，清除缓存以强制重新排序
+        if (_sortKey == SortKey.latestNav) {
+          setState(() {
+            _cachedSortedFundCodes = null;
+          });
+        } else {
+          setState(() {});
+        }
+      }
     };
     _loadSortState();
     _loadValuationRefreshInterval();
@@ -290,6 +299,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
     try {
       await _dataManager.refreshAllValuations(_fundService, silent: silent);
+      // 估值刷新完成后，如果当前是按最新估值排序，需要清除缓存并重新排序
+      if (mounted && _sortKey == SortKey.latestNav) {
+        setState(() {
+          // 清除排序缓存，强制重新排序
+          _cachedSortedFundCodes = null;
+        });
+      }
       if (mounted && !silent) {
         context.showToast('估值刷新完成');
       }

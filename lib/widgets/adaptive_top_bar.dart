@@ -980,63 +980,72 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     final bgColor = widget.backgroundColor ?? _getBackgroundColor(progress, isDarkMode);
     final blurAmount = (1 - progress) * 8;
 
-    return AnimatedBuilder(
-      animation: _hideController,
-      builder: (context, _) {
-        return ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Opacity(
-                  opacity: progress,
-                  child: Transform.translate(
-                    offset: Offset(0, -16 * (1 - progress)),
-                    child: Container(
-                      height: widget.maxHeight * progress,
-                      padding: widget.padding,
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(16 * progress)),
-                      ),
-                      child: Row(
-                        children: [
-                          widget.useMenuStyle ? _buildLeftForMenuStyle() : Row(children: _buildLeftChildren()),
-                          const Spacer(),
-                          widget.useMenuStyle ? _buildRightForMenuStyle() : Row(children: _buildRightChildren()),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeInOutCubic,
-                  child: AnimatedOpacity(
-                    opacity: _currentSearchVisible ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                    child: Container(
-                      height: _currentSearchVisible ? 52 : 0,
-                      child: SingleChildScrollView(
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: Search(
-                          controller: _internalSearchController,
-                          focusNode: _internalFocusNode,
-                          onChanged: _onSearchChanged,
-                          onClear: _onSearchClear,
-                          placeholder: widget.searchPlaceholder,
+    return GestureDetector(
+      // 点击外部区域时让搜索框失焦
+      onTap: () {
+        if (_currentSearchVisible && _internalFocusNode.hasFocus) {
+          _internalFocusNode.unfocus();
+        }
+      },
+      behavior: HitTestBehavior.translucent,
+      child: AnimatedBuilder(
+        animation: _hideController,
+        builder: (context, _) {
+          return ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: progress,
+                    child: Transform.translate(
+                      offset: Offset(0, -16 * (1 - progress)),
+                      child: Container(
+                        height: widget.maxHeight * progress,
+                        padding: widget.padding,
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16 * progress)),
+                        ),
+                        child: Row(
+                          children: [
+                            widget.useMenuStyle ? _buildLeftForMenuStyle() : Row(children: _buildLeftChildren()),
+                            const Spacer(),
+                            widget.useMenuStyle ? _buildRightForMenuStyle() : Row(children: _buildRightChildren()),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeInOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _currentSearchVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: Container(
+                        height: _currentSearchVisible ? 52 : 0,
+                        child: SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Search(
+                            controller: _internalSearchController,
+                            focusNode: _internalFocusNode,
+                            onChanged: _onSearchChanged,
+                            onClear: _onSearchClear,
+                            placeholder: widget.searchPlaceholder,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

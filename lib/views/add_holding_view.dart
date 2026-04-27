@@ -154,6 +154,57 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       return '待确认 - T+$daysToConfirm日自动更新';
     }
   }
+  
+  // 构建历史交易的净值日期提示
+  String _buildNavDateHint() {
+    // 判断交易日期是否为工作日
+    final isTradeWeekday = DataManager.isWeekday(_purchaseDate);
+    
+    // 计算预期的净值日期
+    final expectedNavDate = DataManager.calculateNavDateForTrade(_purchaseDate, _isAfter1500);
+    final navDateStr = '${expectedNavDate.month.toString().padLeft(2, '0')}-${expectedNavDate.day.toString().padLeft(2, '0')}';
+    
+    // 检查净值日期是否是今天或未来（净值还未公布）
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final navDateNotAvailable = !expectedNavDate.isBefore(today);
+    
+    if (!isTradeWeekday) {
+      // 非工作日：统一视为下一个工作日的15:00前
+      if (navDateNotAvailable) {
+        return '非交易日，顺延至$navDateStr（待确认）';
+      } else {
+        return '非交易日，顺延至$navDateStr';
+      }
+    }
+    
+    // 工作日：根据15:00前后
+    if (navDateNotAvailable) {
+      // 如果净值日期是未来，显示待确认提示
+      if (_isAfter1500) {
+        return 'T+1日净值（待确认）-$navDateStr';
+      } else {
+        return 'T日净值（待确认）-$navDateStr';
+      }
+    }
+    
+    // 如果已经有净值数据，显示实际净值日期
+    if (_navDate != null) {
+      final actualNavDateStr = '${_navDate!.month.toString().padLeft(2, '0')}-${_navDate!.day.toString().padLeft(2, '0')}';
+      if (_isAfter1500) {
+        return 'T+1日净值（下一交易日）-$actualNavDateStr';
+      } else {
+        return 'T日净值（当天）-$actualNavDateStr';
+      }
+    }
+    
+    // 默认显示
+    if (_isAfter1500) {
+      return 'T+1日净值（下一交易日）-$navDateStr';
+    } else {
+      return 'T日净值（当天）-$navDateStr';
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -565,12 +616,18 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         } else {
           context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
         }
-        Navigator.of(context).pop();
+        // 延迟一下再关闭页面，确保Toast显示和DataManager通知完成
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (mounted) {
+          Navigator.of(context).pop();
+          return; // pop后直接返回，不执行finally中的setState
+        }
       }
     } catch (e) {
       await _dataManager.addLog('添加交易失败: $e', type: LogType.error);
       context.showToast('添加失败: $e');
     } finally {
+      // 只有在页面仍然挂载的情况下才更新状态
       if (mounted) {
         setState(() {
           _isSaving = false;
@@ -607,9 +664,15 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final targetNavDate = DataManager.calculateNavDateForTrade(targetDate, _isAfter1500);
       final isPending = DataManager.isTransactionPending(targetDate);
       
-      // 如果是待确认交易(今天或未来),不自动填充净值
-      if (isPending) {
-        print('待确认交易(今天或未来日期),不自动填充净值');
+      // 检查净值日期是否是未来日期或今天（没有净值数据）
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      // 净值日期是今天或未来，说明净值还未公布
+      final navDateNotAvailable = !targetNavDate.isBefore(today);
+      
+      // 如果是待确认交易(今天或未来)或净值日期还未公布，不自动填充净值
+      if (isPending || navDateNotAvailable) {
+        print('待确认交易 - 交易日期: $targetDate, 净值日期: $targetNavDate, 净值是否可用: ${!navDateNotAvailable}');
         setState(() {
           _confirmNavController.clear();
           _confirmNav = null;
@@ -685,6 +748,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _confirmNav = selectedPoint!.nav;
           _navDate = selectedPoint!.date;
           _confirmNavController.text = selectedPoint!.nav.toStringAsFixed(4);
+          // 同时更新基金代码下方显示的净值信息
+          _currentNav = selectedPoint!.nav;
         });
         final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
         print('$timeLabel交易 - $matchType - 选择日期: $targetDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
@@ -810,22 +875,61 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   _buildRowField(
                     label: '交易时间',
                     required: true,
-                    child: _buildTimeSegmentField(
-                      isAfter1500: _isAfter1500,
-                      onChanged: (value) async {
-                        setState(() {
-                          _isAfter1500 = value;
-                        });
-                        // 重新获取净值
-                        if (_fundCodeController.text.trim().length == 6) {
-                          await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);
-                          // 净值更新后，重新计算份额
-                          print('切换15:00前后，重新计算份额。当前确认净值: $_confirmNav, 金额: ${_purchaseAmountController.text}, 费率: ${_feeRateController.text}');
-                          _calculateShares();
-                          print('计算后份额: ${_purchaseSharesController.text}');
-                        }
-                      },
-                      isDarkMode: isDarkMode,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTimeSegmentField(
+                          isAfter1500: _isAfter1500,
+                          onChanged: (value) async {
+                            setState(() {
+                              _isAfter1500 = value;
+                            });
+                            // 重新获取净值
+                            if (_fundCodeController.text.trim().length == 6) {
+                              await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);
+                              // 净值更新后，重新计算份额
+                              print('切换15:00前后，重新计算份额。当前确认净值: $_confirmNav, 金额: ${_purchaseAmountController.text}, 费率: ${_feeRateController.text}');
+                              _calculateShares();
+                              print('计算后份额: ${_purchaseSharesController.text}');
+                            }
+                          },
+                          isDarkMode: isDarkMode,
+                        ),
+                        // 对于历史日期，显示提示信息
+                        if (!_isTodayTransaction && _purchaseDate.isBefore(DateTime.now()))
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemBlue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: CupertinoColors.systemBlue.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.info_circle,
+                                  size: 12,
+                                  color: CupertinoColors.systemBlue,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    _buildNavDateHint(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: CupertinoColors.systemBlue,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),
