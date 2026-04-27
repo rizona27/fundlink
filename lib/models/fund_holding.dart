@@ -55,9 +55,9 @@ class FundHolding {
   double get profitRate => totalCost > 0 ? profit / totalCost * 100 : 0;
 
   bool get isValidHolding {
+    // 修改：允许待确认交易的份额为0，只要有成本就认为有效
     return clientName.isNotEmpty &&
         fundCode.isNotEmpty &&
-        totalShares > 0 &&
         totalCost > 0;
   }
 

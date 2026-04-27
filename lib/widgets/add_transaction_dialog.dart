@@ -237,9 +237,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       // 如果是待确认交易(今天或未来),不自动填充净值
       if (isPending) {
         print('待确认交易(今天或未来日期),不自动填充净值');
-        setState(() {
-          _navController.clear();
-        });
+        // 不清空用户手动输入的净值，只是不自动填充
+        if (_navController.text.isEmpty) {
+          setState(() {
+            _navController.clear();
+          });
+        }
         return;
       }
       
@@ -441,7 +444,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       if (mounted) {
         Navigator.pop(context);
         if (isPending) {
-          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功\n净值待T+1确认后生效');
+          final confirmDays = _isAfter1500 ? 'T+2' : 'T+1';
+          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功\n净值待${confirmDays}确认后生效');
         } else {
           context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功');
         }
@@ -759,51 +763,68 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                       const SizedBox(height: 12),
                       
-                    // 成交净值输入框
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '成交净值',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
-                              ),
-                            ),
-                            if (_isTodayTransaction)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: CupertinoColors.systemOrange.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(4),
+                      // 成交净值输入框
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '成交净值',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
                                 ),
-                                child: Text(
-                                  '待确认',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: CupertinoColors.systemOrange,
-                                    fontWeight: FontWeight.w500,
+                              ),
+                              if (_isTodayTransaction)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '待确认',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: CupertinoColors.systemOrange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
+                            ],
+                          ),
+                          // 显示预计使用的净值日期
+                          if (_isTodayTransaction) ...[
+                            const SizedBox(height: 4),
+                            Builder(
+                              builder: (context) {
+                                final navDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
+                                final confirmDate = DataManager.calculateConfirmDate(_tradeDate, _isAfter1500);
+                                return Text(
+                                  '预计使用 ${navDate.month}月${navDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondaryColor,
+                                  ),
+                                );
+                              },
+                            ),
                           ],
-                        ),
-                        const SizedBox(height: 6),
-                        _buildInputField(
-                          label: '',
-                          controller: _navController,
-                          hint: _isTodayTransaction 
-                              ? 'T+1日自动更新'
-                              : (_isFetchingNav ? '加载中...' : '用于计算份额'),
-                          suffix: '',
-                          onChanged: (value) => _calculateEstimated(),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 6),
+                          _buildInputField(
+                            label: '',
+                            controller: _navController,
+                            hint: _isTodayTransaction 
+                                ? (_isAfter1500 ? 'T+2日自动更新' : 'T+1日自动更新')
+                                : (_isFetchingNav ? '加载中...' : '用于计算份额'),
+                            suffix: '',
+                            onChanged: (value) => _calculateEstimated(),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       
                       _buildInputField(
@@ -865,14 +886,67 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                       const SizedBox(height: 12),
                       
-                      _buildInputField(
-                        label: '成交净值',
-                        controller: _navController,
-                        hint: _isTodayTransaction 
-                            ? 'T+1日自动更新'
-                            : (_isFetchingNav ? '加载中...' : '用于计算金额'),
-                        suffix: '',
-                        onChanged: (value) => _calculateEstimated(),
+                      // 成交净值输入框（卖出模式）
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '成交净值',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
+                                ),
+                              ),
+                              if (_isTodayTransaction)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '待确认',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: CupertinoColors.systemOrange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          // 显示预计使用的净值日期
+                          if (_isTodayTransaction) ...[
+                            const SizedBox(height: 4),
+                            Builder(
+                              builder: (context) {
+                                final navDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
+                                final confirmDate = DataManager.calculateConfirmDate(_tradeDate, _isAfter1500);
+                                return Text(
+                                  '预计使用 ${navDate.month}月${navDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondaryColor,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          _buildInputField(
+                            label: '',
+                            controller: _navController,
+                            hint: _isTodayTransaction 
+                                ? (_isAfter1500 ? 'T+2日自动更新' : 'T+1日自动更新')
+                                : (_isFetchingNav ? '加载中...' : '用于计算金额'),
+                            suffix: '',
+                            onChanged: (value) => _calculateEstimated(),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       
@@ -954,11 +1028,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   ],
                 ), // SingleChildScrollView Column
               ), // SingleChildScrollView
-            ), // Container
+            ), // Container (内容区)
           ], // Column children
         ), // Column
       ), // CupertinoPopupSurface
-      ), // Container
+    ), // Container (外层)
     ); // Center
   }
 

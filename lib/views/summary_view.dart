@@ -35,8 +35,80 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   int _valuationRefreshIntervalSeconds = 180;
   Timer? _valuationTimer;
+  Timer? _marketStatusTimer; // 检测开市状态变化的定时器
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
+  
+  // 开市时间检测
+  bool get _isMarketOpen {
+    // 获取所有持仓的最新估值时间
+    final holdings = _dataManager.holdings;
+    if (holdings.isEmpty) return false;
+    
+    // 找到最新的估值时间
+    DateTime? latestValuationTime;
+    for (final holding in holdings) {
+      final cache = _dataManager.getValuation(holding.fundCode);
+      if (cache != null && cache['gztime'] != null) {
+        final gztimeStr = cache['gztime'] as String;
+        if (gztimeStr.isNotEmpty) {
+          try {
+            // gztime 格式: "2026-04-27 15:00" 或 "2026-04-27"
+            final parts = gztimeStr.split(' ');
+            final datePart = parts[0];
+            final timePart = parts.length > 1 ? parts[1] : '15:00';
+            
+            final dateTime = DateTime.parse('$datePart $timePart');
+            if (latestValuationTime == null || dateTime.isAfter(latestValuationTime!)) {
+              latestValuationTime = dateTime;
+            }
+          } catch (e) {
+            // 解析失败，跳过
+          }
+        }
+      }
+    }
+    
+    // 如果没有估值时间，使用当前时间判断
+    if (latestValuationTime == null) {
+      final now = DateTime.now();
+      final weekday = now.weekday;
+      if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
+      
+      final hour = now.hour;
+      final minute = now.minute;
+      final currentTime = hour * 60 + minute;
+      final morningStart = 9 * 60 + 30;
+      final morningEnd = 11 * 60 + 30;
+      final afternoonStart = 13 * 60;
+      final afternoonEnd = 15 * 60;
+      
+      return (currentTime >= morningStart && currentTime < morningEnd) ||
+             (currentTime >= afternoonStart && currentTime < afternoonEnd);
+    }
+    
+    // 根据最新估值时间判断
+    final weekday = latestValuationTime!.weekday;
+    // 周末闭市
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      return false;
+    }
+    
+    final hour = latestValuationTime!.hour;
+    final minute = latestValuationTime!.minute;
+    final valuationTime = hour * 60 + minute;
+    
+    // 如果估值时间在交易时间段内，说明还在交易中
+    final morningStart = 9 * 60 + 30;  // 9:30
+    final morningEnd = 11 * 60 + 30;   // 11:30
+    final afternoonStart = 13 * 60;     // 13:00
+    final afternoonEnd = 15 * 60;       // 15:00
+    
+    final isInTradingHours = (valuationTime >= morningStart && valuationTime < morningEnd) ||
+                             (valuationTime >= afternoonStart && valuationTime < afternoonEnd);
+    
+    return isInTradingHours;
+  }
 
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
@@ -58,18 +130,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     WidgetsBinding.instance.addObserver(this);
     _dataListener = () {
       if (mounted) {
-        // 如果当前是按最新估值排序，清除缓存以强制重新排序
-        if (_sortKey == SortKey.latestNav) {
-          setState(() {
-            _cachedSortedFundCodes = null;
-          });
-        } else {
-          setState(() {});
-        }
+        setState(() {
+          // 清除缓存以强制重新计算
+          // 注：排序操作非常快（O(n log n)），对性能影响可忽略
+          _cachedSortedFundCodes = null;
+        });
       }
     };
     _loadSortState();
     _loadValuationRefreshInterval();
+    // 启动市场状态检测定时器
+    _startMarketStatusTimer();
+    
+    // 立即触发一次 UI 更新，确保 isMarketOpen 的值被正确传递
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   void _onScrollUpdate(double offset) {
@@ -134,12 +212,21 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     // 启动时自动确认已过期的待确认交易
     _autoConfirmPendingTransactions();
+    
+    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
+    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopValuationTimer();
+    _stopMarketStatusTimer(); // 停止市场状态检测
     _dataManager.removeListener(_dataListener);
     _scrollThrottleTimer?.cancel();
     _scrollController.dispose(); // 释放滚动控制器
@@ -150,6 +237,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
+      _startMarketStatusTimer(); // 重启市场状态检测
       _restartValuationTimer();
       if (_dataManager.isValuationRefreshInProgress) {
         setState(() {});
@@ -159,18 +247,35 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     } else if (state == AppLifecycleState.paused) {
       _isPageVisible = false;
       _stopValuationTimer();
+      _stopMarketStatusTimer(); // 停止市场状态检测
     }
   }
 
   void _startValuationTimer() {
     _stopValuationTimer();
-    if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing) return;
+    // 只有在开市期间才启动自动刷新
+    if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing || !_isMarketOpen) {
+      print('⏸️ 估值定时器未启动: showValuation=$_showValuationRefresh, pageVisible=$_isPageVisible, refreshing=${_dataManager.isValuationRefreshing}, marketOpen=$_isMarketOpen');
+      return;
+    }
 
+    print('▶️ 启动估值定时器，间隔: ${_valuationRefreshIntervalSeconds}秒');
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        if (_isPageVisible && mounted && _showValuationRefresh && !_dataManager.isValuationRefreshing && !_dataManager.isValuationRefreshInProgress) {
+        // 每次触发前再次检查是否仍在开市时间
+        final now = DateTime.now();
+        final shouldRefresh = _isPageVisible && mounted && _showValuationRefresh && 
+            !_dataManager.isValuationRefreshing && 
+            !_dataManager.isValuationRefreshInProgress &&
+            _isMarketOpen;
+        
+        print('⏰ 定时器触发: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}, 应该刷新: $shouldRefresh, marketOpen: $_isMarketOpen');
+        
+        if (shouldRefresh) {
           _onValuationRefresh();
+        } else {
+          print('❌ 跳过刷新: marketOpen=$_isMarketOpen');
         }
       },
     );
@@ -182,9 +287,36 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _restartValuationTimer() {
-    if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing) {
+    // 只有在开市期间才重启定时器
+    if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing && _isMarketOpen) {
       _startValuationTimer();
     }
+  }
+  
+  // 启动市场状态检测定时器（每分钟检查一次）
+  void _startMarketStatusTimer() {
+    _stopMarketStatusTimer();
+    _marketStatusTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (!_isPageVisible || !mounted) return;
+      
+      // 如果当前应该显示估值刷新但定时器未运行，且现在是开市时间
+      if (_showValuationRefresh && _valuationTimer == null && _isMarketOpen) {
+        _restartValuationTimer();
+      }
+      // 如果现在是闭市时间，停止定时器
+      else if (!_isMarketOpen && _valuationTimer != null) {
+        _stopValuationTimer();
+      }
+      
+      // 触发 UI 更新，让 AdaptiveTopBar 重新获取 isMarketOpen 的值
+      setState(() {});
+    });
+  }
+  
+  // 停止市场状态检测定时器
+  void _stopMarketStatusTimer() {
+    _marketStatusTimer?.cancel();
+    _marketStatusTimer = null;
   }
 
   Future<void> _loadValuationRefreshInterval() async {
@@ -292,6 +424,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         context.showToast('估值刷新正在进行中...');
       }
       return;
+    }
+
+    // 非交易时间手动刷新时提示用户
+    if (!silent && mounted && !_isMarketOpen) {
+      context.showToast('当前为非交易时间，仅能获取收市后估值');
     }
 
     _lastValuationRefreshTime = DateTime.now();
@@ -592,7 +729,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         holding: firstHolding,
       ),
       child: Container(
-        margin: const EdgeInsets.only(top: 8),
+        margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: bgColor,
@@ -729,7 +866,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               fundService: _fundService,
               onRefresh: _onFundRefresh,
               onLongPressRefresh: _onFundLongPressRefresh,
-              showValuationRefresh: _showValuationRefresh,
+              showValuationRefresh: _showValuationRefresh, // 始终显示估值刷新按钮
               valuationRefreshIntervalSeconds: _valuationRefreshIntervalSeconds,
               onValuationRefresh: _onValuationRefresh,
               onValuationRefreshIntervalChanged: _onValuationRefreshIntervalChanged,
@@ -894,31 +1031,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         );
                       }
 
-                      // 如果展开，添加"更多"按钮
-                      final Widget? moreButton = isExpanded
-                          ? GestureDetector(
-                              onTap: () {
-                                // 跳转到基金详情页
-                                Navigator.of(context).push(
-                                  CupertinoPageRoute(
-                                    builder: (context) => FundDetailPage(
-                                      holding: first, // 使用第一个持仓作为代表
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  CupertinoIcons.ellipsis_circle,
-                                  size: 18,
-                                  color: isDark
-                                      ? CupertinoColors.white.withOpacity(0.6)
-                                      : CupertinoColors.systemGrey,
-                                ),
-                              ),
-                            )
-                          : null;
+                      // 如果展开，添加"更多"按钮（放在展开内容中，而不是GradientCard的trailing）
 
                       return Column(
                         key: ValueKey('fund_$fundCode'), // 添加key用于滚动定位
@@ -931,7 +1044,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             onTap: () => _toggleExpand(fundCode),
                             isDarkMode: isDark,
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: moreButton ?? trailing,
+                            trailing: trailing, // 始终显示持仓数，保持高度一致
                             maxTitleLength: 6,
                           ),
                           AnimatedSize(

@@ -130,6 +130,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
+    
+    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
+    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   void _onDataManagerChanged() {
@@ -412,11 +420,19 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                       ],
                                     ),
                                   ),
-                                  if (_isPinnedSectionExpanded) ...[
-                                    const SizedBox(height: 8),
-                                    ..._buildPinnedCards(),
-                                    const SizedBox(height: 16),
-                                  ],
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                    child: _isPinnedSectionExpanded
+                                        ? Column(
+                                            children: [
+                                              const SizedBox(height: 8),
+                                              ..._buildPinnedCards(),
+                                              const SizedBox(height: 16),
+                                            ],
+                                          )
+                                        : const SizedBox(height: 8), // 未展开时也添加间距
+                                  ),
                                 ],
                               );
                             }
@@ -523,7 +539,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   curve: Curves.easeOutCubic,
                   child: isExpanded
                       ? Container(
-                    margin: const EdgeInsets.only(top: 8),
+                    margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
                     child: Column(children: _buildFundCards(group.holdings)),
                   )
                       : const SizedBox.shrink(),
@@ -613,7 +629,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               curve: Curves.easeOutCubic,
               child: isExpanded
                   ? Container(
-                margin: const EdgeInsets.only(top: 8),
+                margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
                 child: Column(children: _buildFundCards(group.holdings)),
               )
                   : const SizedBox.shrink(),

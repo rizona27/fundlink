@@ -157,53 +157,27 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   
   // 构建历史交易的净值日期提示
   String _buildNavDateHint() {
-    // 判断交易日期是否为工作日
-    final isTradeWeekday = DataManager.isWeekday(_purchaseDate);
-    
-    // 计算预期的净值日期
+    // 计算预期的净值日期和确认日期
     final expectedNavDate = DataManager.calculateNavDateForTrade(_purchaseDate, _isAfter1500);
-    final navDateStr = '${expectedNavDate.month.toString().padLeft(2, '0')}-${expectedNavDate.day.toString().padLeft(2, '0')}';
+    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
     
     // 检查净值日期是否是今天或未来（净值还未公布）
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final navDateNotAvailable = !expectedNavDate.isBefore(today);
     
-    if (!isTradeWeekday) {
-      // 非工作日：统一视为下一个工作日的15:00前
-      if (navDateNotAvailable) {
-        return '非交易日，顺延至$navDateStr（待确认）';
-      } else {
-        return '非交易日，顺延至$navDateStr';
-      }
-    }
-    
-    // 工作日：根据15:00前后
     if (navDateNotAvailable) {
-      // 如果净值日期是未来，显示待确认提示
-      if (_isAfter1500) {
-        return 'T+1日净值（待确认）-$navDateStr';
-      } else {
-        return 'T日净值（待确认）-$navDateStr';
-      }
+      // 待确认交易：显示预计使用的净值日期和确认日期
+      return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认';
     }
     
     // 如果已经有净值数据，显示实际净值日期
     if (_navDate != null) {
-      final actualNavDateStr = '${_navDate!.month.toString().padLeft(2, '0')}-${_navDate!.day.toString().padLeft(2, '0')}';
-      if (_isAfter1500) {
-        return 'T+1日净值（下一交易日）-$actualNavDateStr';
-      } else {
-        return 'T日净值（当天）-$actualNavDateStr';
-      }
+      return '使用 ${_navDate!.month}月${_navDate!.day}日 净值';
     }
     
     // 默认显示
-    if (_isAfter1500) {
-      return 'T+1日净值（下一交易日）-$navDateStr';
-    } else {
-      return 'T日净值（当天）-$navDateStr';
-    }
+    return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值';
   }
 
   @override
@@ -444,8 +418,28 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       _isSaving = true;
     });
 
-    final amount = double.parse(_purchaseAmountController.text.trim());
-    final shares = double.parse(_purchaseSharesController.text.trim());
+    final amountText = _purchaseAmountController.text.trim();
+    final sharesText = _purchaseSharesController.text.trim();
+    
+    // 金额必须有值
+    if (amountText.isEmpty) {
+      context.showToast('请输入买入金额');
+      setState(() => _isSaving = false);
+      return;
+    }
+    
+    final amount = double.tryParse(amountText);
+    if (amount == null || amount <= 0) {
+      context.showToast('请输入有效的金额');
+      setState(() => _isSaving = false);
+      return;
+    }
+    
+    // 份额可以为空（待确认交易）
+    double shares = 0;
+    if (sharesText.isNotEmpty) {
+      shares = double.tryParse(sharesText) ?? 0;
+    }
     final fundCode = _fundCodeController.text.trim().toUpperCase();
     final clientId = _clientIdController.text.trim();
     final clientName = _clientNameController.text.trim();
@@ -583,7 +577,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (isPending) {
         confirmedNav = null;
         // 待确认交易：如果用户没有输入份额，则设为0，等待后续确认时计算
-        if (_purchaseSharesController.text.trim().isEmpty) {
+        if (sharesText.isEmpty) {
           transactionShares = 0;
         }
         print('创建待确认交易(新增持仓): 今天或未来日期, 份额: $transactionShares');

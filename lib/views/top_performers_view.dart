@@ -96,7 +96,18 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       _dataManager.addListener(_dataListener);
       _isInitialized = true;
       _updateCachedItems();
+    } else {
+      // 已初始化的页面，每次切换回来时也要更新数据
+      _updateCachedItems();
     }
+    
+    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
+    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   void _onScrollUpdate(double offset) {
@@ -192,8 +203,10 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final validHoldings = <FundHolding>[];
 
     // 性能优化：批量计算，减少重复调用
+    // 修改：显示所有有效持仓，包括待确认交易（currentNav可能为0）
     for (final h in holdings) {
-      if (h.isValid && h.currentNav > 0) {
+      // 只要持仓有效（有份额和成本），就显示，不管净值是否为0
+      if (h.isValidHolding) {
         validHoldings.add(h);
       }
     }
@@ -316,8 +329,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   bool get _hasData {
+    // 修改：检查是否有任何有效持仓（包括待确认交易）
     for (final h in _dataManager.holdings) {
-      if (h.isValid && h.currentNav > 0) return true;
+      if (h.isValidHolding) return true;
     }
     return false;
   }
