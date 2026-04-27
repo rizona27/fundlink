@@ -50,9 +50,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   bool _isFetchingNav = false; // 是否正在获取净值
   bool _isAfter1500 = false; // 是否15:00后交易
   
-  // 判断是否为待确认交易(今天或未来)
+  // 判断是否为待确认交易(基于净值日期)
   bool get _isTodayTransaction {
-    return DataManager.isTransactionPending(_tradeDate);
+    return DataManager.isTransactionPending(_tradeDate, _isAfter1500);
   }
 
   @override
@@ -213,7 +213,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         onConfirm: (date) {
           setState(() => _tradeDate = date);
           // 日期改变后，重新获取净值
-          _fetchNavByDate();
+          _fetchNavByDate().then((_) {
+            // 净值更新后，重新计算预估份额/金额
+            if (!_isTodayTransaction && mounted) {
+              print('日期已变更，重新计算预估值');
+              _calculateEstimated();
+            }
+          });
         },
       ),
     );
@@ -226,7 +232,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       
       // 计算应该使用的净值日期
       final targetNavDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
-      final isPending = DataManager.isTransactionPending(_tradeDate);
+      final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
       
       // 如果是待确认交易(今天或未来),不自动填充净值
       if (isPending) {
@@ -279,6 +285,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           _navController.text = selectedPoint!.nav.toStringAsFixed(4);
         });
         print('加仓/减仓 - 选择日期: $_tradeDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
+        
+        // 净值变化后，自动重新计算预估份额/金额
+        if (!_isTodayTransaction) {
+          print('净值已更新，重新计算预估值');
+          _calculateEstimated();
+        }
       }
     } catch (e) {
       print('获取历史净值失败: $e');
@@ -395,7 +407,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     }
 
     // 判断是否为待确认交易(今天或未来的交易)
-    final isPending = DataManager.isTransactionPending(_tradeDate);
+    final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
     double? confirmedNav;
     
     if (isPending) {

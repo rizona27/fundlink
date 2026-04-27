@@ -134,9 +134,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   bool _isAfter1500 = false;
   bool _isSaving = false;
   
-  // 判断是否为待确认交易(今天或未来)
+  // 判断是否为待确认交易(基于净值日期)
   bool get _isTodayTransaction {
-    return DataManager.isTransactionPending(_purchaseDate);
+    return DataManager.isTransactionPending(_purchaseDate, _isAfter1500);
   }
   
   // 计算待确认交易的提示文本
@@ -575,8 +575,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;
       
-      // 判断是否为待确认交易(今天或未来的交易)
-      final isPending = DataManager.isTransactionPending(_purchaseDate);
+      // 判断是否为待确认交易(基于净值日期)
+      final isPending = DataManager.isTransactionPending(_purchaseDate, _isAfter1500);
       double? confirmedNav;
       double transactionShares = shares;
       
@@ -649,6 +649,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           // 选择日期后，尝试获取该日期的净值
           if (_fundCodeController.text.trim().length == 6) {
             await _fetchNavByDate(_fundCodeController.text.trim(), newDate);
+            // 净值更新后，重新计算份额
+            if (!_isTodayTransaction) {
+              print('日期已变更，重新计算份额');
+              _calculateShares();
+            }
           }
         },
       ),
@@ -662,7 +667,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       
       // 计算应该使用的净值日期
       final targetNavDate = DataManager.calculateNavDateForTrade(targetDate, _isAfter1500);
-      final isPending = DataManager.isTransactionPending(targetDate);
+      final isPending = DataManager.isTransactionPending(targetDate, _isAfter1500);
       
       // 检查净值日期是否是未来日期或今天（没有净值数据）
       final now = DateTime.now();
@@ -753,6 +758,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         });
         final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
         print('$timeLabel交易 - $matchType - 选择日期: $targetDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
+        
+        // 净值变化后，自动重新计算份额
+        if (!_isTodayTransaction) {
+          print('净值已更新，重新计算份额');
+          _calculateShares();
+        }
       } else {
         print('未找到 $targetNavDate 附近的净值数据（最近的是 ${closestPoint?.date}，相差${minDiff}天）');
       }

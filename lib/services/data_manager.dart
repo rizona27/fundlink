@@ -927,46 +927,55 @@ class DataManager extends ChangeNotifier {
   }
   
   /// 计算交易净值何时可以确认(净值公布时间)
-  /// - 过去日期: 已确认
-  /// - 今天或未来:
+  /// 关键：基于净值日期而非交易日期来判断
+  /// - 如果净值日期是过去：已确认，返回交易日期
+  /// - 如果净值日期是今天或未来：
   ///   * 工作日15:00前: T+1日可确认（使用T日净值）
   ///   * 工作日15:00后: T+2日可确认（使用T+1日净值）
   ///   * 非工作日: 统一按下一个工作日的15:00前处理，T+1日可确认（使用下一个工作日净值）
   static DateTime calculateConfirmDate(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     
-    // 过去的交易,已经确认
-    if (tradeDay.isBefore(today)) {
-      return tradeDay;
+    // 先计算该交易应该使用的净值日期
+    final navDate = calculateNavDateForTrade(tradeDate, isAfter1500);
+    final navDay = DateTime(navDate.year, navDate.month, navDate.day);
+    
+    // 如果净值日期是过去，说明已经确认
+    if (navDay.isBefore(today)) {
+      return tradeDate;
     }
     
-    // 今天或未来的交易
-    // 如果是非工作日，统一视为下一个工作日的15:00前
-    final effectiveIsAfter1500 = isWeekday(tradeDay) ? isAfter1500 : false;
+    // 净值日期是今天或未来，需要计算确认日期
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    final isTradeWeekday = isWeekday(tradeDay);
+    final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
       // 15:00后，使用T+1日净值，T+2日可确认
-      final navDate = getNextWeekday(tradeDay); // T+1日（净值日期）
-      return getNextWeekday(navDate); // T+2日（确认日期）
+      final actualNavDate = getNextWeekday(tradeDay); // T+1日（净值日期）
+      return getNextWeekday(actualNavDate); // T+2日（确认日期）
     } else {
       // 15:00前，使用T日净值，T+1日可确认
-      final navDate = isWeekday(tradeDay) ? tradeDay : getNextWeekday(tradeDay); // T日（净值日期）
-      return getNextWeekday(navDate); // T+1日（确认日期）
+      final actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); // T日（净值日期）
+      return getNextWeekday(actualNavDate); // T+1日（确认日期）
     }
   }
   
   /// 判断交易是否为待确认状态
-  /// - 过去日期: 已确认
-  /// - 今天或未来: 待确认
-  static bool isTransactionPending(DateTime tradeDate) {
+  /// 关键：基于净值日期而非交易日期来判断
+  /// - 如果净值日期是今天或未来：待确认（净值还未公布）
+  /// - 如果净值日期是过去：已确认（净值已公布）
+  static bool isTransactionPending(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     
-    // 今天或未来的交易都是待确认
-    return !tradeDay.isBefore(today);
+    // 先计算该交易应该使用的净值日期
+    final navDate = calculateNavDateForTrade(tradeDate, isAfter1500);
+    final navDay = DateTime(navDate.year, navDate.month, navDate.day);
+    
+    // 如果净值日期是今天或未来，说明净值还未公布，需要待确认
+    return !navDay.isBefore(today);
   }
 }
 
