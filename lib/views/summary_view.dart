@@ -1031,7 +1031,43 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         );
                       }
 
-                      // 如果展开，添加"更多"按钮（放在展开内容中，而不是GradientCard的trailing）
+                      // 如果展开，在 trailing 中添加三个点菜单按钮
+                      Widget? finalTrailing = trailing;
+                      if (isExpanded) {
+                        finalTrailing = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (trailing != null) ...[
+                              trailing!,
+                              const SizedBox(width: 8),
+                            ],
+                            GestureDetector(
+                              onTap: () {
+                                // 跳转到第一个持仓的基金详情页
+                                Navigator.of(context).push(
+                                  CupertinoPageRoute(
+                                    builder: (context) => FundDetailPage(holding: first),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: isDark 
+                                      ? CupertinoColors.white.withOpacity(0.2)
+                                      : CupertinoColors.black.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  CupertinoIcons.ellipsis,
+                                  size: 16,
+                                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
 
                       return Column(
                         key: ValueKey('fund_$fundCode'), // 添加key用于滚动定位
@@ -1044,7 +1080,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             onTap: () => _toggleExpand(fundCode),
                             isDarkMode: isDark,
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: trailing, // 始终显示持仓数，保持高度一致
+                            trailing: finalTrailing, // 使用包含三个点按钮的 trailing
                             maxTitleLength: 6,
                           ),
                           AnimatedSize(

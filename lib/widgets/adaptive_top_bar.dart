@@ -1102,8 +1102,6 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
           Positioned.fill(
             child: GestureDetector(
               onTap: () {
-                // 点击背景时，触发菜单项的_close方法
-                // 通过找到_AnimatedButtonGroup的state来调用
                 _hideMenuWithAnimation();
               },
               behavior: HitTestBehavior.translucent,
@@ -1140,7 +1138,7 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
     _cancelAutoCloseTimer();
     _isShowing = false;
     
-    // 通过GlobalKey调用_AnimatedButtonGroupState的_close方法
+    // 通过 GlobalKey 调用 _AnimatedButtonGroupState 的 _close 方法
     _menuKey.currentState?._close();
   }
 
@@ -1259,6 +1257,7 @@ class _AnimatedButtonGroup extends StatefulWidget {
   final VoidCallback onHide;
   final bool showAbove;
   final VoidCallback? onAnimationComplete; // 动画完成回调
+  
   const _AnimatedButtonGroup({
     super.key,
     required this.items,
@@ -1472,7 +1471,7 @@ class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTicke
             switchOutCurve: Curves.easeInOut,
             child: _isHovered
                 ? Padding(
-                    key: const ValueKey('text'),
+                    key: ValueKey('text_${widget.item.label}'),
                     padding: const EdgeInsets.only(left: 4),
                     child: FadeTransition(
                       opacity: _opacityAnimation,
@@ -1486,7 +1485,7 @@ class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTicke
                       ),
                     ),
                   )
-                : const SizedBox.shrink(key: ValueKey('empty')),
+                : SizedBox.shrink(key: ValueKey('empty_${widget.item.label}')),
           ),
         ],
       );

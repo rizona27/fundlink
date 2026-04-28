@@ -9,6 +9,7 @@ import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../models/fund_info_cache.dart';
 import '../services/fund_service.dart';
+import '../services/china_trading_day_service.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
 
 extension ThemeModeDisplayName on ThemeMode {
@@ -840,8 +841,8 @@ class DataManager extends ChangeNotifier {
     
     for (final tx in pendingTransactions) {
       try {
-        // 计算该交易何时可以确认
-        final canConfirmDate = calculateConfirmDate(tx.tradeDate, tx.isAfter1500);
+        // 使用新的异步方法计算该交易何时可以确认（考虑节假日和调休）
+        final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
         
         // 如果当前日期 >= 可确认日期,则尝试获取净值并确认
         if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
@@ -853,6 +854,7 @@ class DataManager extends ChangeNotifier {
           }
         }
       } catch (e) {
+        print('自动确认交易失败: $e');
       }
     }
     
@@ -864,12 +866,36 @@ class DataManager extends ChangeNotifier {
   }
   
   /// 判断是否为工作日(周一到周五,不考虑节假日)
+  /// @deprecated 请使用 ChinaTradingDayService.isTradingDay() 获取更准确的交易日判断
   static bool isWeekday(DateTime date) {
     final weekday = date.weekday; // 1=Monday, 7=Sunday
     return weekday >= DateTime.monday && weekday <= DateTime.friday;
   }
   
+  /// 判断是否为中国 A 股交易日（考虑法定节假日和调休补班）
+  /// 使用三层降级策略：
+  /// 1. 专业节假日 API（包含调休补班信息）
+  /// 2. world_holidays 包（法定节假日）
+  /// 3. 本地周一到周五判断（兜底方案）
+  static Future<bool> isTradingDay(DateTime date) async {
+    final service = ChinaTradingDayService();
+    return await service.isTradingDay(date);
+  }
+  
+  /// 获取下一个交易日
+  static Future<DateTime> getNextTradingDay({DateTime? from}) async {
+    final service = ChinaTradingDayService();
+    return await service.getNextTradingDay(from: from);
+  }
+  
+  /// 获取上一个交易日
+  static Future<DateTime> getPreviousTradingDay({DateTime? from}) async {
+    final service = ChinaTradingDayService();
+    return await service.getPreviousTradingDay(from: from);
+  }
+  
   /// 获取下一个工作日
+  /// @deprecated 请使用 getNextTradingDay() 获取更准确的下一个交易日
   static DateTime getNextWeekday(DateTime from) {
     DateTime next = from.add(const Duration(days: 1));
     while (!isWeekday(next)) {
@@ -926,6 +952,46 @@ class DataManager extends ChangeNotifier {
     }
   }
   
+  /// 计算交易应该使用的净值日期（异步版本，考虑法定节假日和调休补班）
+  /// @deprecated 请使用 calculateNavDateForTradeAsync
+  static Future<DateTime> calculateNavDateForTradeAsync(DateTime tradeDate, bool isAfter1500) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    
+    // 判断是否为交易日
+    final isTradeTradingDay = await isTradingDay(tradeDay);
+    
+    // 过去的交易
+    if (tradeDay.isBefore(today)) {
+      if (!isTradeTradingDay) {
+        // 非交易日：统一视为下一个交易日的15:00前
+        return await getNextTradingDay(from: tradeDay);
+      } else {
+        // 交易日：根据15:00前后决定
+        if (isAfter1500) {
+          // 15:00后，使用下一个交易日的净值(T+1日)
+          return await getNextTradingDay(from: tradeDay);
+        } else {
+          // 15:00前，使用当天的净值(T日)
+          return tradeDay;
+        }
+      }
+    }
+    
+    // 今天或未来的交易
+    // 如果是非交易日，统一视为下一个交易日的15:00前
+    final effectiveIsAfter1500 = isTradeTradingDay ? isAfter1500 : false;
+    
+    if (effectiveIsAfter1500) {
+      // 15:00后,使用下一个交易日的净值(T+1日)
+      return await getNextTradingDay(from: tradeDay);
+    } else {
+      // 15:00前,使用当天的净值(T日),如果是非交易日则用下一个交易日
+      return isTradeTradingDay ? tradeDay : await getNextTradingDay(from: tradeDay);
+    }
+  }
+  
   /// 计算交易净值何时可以确认(净值公布时间)
   /// 关键：基于净值日期而非交易日期来判断
   /// - 如果净值日期是过去：已确认，返回交易日期
@@ -962,6 +1028,36 @@ class DataManager extends ChangeNotifier {
     }
   }
   
+  /// 计算交易净值何时可以确认（异步版本，考虑法定节假日和调休补班）
+  static Future<DateTime> calculateConfirmDateAsync(DateTime tradeDate, bool isAfter1500) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // 先计算该交易应该使用的净值日期（使用新的异步方法）
+    final navDate = await calculateNavDateForTradeAsync(tradeDate, isAfter1500);
+    final navDay = DateTime(navDate.year, navDate.month, navDate.day);
+    
+    // 如果净值日期是过去，说明已经确认
+    if (navDay.isBefore(today)) {
+      return tradeDate;
+    }
+    
+    // 净值日期是今天或未来，需要计算确认日期
+    final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
+    final isTradeTradingDay = await isTradingDay(tradeDay);
+    final effectiveIsAfter1500 = isTradeTradingDay ? isAfter1500 : false;
+    
+    if (effectiveIsAfter1500) {
+      // 15:00后，使用T+1日净值，T+2日可确认
+      final actualNavDate = await getNextTradingDay(from: tradeDay); // T+1日（净值日期）
+      return await getNextTradingDay(from: actualNavDate); // T+2日（确认日期）
+    } else {
+      // 15:00前，使用T日净值，T+1日可确认
+      final actualNavDate = isTradeTradingDay ? tradeDay : await getNextTradingDay(from: tradeDay); // T日（净值日期）
+      return await getNextTradingDay(from: actualNavDate); // T+1日（确认日期）
+    }
+  }
+  
   /// 判断交易是否为待确认状态
   /// 关键：基于净值日期而非交易日期来判断
   /// - 如果净值日期是今天或未来：待确认（净值还未公布）
@@ -972,6 +1068,19 @@ class DataManager extends ChangeNotifier {
     
     // 先计算该交易应该使用的净值日期
     final navDate = calculateNavDateForTrade(tradeDate, isAfter1500);
+    final navDay = DateTime(navDate.year, navDate.month, navDate.day);
+    
+    // 如果净值日期是今天或未来，说明净值还未公布，需要待确认
+    return !navDay.isBefore(today);
+  }
+  
+  /// 判断交易是否为待确认状态（异步版本，考虑节假日）
+  static Future<bool> isTransactionPendingAsync(DateTime tradeDate, bool isAfter1500) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // 先计算该交易应该使用的净值日期（使用异步方法，考虑节假日）
+    final navDate = await calculateNavDateForTradeAsync(tradeDate, isAfter1500);
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
     // 如果净值日期是今天或未来，说明净值还未公布，需要待确认

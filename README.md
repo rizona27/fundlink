@@ -50,7 +50,8 @@ lib/
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算、持久化
 │   ├── file_export_service.dart           # 支持导出组件，解析格式类型CSV/Excel
 │   ├── file_import_service.dart           # 支持导入组件，解析格式类型CSV/Excel
-│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
+│   ├── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
+│   └── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略（专业API → world_holidays → 基础判断），内置内存缓存优化性能
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性

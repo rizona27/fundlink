@@ -49,18 +49,52 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   bool _hasManuallyEditedAmount = false; // 用户是否手动编辑过金额
   bool _isFetchingNav = false; // 是否正在获取净值
   bool _isAfter1500 = false; // 是否15:00后交易
+  bool _isPendingTransaction = false; // 是否为待确认交易
+  
+  // 缓存待确认提示的 Future，避免重复计算
+  Future<String>? _pendingHintFuture;
   
   // 判断是否为待确认交易(基于净值日期)
   bool get _isTodayTransaction {
-    return DataManager.isTransactionPending(_tradeDate, _isAfter1500);
+    return _isPendingTransaction;
+  }
+  
+  // 更新待确认交易状态（异步）
+  Future<void> _updatePendingStatus() async {
+    final isPending = await DataManager.isTransactionPendingAsync(_tradeDate, _isAfter1500);
+    if (mounted) {
+      setState(() {
+        _isPendingTransaction = isPending;
+      });
+    }
+  }
+  
+  // 构建待确认交易的提示文本（异步版本，考虑节假日）
+  Future<String> _getPendingTransactionHint() async {
+    if (!_isTodayTransaction) return '';
+    
+    final confirmDate = await DataManager.calculateConfirmDateAsync(_tradeDate, _isAfter1500);
+    
+    // 显示具体日期：待确认-MM-DD日自动更新
+    return '待确认-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')}日自动更新';
+  }
+  
+  // 获取或创建待确认提示的 Future
+  Future<String> _getOrCreatePendingHintFuture() {
+    if (_pendingHintFuture == null) {
+      _pendingHintFuture = _getPendingTransactionHint();
+    }
+    return _pendingHintFuture!;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _checkTimeAndSetNav();
-    _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+    _updatePendingStatus().then((_) {
+      _checkTimeAndSetNav();
+      _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+    });
   }
 
   Future<void> _fetchCurrentNavIfNeeded() async {
@@ -211,14 +245,21 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       builder: (context) => _TransactionDatePickerModal(
         initialDate: _tradeDate,
         onConfirm: (date) {
-          setState(() => _tradeDate = date);
-          // 日期改变后，重新获取净值
-          _fetchNavByDate().then((_) {
-            // 净值更新后，重新计算预估份额/金额
-            if (!_isTodayTransaction && mounted) {
-              print('日期已变更，重新计算预估值');
-              _calculateEstimated();
-            }
+          setState(() {
+            _tradeDate = date;
+            // 清空提示缓存，让它重新计算
+            _pendingHintFuture = null;
+          });
+          // 更新待确认状态
+          _updatePendingStatus().then((_) {
+            // 日期改变后，重新获取净值
+            _fetchNavByDate().then((_) {
+              // 净值更新后，重新计算预估份额/金额
+              if (!_isTodayTransaction && mounted) {
+                print('日期已变更，重新计算预估值');
+                _calculateEstimated();
+              }
+            });
           });
         },
       ),
@@ -230,8 +271,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     try {
       final fundService = FundService(_dataManager);
       
-      // 计算应该使用的净值日期
-      final targetNavDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
+      // 计算应该使用的净值日期（使用异步方法，考虑节假日）
+      final targetNavDate = await DataManager.calculateNavDateForTradeAsync(_tradeDate, _isAfter1500);
       final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
       
       // 如果是待确认交易(今天或未来),不自动填充净值
@@ -702,9 +743,16 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                           Expanded(
                             child: GestureDetector(
                               onTap: () {
-                                setState(() => _isAfter1500 = false);
-                                _fetchNavByDate(); // 重新获取净值
-                                _calculateEstimated(); // 重新计算份额/金额
+                                setState(() {
+                                  _isAfter1500 = false;
+                                  // 清空提示缓存，让它重新计算
+                                  _pendingHintFuture = null;
+                                });
+                                // 更新待确认状态
+                                _updatePendingStatus().then((_) {
+                                  _fetchNavByDate(); // 重新获取净值
+                                  _calculateEstimated(); // 重新计算份额/金额
+                                });
                               },
                               child: Container(
                                 decoration: BoxDecoration(
@@ -726,9 +774,16 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                           Expanded(
                             child: GestureDetector(
                               onTap: () {
-                                setState(() => _isAfter1500 = true);
-                                _fetchNavByDate(); // 重新获取净值
-                                _calculateEstimated(); // 重新计算份额/金额
+                                setState(() {
+                                  _isAfter1500 = true;
+                                  // 清空提示缓存，让它重新计算
+                                  _pendingHintFuture = null;
+                                });
+                                // 更新待确认状态
+                                _updatePendingStatus().then((_) {
+                                  _fetchNavByDate(); // 重新获取净值
+                                  _calculateEstimated(); // 重新计算份额/金额
+                                });
                               },
                               child: Container(
                                 decoration: BoxDecoration(
@@ -799,12 +854,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                           // 显示预计使用的净值日期
                           if (_isTodayTransaction) ...[
                             const SizedBox(height: 4),
-                            Builder(
-                              builder: (context) {
-                                final navDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
-                                final confirmDate = DataManager.calculateConfirmDate(_tradeDate, _isAfter1500);
+                            FutureBuilder<String>(
+                              future: _getOrCreatePendingHintFuture(),
+                              builder: (context, snapshot) {
+                                final hint = snapshot.data ?? '加载中...';
                                 return Text(
-                                  '预计使用 ${navDate.month}月${navDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认',
+                                  hint,
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: secondaryColor,
@@ -818,7 +873,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                             label: '',
                             controller: _navController,
                             hint: _isTodayTransaction 
-                                ? (_isAfter1500 ? 'T+2日自动更新' : 'T+1日自动更新')
+                                ? ''
                                 : (_isFetchingNav ? '加载中...' : '用于计算份额'),
                             suffix: '',
                             onChanged: (value) => _calculateEstimated(),
@@ -922,12 +977,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                           // 显示预计使用的净值日期
                           if (_isTodayTransaction) ...[
                             const SizedBox(height: 4),
-                            Builder(
-                              builder: (context) {
-                                final navDate = DataManager.calculateNavDateForTrade(_tradeDate, _isAfter1500);
-                                final confirmDate = DataManager.calculateConfirmDate(_tradeDate, _isAfter1500);
+                            FutureBuilder<String>(
+                              future: _getOrCreatePendingHintFuture(),
+                              builder: (context, snapshot) {
+                                final hint = snapshot.data ?? '加载中...';
                                 return Text(
-                                  '预计使用 ${navDate.month}月${navDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认',
+                                  hint,
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: secondaryColor,
@@ -941,7 +996,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                             label: '',
                             controller: _navController,
                             hint: _isTodayTransaction 
-                                ? (_isAfter1500 ? 'T+2日自动更新' : 'T+1日自动更新')
+                                ? ''
                                 : (_isFetchingNav ? '加载中...' : '用于计算金额'),
                             suffix: '',
                             onChanged: (value) => _calculateEstimated(),

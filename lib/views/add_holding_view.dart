@@ -133,29 +133,73 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   DateTime _purchaseDate = DateTime.now();
   bool _isAfter1500 = false;
   bool _isSaving = false;
+  bool _isPendingTransaction = false; // 是否为待确认交易
+  
+  // 缓存待确认提示的 Future，避免 FutureBuilder 重复执行
+  Future<String>? _pendingHintFuture;
   
   // 判断是否为待确认交易(基于净值日期)
+  // 注意：这是一个同步 getter，使用缓存的状态变量
   bool get _isTodayTransaction {
-    return DataManager.isTransactionPending(_purchaseDate, _isAfter1500);
+    return _isPendingTransaction;
   }
   
-  // 计算待确认交易的提示文本
-  String get _pendingTransactionHint {
-    if (!_isTodayTransaction) return '可修改，默认当前净值';
-    
-    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final daysToConfirm = confirmDate.difference(today).inDays;
-    
-    if (daysToConfirm <= 0) {
-      return 'T+${_isAfter1500 ? '2' : '1'}日自动更新';
-    } else {
-      return '待确认 - T+$daysToConfirm日自动更新';
+  // 更新待确认交易状态（异步）
+  Future<void> _updatePendingStatus() async {
+    final isPending = await DataManager.isTransactionPendingAsync(_purchaseDate, _isAfter1500);
+    if (mounted) {
+      setState(() {
+        _isPendingTransaction = isPending;
+      });
     }
   }
   
+  // 计算待确认交易的提示文本
+  // 构建待确认交易的提示文本（异步版本，考虑节假日）
+  Future<String> _getPendingTransactionHint() async {
+    if (!_isTodayTransaction) return '可修改，默认当前净值';
+    
+    final confirmDate = await DataManager.calculateConfirmDateAsync(_purchaseDate, _isAfter1500);
+    
+    // 显示具体日期：待确认-MM-DD日自动更新
+    return '待确认-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')}日自动更新';
+  }
+  
+  // 获取或创建待确认提示的 Future
+  Future<String> _getOrCreatePendingHintFuture() {
+    // 如果 Future 不存在或者参数变化了，重新创建
+    if (_pendingHintFuture == null) {
+      _pendingHintFuture = _getPendingTransactionHint();
+    }
+    return _pendingHintFuture!;
+  }
+  
   // 构建历史交易的净值日期提示
+  Future<String> _buildNavDateHintAsync() async {
+    // 计算预期的净值日期和确认日期（使用新的异步方法，考虑节假日）
+    final expectedNavDate = await DataManager.calculateNavDateForTradeAsync(_purchaseDate, _isAfter1500);
+    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
+    
+    // 检查净值日期是否是今天或未来（净值还未公布）
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final navDateNotAvailable = !expectedNavDate.isBefore(today);
+    
+    if (navDateNotAvailable) {
+      // 待确认交易：显示预计使用的净值日期和确认日期
+      return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认';
+    }
+    
+    // 如果已经有净值数据，显示实际净值日期
+    if (_navDate != null) {
+      return '使用 ${_navDate!.month}月${_navDate!.day}日 净值';
+    }
+    
+    // 默认显示
+    return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值';
+  }
+  
+  // 保留旧方法用于向后兼容（同步版本）
   String _buildNavDateHint() {
     // 计算预期的净值日期和确认日期
     final expectedNavDate = DataManager.calculateNavDateForTrade(_purchaseDate, _isAfter1500);
@@ -185,6 +229,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
+    // 初始化待确认状态
+    _updatePendingStatus();
   }
 
   @override
@@ -279,7 +325,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     
     // 当输入完整的6位基金代码时，查询基金信息
     if (newValue.length == 6) {
-      _fetchFundInfo(newValue);
+      // 先更新待确认状态，再获取基金信息
+      _updatePendingStatus().then((_) {
+        _fetchFundInfo(newValue);
+      });
     } else {
       setState(() {
         _fundName = '';
@@ -323,7 +372,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         });
         
         // 后台缓存净值趋势数据，用于后续根据日期查找
-        _cacheTrendData(fundCode);
+        // 缓存完成后，检查并更新为最新的净值
+        await _cacheTrendDataAndUpdateLatest(fundCode);
       }
     } catch (e) {
       print('获取基金信息失败: $e');
@@ -339,6 +389,40 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _cachedTrendData = trendData;
         });
         print('已缓存 ${trendData.length} 条净值数据');
+      }
+    } catch (e) {
+      print('缓存净值趋势数据失败: $e');
+    }
+  }
+  
+  // 缓存净值趋势数据并更新最新净值
+  Future<void> _cacheTrendDataAndUpdateLatest(String fundCode) async {
+    try {
+      final trendData = await _fundService.fetchNetWorthTrend(fundCode);
+      if (mounted && trendData.isNotEmpty) {
+        // 获取最新的净值点（列表最后一个）
+        final latestPoint = trendData.last;
+        
+        setState(() {
+          _cachedTrendData = trendData;
+          
+          // 如果 API 返回的净值日期早于缓存中的最新净值日期，则更新
+          if (_navDate == null || latestPoint.date.isAfter(_navDate!)) {
+            _currentNav = latestPoint.nav;
+            _navDate = latestPoint.date;
+            
+            // 如果是非待确认交易，也更新确认净值
+            if (!_isTodayTransaction) {
+              _confirmNav = latestPoint.nav;
+              if (_confirmNav != null && _confirmNav! > 0) {
+                _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+              }
+            }
+            
+            print('从缓存数据更新最新净值: $_currentNav ($_navDate)');
+          }
+        });
+        print('已缓存 ${trendData.length} 条净值数据，最新: ${latestPoint.nav} (${latestPoint.date})');
       }
     } catch (e) {
       print('缓存净值趋势数据失败: $e');
@@ -413,6 +497,40 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   Future<void> _saveHolding() async {
     if (_isSaving) return;
     if (!_isFormValid) return;
+
+    // 验证交易日期是否为交易日
+    final isTradingDay = await DataManager.isTradingDay(_purchaseDate);
+    if (!isTradingDay) {
+      final confirmed = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('非交易日提示'),
+          content: Text(
+            '您选择的日期（${_purchaseDate.year}年${_purchaseDate.month}月${_purchaseDate.day}日）不是 A 股交易日。\n'
+            '\n'
+            '基金交易只能在交易日进行，是否继续？\n'
+            '\n'
+            '• 继续：系统会自动顺延至下一个交易日处理\n'
+            '• 取消：重新选择交易日期',
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(context, false),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('继续'),
+              onPressed: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed != true) {
+        return;
+      }
+    }
 
     setState(() {
       _isSaving = true;
@@ -606,7 +724,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       
       if (mounted) {
         if (isPending) {
-          context.showToast(shouldMerge ? '已合并到现有持仓\n$_pendingTransactionHint' : '添加成功\n$_pendingTransactionHint');
+          final hint = await _getPendingTransactionHint();
+          context.showToast(shouldMerge ? '已合并到现有持仓\n$hint' : '添加成功\n$hint');
         } else {
           context.showToast(shouldMerge ? '已合并到现有持仓' : '添加成功');
         }
@@ -638,7 +757,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         onConfirm: (newDate) async {
           setState(() {
             _purchaseDate = newDate;
+            // 清空提示缓存，让它重新计算
+            _pendingHintFuture = null;
           });
+          // 更新待确认状态
+          await _updatePendingStatus();
           
           // 选择日期后，尝试获取该日期的净值
           if (_fundCodeController.text.trim().length == 6) {
@@ -659,9 +782,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     try {
       List<NetWorthPoint> trendData;
       
-      // 计算应该使用的净值日期
-      final targetNavDate = DataManager.calculateNavDateForTrade(targetDate, _isAfter1500);
-      final isPending = DataManager.isTransactionPending(targetDate, _isAfter1500);
+      // 计算应该使用的净值日期（使用异步方法，考虑节假日）
+      final targetNavDate = await DataManager.calculateNavDateForTradeAsync(targetDate, _isAfter1500);
       
       // 检查净值日期是否是未来日期或今天（没有净值数据）
       final now = DateTime.now();
@@ -669,9 +791,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       // 净值日期是今天或未来，说明净值还未公布
       final navDateNotAvailable = !targetNavDate.isBefore(today);
       
-      // 如果是待确认交易(今天或未来)或净值日期还未公布，不自动填充净值
-      if (isPending || navDateNotAvailable) {
-        print('待确认交易 - 交易日期: $targetDate, 净值日期: $targetNavDate, 净值是否可用: ${!navDateNotAvailable}');
+      // 关键修复：只检查净值日期是否可用，不检查交易是否待确认
+      // 即使是待确认交易，如果净值日期是过去（已有净值），也应该填充
+      if (navDateNotAvailable) {
+        print('净值未公布 - 交易日期: $targetDate, 净值日期: $targetNavDate, 净值是否可用: false');
         setState(() {
           _confirmNavController.clear();
           _confirmNav = null;
@@ -745,9 +868,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (selectedPoint != null) {
         setState(() {
           _confirmNav = selectedPoint!.nav;
-          _navDate = selectedPoint!.date;
+          _navDate = selectedPoint!.date;  // 更新净值日期，用于显示
           _confirmNavController.text = selectedPoint!.nav.toStringAsFixed(4);
-          // 同时更新基金代码下方显示的净值信息
+          // 更新基金代码下方显示的净值信息，使其与选择的交易日期一致
           _currentNav = selectedPoint!.nav;
         });
         final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
@@ -888,7 +1011,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                           onChanged: (value) async {
                             setState(() {
                               _isAfter1500 = value;
+                              // 清空提示缓存，让它重新计算
+                              _pendingHintFuture = null;
                             });
+                            // 更新待确认状态
+                            await _updatePendingStatus();
                             // 重新获取净值
                             if (_fundCodeController.text.trim().length == 6) {
                               await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);
@@ -973,43 +1100,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                   _buildRowField(
                     label: '确认净值',
                     required: !_isTodayTransaction,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_isTodayTransaction)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemOrange.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: CupertinoColors.systemOrange.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.clock,
-                                  size: 12,
-                                  color: CupertinoColors.systemOrange,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _pendingTransactionHint,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: CupertinoColors.systemOrange,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        _buildAmountField(
+                    child: FutureBuilder<String>(
+                      future: _getOrCreatePendingHintFuture(),
+                      builder: (context, snapshot) {
+                        final hint = snapshot.data ?? (_isTodayTransaction ? '加载中...' : '可修改，默认当前净值');
+                        return _buildAmountField(
                           controller: _confirmNavController,
-                          hint: _pendingTransactionHint,
+                          hint: hint,
                           error: false,
                           onChanged: (value) {
                             final nav = double.tryParse(value.trim());
@@ -1024,8 +1121,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                           inputBgColor: inputBgColor,
                           textColor: textColor,
                           placeholderColor: placeholderColor,
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 12),
