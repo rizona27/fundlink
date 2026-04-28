@@ -403,6 +403,10 @@ class DataManager extends ChangeNotifier {
 
     // 添加交易记录
     _transactions = [..._transactions, transaction];
+    
+    // 清除该客户基金的交易历史缓存
+    final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
+    _transactionHistoryCache.remove(cacheKey);
 
     // 重新计算该客户该基金的持仓
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
@@ -507,6 +511,10 @@ class DataManager extends ChangeNotifier {
 
     final transaction = _transactions[index];
     _transactions = List.from(_transactions)..removeAt(index);
+    
+    // 清除该客户基金的交易历史缓存
+    final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
+    _transactionHistoryCache.remove(cacheKey);
 
     // 重新计算持仓
     await _rebuildHolding(transaction.clientId, transaction.fundCode);

@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
@@ -8,6 +9,8 @@ import '../services/fund_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/add_transaction_dialog.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../widgets/glass_button.dart';
+import 'add_holding_view.dart';
 
 class EditHoldingView extends StatefulWidget {
   final FundHolding holding;
@@ -76,6 +79,46 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
+    // 待确认交易不允许删除
+    if (tx.isPending) {
+      await showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('无法删除'),
+          content: const Text('待确认交易不能删除\n请等待净值确认后操作'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    // 检查是否是第一笔买入交易（基石交易）
+    final isFoundationBuy = tx.type == TransactionType.buy && 
+                            _transactions.isNotEmpty && 
+                            tx.id == _transactions.first.id;
+    
+    if (isFoundationBuy) {
+      await showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('无法删除'),
+          content: const Text('第一笔买入交易是基石交易\n不能编辑或删除，以保障持仓数据完整性'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       barrierDismissible: true, // 允许点击外部关闭
@@ -110,7 +153,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       }
     }
   }
-
+  
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
@@ -411,7 +454,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               itemCount: _transactions.length,
                               itemBuilder: (context, index) {
                                 final tx = _transactions[index];
-                                return _buildTransactionCard(tx, isDarkMode, textColor, secondaryTextColor);
+                                return _buildTransactionCard(tx, index, isDarkMode, textColor, secondaryTextColor);
                               },
                             ),
                     ),
@@ -425,10 +468,20 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     );
   }
 
-  Widget _buildTransactionCard(TransactionRecord tx, bool isDarkMode, Color textColor, Color secondaryTextColor) {
+  Widget _buildTransactionCard(TransactionRecord tx, int index, bool isDarkMode, Color textColor, Color secondaryTextColor) {
     final typeColor = tx.type == TransactionType.buy 
         ? const Color(0xFF34C759)
         : const Color(0xFFFF3B30);
+    
+    // 判断是否是第一笔买入交易（基石交易）
+    // 找到所有买入交易中最早的那一笔
+    final buyTransactions = _transactions
+        .where((t) => t.type == TransactionType.buy)
+        .toList()
+      ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
+    
+    final isFoundationBuy = buyTransactions.isNotEmpty && 
+                            tx.id == buyTransactions.first.id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -544,19 +597,511 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ],
                 ),
               ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minSize: 0,
-                onPressed: () => _confirmDeleteTransaction(tx),
-                child: Icon(
-                  CupertinoIcons.delete,
-                  size: 18,
-                  color: CupertinoColors.systemRed,
+              // 编辑和删除按钮（基石交易不显示）
+              if (!isFoundationBuy) ...[
+                // 编辑按钮
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 0,
+                  onPressed: () => _editTransaction(tx),
+                  child: Icon(
+                    CupertinoIcons.pencil,
+                    size: 18,
+                    color: CupertinoColors.systemBlue,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // 删除按钮
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 0,
+                  onPressed: () => _confirmDeleteTransaction(tx),
+                  child: Icon(
+                    CupertinoIcons.delete,
+                    size: 18,
+                    color: CupertinoColors.systemRed,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _editTransaction(TransactionRecord tx) async {
+    // 待确认交易不允许编辑
+    if (tx.isPending) {
+      await showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('无法编辑'),
+          content: const Text('待确认交易不能编辑\n请等待净值确认后操作'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    final sharesController = TextEditingController(text: tx.shares.toStringAsFixed(2));
+    final amountController = TextEditingController(text: tx.amount.toStringAsFixed(2));
+    DateTime tradeDate = tx.tradeDate;
+    bool sharesError = false;
+    bool amountError = false;
+
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+              final textColor = isDark ? CupertinoColors.white : const Color(0xFF1C1C1E);
+              final secondaryTextColor = isDark 
+                  ? CupertinoColors.white.withOpacity(0.6)
+                  : const Color(0xFF8E8E93);
+              
+              return CupertinoPopupSurface(
+                isSurfacePainted: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 标题栏 - 使用不同背景色
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '编辑${tx.type.displayName}交易',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? CupertinoColors.systemGrey.withOpacity(0.3)
+                                    : CupertinoColors.systemGrey.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                CupertinoIcons.xmark,
+                                size: 16,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // 内容区域 - 使用不同背景色
+                    Container(
+                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 份额输入
+                            Text(
+                              '交易份额',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            CupertinoTextField(
+                              controller: sharesController,
+                              placeholder: '请输入份额',
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [AmountInputFormatter()],
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              onChanged: (value) {
+                                final trimmed = value.trim();
+                                bool error = false;
+                                if (trimmed.isNotEmpty) {
+                                  final shares = double.tryParse(trimmed);
+                                  error = shares == null || shares <= 0;
+                                } else {
+                                  error = true;
+                                }
+                                setDialogState(() => sharesError = error);
+                              },
+                            ),
+                            if (sharesError)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '请输入有效的份额',
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF3B30)),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            
+                            // 金额输入
+                            Text(
+                              '交易金额',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            CupertinoTextField(
+                              controller: amountController,
+                              placeholder: '请输入金额',
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [AmountInputFormatter()],
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              onChanged: (value) {
+                                final trimmed = value.trim();
+                                bool error = false;
+                                if (trimmed.isNotEmpty) {
+                                  final amount = double.tryParse(trimmed);
+                                  error = amount == null || amount <= 0;
+                                }
+                                setDialogState(() => amountError = error);
+                              },
+                            ),
+                            if (amountError)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '请输入有效的金额',
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF3B30)),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            
+                            // 日期选择
+                            Text(
+                              '交易日期',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              onTap: () async {
+                                await showCupertinoModalPopup(
+                                  context: context,
+                                  builder: (pickerContext) => _DatePickerModal(
+                                    initialDate: tradeDate,
+                                    onConfirm: (selectedDate) {
+                                      if (context.mounted) {
+                                        setDialogState(() => tradeDate = selectedDate);
+                                      }
+                                    },
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.calendar, size: 18, color: secondaryTextColor),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${tradeDate.year}-${tradeDate.month.toString().padLeft(2, '0')}-${tradeDate.day.toString().padLeft(2, '0')}',
+                                      style: TextStyle(fontSize: 15, color: textColor, fontWeight: FontWeight.w500),
+                                    ),
+                                    const Spacer(),
+                                    Icon(CupertinoIcons.chevron_right, size: 16, color: secondaryTextColor),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // 底部按钮 - 使用不同背景色
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GlassButton(
+                              label: '取消',
+                              onPressed: () => Navigator.pop(context),
+                              isPrimary: false,
+                              height: 44,
+                              borderRadius: 30,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GlassButton(
+                              label: '保存',
+                              onPressed: () async {
+                                final sharesText = sharesController.text.trim();
+                                final amountText = amountController.text.trim();
+                                
+                                if (sharesText.isEmpty) {
+                                  context.showToast('请输入份额');
+                                  return;
+                                }
+                                
+                                final shares = double.tryParse(sharesText);
+                                if (shares == null || shares <= 0) {
+                                  context.showToast('请输入有效的份额');
+                                  return;
+                                }
+                                
+                                final amount = double.tryParse(amountText);
+                                if (amount == null || amount <= 0) {
+                                  context.showToast('请输入有效的金额');
+                                  return;
+                                }
+                                
+                                Navigator.pop(context);
+                                
+                                try {
+                                  // 创建更新后的交易记录
+                                  final updatedTx = TransactionRecord(
+                                    id: tx.id,
+                                    clientId: tx.clientId,
+                                    clientName: tx.clientName,
+                                    fundCode: tx.fundCode,
+                                    fundName: tx.fundName,
+                                    type: tx.type,
+                                    amount: amount,
+                                    shares: shares,
+                                    tradeDate: tradeDate,
+                                    nav: tx.nav,
+                                    fee: tx.fee,
+                                    remarks: tx.remarks,
+                                    isAfter1500: tx.isAfter1500,
+                                    isPending: tx.isPending,
+                                    confirmedNav: tx.confirmedNav,
+                                  );
+                                  
+                                  // 删除旧交易，添加新交易
+                                  await _dataManager.deleteTransaction(tx.id);
+                                  await _dataManager.addTransaction(updatedTx);
+                                  
+                                  _loadTransactions();
+                                  context.showToast('修改成功');
+                                } catch (e) {
+                                  context.showToast('修改失败: $e');
+                                }
+                              },
+                              isPrimary: true,
+                              height: 44,
+                              borderRadius: 30,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 日期选择器弹窗（参照加减仓页面样式）
+class _DatePickerModal extends StatefulWidget {
+  final DateTime initialDate;
+  final ValueChanged<DateTime> onConfirm;
+
+  const _DatePickerModal({
+    required this.initialDate,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_DatePickerModal> createState() => _DatePickerModalState();
+}
+
+class _DatePickerModalState extends State<_DatePickerModal> {
+  late DateTime _tempDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempDate = widget.initialDate;
+  }
+
+  void _updateTempDate({int? year, int? month, int? day}) {
+    setState(() {
+      int y = year ?? _tempDate.year;
+      int m = month ?? _tempDate.month;
+      int d = day ?? _tempDate.day;
+      int maxDays = DateTime(y, m + 1, 0).day;
+      if (d > maxDays) d = maxDays;
+      _tempDate = DateTime(y, m, d);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final days = List.generate(
+      DateTime(_tempDate.year, _tempDate.month + 1, 0).day,
+      (i) => i + 1,
+    );
+
+    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
+      background: isDarkMode
+          ? CupertinoColors.white.withOpacity(0.05)
+          : CupertinoColors.black.withOpacity(0.03),
+    );
+
+    return CupertinoPopupSurface(
+      child: Container(
+        height: 280,
+        decoration: BoxDecoration(
+          color: panelBgColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  _buildPickerColumn(
+                    years,
+                    years.indexOf(_tempDate.year),
+                    '年',
+                    (i) => _updateTempDate(year: years[i]),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    months,
+                    _tempDate.month - 1,
+                    '月',
+                    (i) => _updateTempDate(month: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    days,
+                    _tempDate.day - 1,
+                    '日',
+                    (i) => _updateTempDate(day: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              height: 0.5,
+              color: isDarkMode
+                  ? CupertinoColors.separator
+                  : CupertinoColors.opaqueSeparator,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GlassButton(
+                    label: '取消',
+                    onPressed: () => Navigator.pop(context),
+                    isPrimary: false,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
+                  const SizedBox(width: 12),
+                  GlassButton(
+                    label: '完成',
+                    onPressed: () {
+                      widget.onConfirm(_tempDate);
+                      Navigator.pop(context);
+                    },
+                    isPrimary: true,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPickerColumn(
+    List<int> items,
+    int initial,
+    String unit,
+    ValueChanged<int> onChanged,
+    Color bgColor,
+    Color textColor,
+    Widget overlay,
+  ) {
+    return Expanded(
+      child: CupertinoPicker(
+        scrollController: FixedExtentScrollController(initialItem: initial),
+        itemExtent: 40,
+        backgroundColor: bgColor,
+        selectionOverlay: overlay,
+        onSelectedItemChanged: onChanged,
+        children: items.map((item) => Center(
+          child: Text('$item$unit', style: TextStyle(color: textColor, fontSize: 16)),
+        )).toList(),
       ),
     );
   }

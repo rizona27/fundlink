@@ -688,7 +688,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                   
                                   final marketValue = widget.currentShares * widget.currentNav!;
                                   final profit = marketValue - totalCost;
-                                  final profitColor = profit >= 0 ? const Color(0xFF34C759) : const Color(0xFFFF3B30);
+                                  // 中国股市习惯：红涨绿跌
+                                  final profitColor = profit >= 0 ? const Color(0xFFFF3B30) : const Color(0xFF34C759);
                                   
                                   return Text(
                                     '${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(2)}',

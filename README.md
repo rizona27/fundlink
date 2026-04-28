@@ -78,7 +78,6 @@ lib/
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序，支持筛选
-│   ├── transaction_history_view.dart      # 交易历史视图页，完整展示某客户某基金的所有交易记录，支持删除单条交易
 │   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明
 │
 └── widgets/

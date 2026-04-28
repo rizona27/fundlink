@@ -36,7 +36,7 @@ extension SortKeyExtension on SortKey {
       case SortKey.none:
         return '无排序';
       case SortKey.latestNav:
-        return '最新估值';
+        return '查估值';
       case SortKey.navReturn1m:
         return '近1月';
       case SortKey.navReturn3m:
@@ -307,6 +307,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Timer? _scrollTimer;
   Timer? _autoCloseTimer; // 自动关闭定时器
   bool _isRefreshing = false;
+  final GlobalKey _sortButtonKey = GlobalKey(); // 排序按钮的GlobalKey
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
@@ -910,9 +911,100 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     final textColor = widget.sortKey == SortKey.none
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label)
         : widget.sortKey.color;
+    
+    // 构建排序选项菜单项
+    final List<_MenuItem> sortMenuItems = [];
+    
+    // 根据 cycleType 确定要显示的排序选项
+    if (widget.sortCycleType == SortCycleType.fundReturns) {
+      sortMenuItems.addAll([
+        _MenuItem(
+          icon: SortKey.none.icon,
+          label: SortKey.none.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.none);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.latestNav.icon,
+          label: SortKey.latestNav.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.latestNav);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.navReturn1m.icon,
+          label: SortKey.navReturn1m.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.navReturn1m);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.navReturn3m.icon,
+          label: SortKey.navReturn3m.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.navReturn3m);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.navReturn6m.icon,
+          label: SortKey.navReturn6m.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.navReturn6m);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.navReturn1y.icon,
+          label: SortKey.navReturn1y.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.navReturn1y);
+          },
+        ),
+      ]);
+    } else {
+      sortMenuItems.addAll([
+        _MenuItem(
+          icon: SortKey.none.icon,
+          label: SortKey.none.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.none);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.amount.icon,
+          label: SortKey.amount.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.amount);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.profit.icon,
+          label: SortKey.profit.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.profit);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.profitRate.icon,
+          label: SortKey.profitRate.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.profitRate);
+          },
+        ),
+        _MenuItem(
+          icon: SortKey.days.icon,
+          label: SortKey.days.displayName,
+          onTap: () {
+            widget.onSortKeyChanged?.call(SortKey.days);
+          },
+        ),
+      ]);
+    }
+    
     return Opacity(
       opacity: disabled ? 0.5 : 1.0,
       child: Container(
+        key: _sortButtonKey, // 添加GlobalKey
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(30),
@@ -927,9 +1019,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 使用 PopupMenuButton 显示排序选项
             CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              onPressed: disabled ? null : () => widget.onSortKeyChanged?.call(widget.sortKey.next(cycleType: widget.sortCycleType)),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              onPressed: disabled ? null : () {
+                _showSortMenu(sortMenuItems, isDarkMode, textColor);
+              },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -961,6 +1056,122 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ),
       ),
     );
+  }
+  
+  void _showSortMenu(List<_MenuItem> items, bool isDarkMode, Color textColor) {
+    // 获取排序按钮的位置和尺寸
+    final RenderBox? renderBox = _sortButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    
+    final Offset offset = renderBox.localToGlobal(Offset.zero);
+    final Size size = renderBox.size;
+    
+    // 创建 Overlay 显示下拉菜单（使用药丸状按钮）
+    final overlay = Overlay.of(_sortButtonKey.currentContext!);
+    OverlayEntry? overlayEntry;
+    GlobalKey<_AnimatedButtonGroupState>? menuKey;
+    Timer? autoCloseTimer;
+    
+    menuKey = GlobalKey<_AnimatedButtonGroupState>();
+    bool isClosed = false; // 标记是否已关闭
+    
+    // 带淡出动画的关闭
+    void _closeMenuWithAnimation() {
+      if (isClosed) return;
+      isClosed = true;
+      if (menuKey?.currentState != null) {
+        menuKey!.currentState!._close();
+      } else {
+        try {
+          overlayEntry?.remove();
+        } catch (e) {
+          // 如果overlay已经被移除，忽略错误
+        }
+      }
+    }
+    
+    // 立即关闭（无动画）
+    void _closeMenuImmediately() {
+      if (isClosed) return;
+      isClosed = true;
+      try {
+        overlayEntry?.remove();
+      } catch (e) {
+        // 如果overlay已经被移除，忽略错误
+      }
+    }
+    
+    // 自动关闭定时器（5秒后自动关闭）
+    void startAutoCloseTimer() {
+      autoCloseTimer?.cancel();
+      autoCloseTimer = Timer(const Duration(seconds: 5), () {
+        try {
+          if (!isClosed) {
+            _closeMenuWithAnimation();
+          }
+        } catch (e) {
+          // 忽略错误
+        }
+      });
+    }
+    
+    void cancelAutoCloseTimer() {
+      autoCloseTimer?.cancel();
+    }
+    
+    overlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // 透明背景，点击关闭
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                cancelAutoCloseTimer();
+                _closeMenuWithAnimation();
+              },
+              behavior: HitTestBehavior.translucent,
+            ),
+          ),
+          // 下拉菜单（在按钮下方居中对齐，药丸状按钮，只显示文字）
+          Positioned(
+            top: offset.dy + size.height + 8, // 按钮下方 8px
+            left: offset.dx, // 从按钮左边缘开始
+            child: Material(
+              color: Colors.transparent,
+              child: MouseRegion(
+                onEnter: (_) => cancelAutoCloseTimer(),
+                onExit: (_) => startAutoCloseTimer(),
+                child: _AnimatedButtonGroup(
+                  key: menuKey,
+                  items: items.map((item) => _MenuItem(
+                    icon: item.icon, // 保留图标但不显示
+                    label: item.label,
+                    onTap: () {
+                      cancelAutoCloseTimer();
+                      // 先执行功能
+                      item.onTap();
+                      // 然后立即关闭菜单（无动画）
+                      _closeMenuImmediately();
+                    },
+                  )).toList(),
+                  onHide: () {
+                    if (!isClosed) {
+                      isClosed = true;
+                    }
+                    overlayEntry?.remove();
+                  },
+                  showAbove: false,
+                  textOnly: true, // 只显示文字
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    overlay.insert(overlayEntry);
+    startAutoCloseTimer();
   }
 
   @override
@@ -1257,6 +1468,7 @@ class _AnimatedButtonGroup extends StatefulWidget {
   final VoidCallback onHide;
   final bool showAbove;
   final VoidCallback? onAnimationComplete; // 动画完成回调
+  final bool textOnly; // 是否只显示文字
   
   const _AnimatedButtonGroup({
     super.key,
@@ -1264,6 +1476,7 @@ class _AnimatedButtonGroup extends StatefulWidget {
     required this.onHide,
     this.showAbove = false,
     this.onAnimationComplete,
+    this.textOnly = false,
   });
 
   @override
@@ -1334,16 +1547,32 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
   }
 
   Future<void> close() async {
-    // 先依次关闭每个菜单项（从后往前），每个间隔100ms
+    // 从最后一个菜单项开始依次关闭（与展开顺序相反）
     for (int i = _itemControllers.length - 1; i >= 0; i--) {
-      await _itemControllers[i].reverse();
-      // 添加短暂延迟，让消失效果更明显
-      if (i > 0) {
-        await Future.delayed(const Duration(milliseconds: 80));
+      try {
+        // 不等待，直接启动reverse
+        _itemControllers[i].reverse();
+        // 延迟启动下一个，形成从下到上的消失效果
+        if (i > 0) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      } catch (e) {
+        // 如果控制器已被dispose，跳过
+        break;
       }
     }
-    // 然后反向播放整体动画
-    await _controller.reverse();
+    
+    // 等待所有菜单项动画完成（最多250ms）
+    await Future.delayed(const Duration(milliseconds: 250));
+    
+    // 然后快速反向播放整体动画
+    try {
+      if (!_controller.isAnimating && _controller.status != AnimationStatus.dismissed) {
+        await _controller.reverse();
+      }
+    } catch (e) {
+      // 如果控制器已被dispose，忽略错误
+    }
     if (mounted) {
       widget.onHide();
     }
@@ -1365,7 +1594,7 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end, // 右对齐
+              crossAxisAlignment: widget.textOnly ? CrossAxisAlignment.center : CrossAxisAlignment.end, // textOnly时居中，否则右对齐
               children: widget.items.asMap().entries.map((entry) {
                 final index = entry.key;
                 final item = entry.value;
@@ -1380,7 +1609,7 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
                   },
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end, // 右对齐
+                    crossAxisAlignment: widget.textOnly ? CrossAxisAlignment.center : CrossAxisAlignment.end, // textOnly时居中
                     children: [
                       _buildMenuItemButton(item),
                       if (!isLast) const SizedBox(height: 8),
@@ -1396,9 +1625,76 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
   }
 
   Widget _buildMenuItemButton(_MenuItem item) {
+    if (widget.textOnly) {
+      // textOnly 模式：只显示文字的按钮
+      return _TextOnlyMenuItem(
+        item: item,
+        onClose: _close,
+      );
+    }
     return _HoverableMenuItem(
       item: item,
       onClose: _close,
+    );
+  }
+}
+
+// 只显示文字的菜单项组件
+class _TextOnlyMenuItem extends StatefulWidget {
+  final _MenuItem item;
+  final Future<void> Function() onClose;
+  
+  const _TextOnlyMenuItem({
+    required this.item,
+    required this.onClose,
+  });
+
+  @override
+  State<_TextOnlyMenuItem> createState() => _TextOnlyMenuItemState();
+}
+
+class _TextOnlyMenuItemState extends State<_TextOnlyMenuItem> {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final buttonColor = isDark 
+        ? const Color(0xFF2C2C2E).withOpacity(0.9)
+        : CupertinoColors.white.withOpacity(0.9);
+    final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
+    
+    return GestureDetector(
+      onTap: () {
+        // 先执行功能，再关闭菜单
+        widget.item.onTap();
+        // 延迟关闭，让功能先执行
+        Future.delayed(const Duration(milliseconds: 50), () {
+          widget.onClose();
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: buttonColor,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          widget.item.label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
+        ),
+      ),
     );
   }
 }
