@@ -36,3 +36,6 @@ build_windows_release.bat
 build_windows_release.ps1
 BUILD_WINDOWS_GUIDE.md
 WINDOWS_DISTRIBUTION_GUIDE.md
+update_bundle_id.py
+*.sh
+*.py

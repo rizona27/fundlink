@@ -47,20 +47,20 @@ lib/
 ├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统）
 │
 ├── services/
+│   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略（专业API → world_holidays → 基础判断），内置内存缓存优化性能
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算、持久化
 │   ├── file_export_service.dart           # 支持导出组件，解析格式类型CSV/Excel
 │   ├── file_import_service.dart           # 支持导入组件，解析格式类型CSV/Excel
-│   ├── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
-│   └── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略（专业API → world_holidays → 基础判断），内置内存缓存优化性能
+│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性
 │   ├── fund_info_cache.dart               # 基金信息缓存模型，存储基金代码、名称、当前净值、估值等数据的本地缓存结构
-│   ├── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息（金额、份额、日期、净值、手续费等）
 │   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型（信息/成功/错误/警告/网络/缓存）、时间戳
 │   ├── net_worth_point.dart               # 净值及趋势
 │   ├── profit_result.dart                 # 收益结果模型，绝对收益、年化收益率
-│   └── top_holding.dart                   # 十大重仓情况
+│   ├── top_holding.dart                   # 十大重仓情况
+│   └── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息（金额、份额、日期、净值、手续费等）
 │
 ├── views/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户信息、基金代码、交易金额/份额/日期，支持重复持仓检测与合并，自动查询基金名称和净值

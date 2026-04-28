@@ -449,7 +449,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 8QXX7UMS83;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_BITCODE = NO;
 				GCC_C_LANGUAGE_STANDARD = "compiler-default";
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
@@ -459,7 +459,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_CFLAGS = "-DLIBC_NO_LIBCRAP=1";
-				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink.personal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -635,7 +635,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 8QXX7UMS83;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_BITCODE = NO;
 				GCC_C_LANGUAGE_STANDARD = "compiler-default";
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
@@ -650,7 +650,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_CFLAGS = "-DLIBC_NO_LIBCRAP=1";
-				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink.personal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -669,7 +669,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 8QXX7UMS83;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_BITCODE = NO;
 				GCC_C_LANGUAGE_STANDARD = "compiler-default";
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
@@ -684,7 +684,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_CFLAGS = "-DLIBC_NO_LIBCRAP=1";
-				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rizona.fundlink.personal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";

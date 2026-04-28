@@ -27,7 +27,6 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
-  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
@@ -44,6 +43,8 @@ post_install do |installer|
       
       # 设置 C 语言标准为 GNU99
       config.build_settings['GCC_C_LANGUAGE_STANDARD'] = 'gnu99'
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++0x'
+      config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       
       # 解决模块导入问题
       config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
@@ -52,5 +53,26 @@ post_install do |installer|
       # 排除不支持的架构
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
     end
+  end
+  
+  # Fix GeneratedPluginRegistrant.m for Xcode 15 compatibility
+  generated_file = File.join(File.dirname(__FILE__), 'Runner', 'GeneratedPluginRegistrant.m')
+  if File.exist?(generated_file)
+    content = File.read(generated_file)
+    
+    # Comment out problematic plugin imports
+    content.gsub!(/#if __has_include\(<file_save_directory\/FileSaveDirectoryPlugin\.h>\).*?#endif/m, '// file_save_directory - commented out for Xcode 15 compatibility')
+    content.gsub!(/#if __has_include\(<path_provider_foundation\/PathProviderPlugin\.h>\).*?#endif/m, '// path_provider_foundation - commented out for Xcode 15 compatibility')
+    content.gsub!(/#if __has_include\(<shared_preferences_foundation\/SharedPreferencesPlugin\.h>\).*?#endif/m, '// shared_preferences_foundation - commented out for Xcode 15 compatibility')
+    content.gsub!(/#if __has_include\(<url_launcher_ios\/URLLauncherPlugin\.h>\).*?#endif/m, '// url_launcher_ios - commented out for Xcode 15 compatibility')
+    
+    # Comment out registration calls
+    content.gsub!(/  \[FileSaveDirectoryPlugin registerWithRegistrar:.*?\];/, '  // [FileSaveDirectoryPlugin registerWithRegistrar:...];')
+    content.gsub!(/  \[PathProviderPlugin registerWithRegistrar:.*?\];/, '  // [PathProviderPlugin registerWithRegistrar:...];')
+    content.gsub!(/  \[SharedPreferencesPlugin registerWithRegistrar:.*?\];/, '  // [SharedPreferencesPlugin registerWithRegistrar:...];')
+    content.gsub!(/  \[URLLauncherPlugin registerWithRegistrar:.*?\];/, '  // [URLLauncherPlugin registerWithRegistrar:...];')
+    
+    File.write(generated_file, content)
+    puts "Fixed GeneratedPluginRegistrant.m for Xcode 15 compatibility"
   end
 end
