@@ -39,3 +39,4 @@ WINDOWS_DISTRIBUTION_GUIDE.md
 update_bundle_id.py
 *.sh
 *.py
+IPA_BUILD_GUIDE.md
