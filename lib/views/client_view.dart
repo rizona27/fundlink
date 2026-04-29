@@ -178,7 +178,21 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     }
 
     var groups = map.values.toList();
-    groups.sort((a, b) => a.displayName.compareTo(b.displayName));
+    // 按原始客户姓名排序（中文会按 Unicode 编码排序，近似拼音排序）
+    groups.sort((a, b) {
+      // 找到每个组对应的原始姓名
+      final originalNameA = _filteredHoldings.firstWhere(
+        (h) => (h.clientId.isNotEmpty ? h.clientId : h.clientName) == a.key,
+        orElse: () => a.holdings.first,
+      ).clientName;
+      
+      final originalNameB = _filteredHoldings.firstWhere(
+        (h) => (h.clientId.isNotEmpty ? h.clientId : h.clientName) == b.key,
+        orElse: () => b.holdings.first,
+      ).clientName;
+      
+      return originalNameA.compareTo(originalNameB);
+    });
     return groups;
   }
 

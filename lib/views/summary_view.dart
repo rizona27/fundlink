@@ -1127,12 +1127,15 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             maxTitleLength: 6,
                           ),
                           AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
+                            duration: const Duration(milliseconds: 400),
                             curve: Curves.easeOutCubic,
                             child: isExpanded
-                                ? ClipRect(
-                              child: _buildExpandedContent(first, holdings, isDark),
-                            )
+                                ? Container(
+                                    margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ClientView保持一致
+                                    child: ClipRect(
+                                      child: _buildExpandedContent(first, holdings, isDark),
+                                    ),
+                                  )
                                 : const SizedBox.shrink(),
                           ),
                           const SizedBox(height: 8),

@@ -67,8 +67,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               const SizedBox(height: 16),
               _buildImportExportSection(isDarkMode),
               const SizedBox(height: 16),
-              _buildLogSection(isDarkMode),
-              const SizedBox(height: 16),
               _buildAboutSection(isDarkMode),
               const SizedBox(height: 32),
               _buildFooter(isDarkMode),
@@ -206,27 +204,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildLogSection(bool isDarkMode) {
-    return _buildSection(
-      title: '日志',
-      icon: '日志',
-      isDarkMode: isDarkMode,
-      children: [
-        _buildMenuItem(
-          icon: CupertinoIcons.doc_text_search,
-          title: '查看日志',
-          subtitle: '系统和操作记录',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const LogView()),
-            );
-          },
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildAboutSection(bool isDarkMode) {
     return _buildSection(
@@ -243,6 +221,19 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const VersionView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.doc_text_search,
+          title: '查看日志',
+          subtitle: '系统和操作记录',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const LogView()),
             );
           },
         ),

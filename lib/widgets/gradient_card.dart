@@ -147,19 +147,15 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
     final shadowColor = _getShadowColor();
     final boxShadowColor = _getBoxShadowColor();
 
-    // 计算不对称收缩的边距
-    // 展开时：左端缩进约30px，右端通过裁剪来缩短
-    final leftPadding = 16.0 + (animationValue * 30.0); // 从16增加到46
-    
     return Container(
       margin: EdgeInsets.zero,
-      alignment: Alignment.centerLeft, // 左对齐，确保只有右端缩短
+      alignment: Alignment.centerLeft,
       child: GestureDetector(
         onTap: widget.onTap,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
           child: Container(
-            width: maxWidth - (animationValue * 16.0), // 展开时宽度减少16px（与下方卡片左侧margin相同）
+            // 移除宽度动画，保持固定宽度
             padding: widget.padding ?? const EdgeInsets.symmetric(
               vertical: 10,
               horizontal: 16,
@@ -215,50 +211,46 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                   strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
                 ),
               ),
-              // 右侧内容随动画向右移动
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                margin: EdgeInsets.only(right: animationValue * 16.0), // 展开时右边距增加16px（与渐变条缩短相同）
-                child: widget.trailing != null
-                    ? widget.trailing!
-                    : widget.subtitle != null
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.subtitle!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: subTextColor,
-                                  height: 1.2,
-                                ),
-                              ),
-                              if (widget.countValue != null) ...[
-                                const SizedBox(width: 2),
-                                Text(
-                                  '${widget.countValue}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    fontStyle: FontStyle.italic,
-                                    color: countColor,
-                                    height: 1.2,
-                                  ),
-                                ),
-                                Text(
-                                  '支',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: subTextColor,
-                                    height: 1.2,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          )
-                        : null,
-              ),
+              // 移除右侧内容的动画移动
+              if (widget.trailing != null)
+                widget.trailing!
+              else if (widget.subtitle != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.subtitle!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: subTextColor,
+                        height: 1.2,
+                      ),
+                    ),
+                    if (widget.countValue != null) ...[
+                      const SizedBox(width: 2),
+                      Text(
+                        '${widget.countValue}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          fontStyle: FontStyle.italic,
+                          color: countColor,
+                          height: 1.2,
+                        ),
+                      ),
+                      Text(
+                        '支',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: subTextColor,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ],
+                )
+              else
+                const SizedBox.shrink(),
             ],
           ), // Row
       ), // Container (内层)
