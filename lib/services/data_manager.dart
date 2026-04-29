@@ -562,6 +562,49 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 更新持仓净值后，自动确认相关的待确认交易
+  Future<void> autoConfirmRelatedPendingTransactions(String fundCode, FundService fundService) async {
+    try {
+      // 获取该基金的所有待确认交易
+      final pendingTransactions = getPendingTransactions()
+          .where((tx) => tx.fundCode == fundCode)
+          .toList();
+      
+      if (pendingTransactions.isEmpty) return;
+      
+      print('发现 ${pendingTransactions.length} 笔待确认交易涉及基金 $fundCode，尝试自动确认...');
+      
+      int confirmedCount = 0;
+      final now = DateTime.now();
+      
+      for (final tx in pendingTransactions) {
+        try {
+          // 使用异步方法计算该交易何时可以确认（考虑节假日和调休）
+          final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
+          
+          // 如果当前日期 >= 可确认日期,则尝试获取净值并确认
+          if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
+            // 获取该基金的最新净值
+            final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
+            if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+              await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
+              confirmedCount++;
+            }
+          }
+        } catch (e) {
+          print('自动确认交易失败: $e');
+        }
+      }
+      
+      if (confirmedCount > 0) {
+        await addLog('自动确认 $confirmedCount 笔待确认交易（基金: $fundCode）', type: LogType.success);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('自动确认相关待确认交易失败: $e');
+    }
+  }
+
   Future<void> deleteHoldingAt(int index) async {
     if (index < 0 || index >= _holdings.length) return;
 
@@ -588,6 +631,43 @@ class DataManager extends ChangeNotifier {
     _holdings = newHoldings;
     await saveData();
     notifyListeners();
+  }
+
+  /// 刷新所有持仓并自动确认相关待确认交易
+  Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
+    final total = _holdings.length;
+    for (int i = 0; i < total; i++) {
+      final holding = _holdings[i];
+      final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
+      if (fetched['isValid'] == true) {
+        await updateHoldingNav(
+          holding.clientId,
+          holding.fundCode,
+          fetched['currentNav'],
+          fetched['navDate'],
+        );
+        
+        // 同时更新收益率信息
+        final index = _holdings.indexWhere((h) => h.id == holding.id);
+        if (index != -1) {
+          final updated = _holdings[index].copyWith(
+            navReturn1m: fetched['navReturn1m'],
+            navReturn3m: fetched['navReturn3m'],
+            navReturn6m: fetched['navReturn6m'],
+            navReturn1y: fetched['navReturn1y'],
+          );
+          _holdings[index] = updated;
+        }
+        
+        // 自动确认该基金的待确认交易
+        await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
+      } else {
+        await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
+      }
+      onProgress?.call(i + 1, total);
+    }
+    // 优化：批量保存和通知，减少I/O和重建次数
+    await commitBatchUpdates();
   }
 
   Future<void> togglePinStatus(String holdingId) async {
@@ -644,6 +724,9 @@ class DataManager extends ChangeNotifier {
           );
           _holdings[index] = updated;
         }
+        
+        // 自动确认该基金的待确认交易
+        await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
       } else {
         await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
       }
