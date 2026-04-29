@@ -147,6 +147,9 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
     final shadowColor = _getShadowColor();
     final boxShadowColor = _getBoxShadowColor();
 
+    // 计算卡片宽度：展开时右侧缩短16px
+    final cardWidth = maxWidth - (animationValue * 16);
+
     return Container(
       margin: EdgeInsets.zero,
       alignment: Alignment.centerLeft,
@@ -154,108 +157,131 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
         onTap: widget.onTap,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
-          child: Container(
-            // 移除宽度动画，保持固定宽度
-            padding: widget.padding ?? const EdgeInsets.symmetric(
-              vertical: 10,
-              horizontal: 16,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
+          child: SizedBox(
+            width: cardWidth,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: gradientColors,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: 6,
+                    offset: const Offset(3, 3),
+                  ),
+                  BoxShadow(
+                    color: boxShadowColor,
+                    blurRadius: 4,
+                    offset: const Offset(1, 1),
+                  ),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: shadowColor,
-                  blurRadius: 6,
-                  offset: const Offset(3, 3),
-                ),
-                BoxShadow(
-                  color: boxShadowColor,
-                  blurRadius: 4,
-                  offset: const Offset(1, 1),
-                ),
-              ],
-            ),
-            child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
-                      color: textColor,
-                    ),
+              child: Stack(
+              alignment: Alignment.centerRight,
+              children: [
+                // 主内容区域
+                Padding(
+                  padding: widget.padding ?? const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 16,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      TextSpan(text: displayTitle),
-                      if (widget.clientId != null && widget.clientId!.isNotEmpty)
-                        TextSpan(
-                          text: ' (${widget.clientId})',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.normal,
-                            color: subTextColor,
-                            height: 1.2,
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              height: 1.2,
+                              color: textColor,
+                            ),
+                            children: [
+                              TextSpan(text: displayTitle),
+                              if (widget.clientId != null && widget.clientId!.isNotEmpty)
+                                TextSpan(
+                                  text: ' (${widget.clientId})',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.normal,
+                                    color: subTextColor,
+                                    height: 1.2,
+                                  ),
+                                ),
+                            ],
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          softWrap: false,
+                          strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
                         ),
+                      ),
+                      // 占位空间，保持与 trailing 相同的宽度
+                      if (widget.trailing != null)
+                        const SizedBox(width: 80)
+                      else if (widget.subtitle != null || widget.countValue != null)
+                        const SizedBox(width: 60),
                     ],
                   ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  softWrap: false,
-                  strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
                 ),
-              ),
-              // 移除右侧内容的动画移动
-              if (widget.trailing != null)
-                widget.trailing!
-              else if (widget.subtitle != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.subtitle!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: subTextColor,
-                        height: 1.2,
-                      ),
-                    ),
-                    if (widget.countValue != null) ...[
-                      const SizedBox(width: 2),
-                      Text(
-                        '${widget.countValue}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          fontStyle: FontStyle.italic,
-                          color: countColor,
-                          height: 1.2,
-                        ),
-                      ),
-                      Text(
-                        '支',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: subTextColor,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
-                  ],
-                )
-              else
-                const SizedBox.shrink(),
-            ],
-          ), // Row
-      ), // Container (内层)
-    ), // ClipRRect
-  ), // GestureDetector
-); // Container (外层)
+                // trailing 或 subtitle/count 悬浮在右侧
+                Positioned(
+                  right: 16,
+                  child: widget.trailing != null
+                      ? AnimatedOpacity(
+                          opacity: widget.isExpanded ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          child: widget.trailing!,
+                        )
+                      : (widget.subtitle != null || widget.countValue != null)
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.subtitle != null)
+                                  Text(
+                                    widget.subtitle!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: subTextColor,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                if (widget.countValue != null) ...[
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '${widget.countValue}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      fontStyle: FontStyle.italic,
+                                      color: countColor,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    '支',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: subTextColor,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                ),
+              ],
+            ), // Stack
+            ), // Container (内层)
+          ), // SizedBox
+        ), // ClipRRect
+      ), // GestureDetector
+    ); // Container (外层)
   }
 }

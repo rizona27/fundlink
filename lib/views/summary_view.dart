@@ -772,7 +772,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         holding: firstHolding,
       ),
       child: Container(
-        margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: bgColor,
@@ -1132,9 +1131,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             child: isExpanded
                                 ? Container(
                                     margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ClientView保持一致
-                                    child: ClipRect(
-                                      child: _buildExpandedContent(first, holdings, isDark),
-                                    ),
+                                    child: _buildExpandedContent(first, holdings, isDark),
                                   )
                                 : const SizedBox.shrink(),
                           ),
