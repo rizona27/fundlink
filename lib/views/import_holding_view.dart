@@ -1394,7 +1394,16 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         }
 
         // iOS优化：获取基金信息时添加重试机制
-        Map<String, dynamic> fundInfo;
+        Map<String, dynamic> fundInfo = {  // 初始化默认值
+          'fundName': '',
+          'currentNav': 0.0,
+          'navDate': DateTime.now(),
+          'isValid': false,
+          'navReturn1m': null,
+          'navReturn3m': null,
+          'navReturn6m': null,
+          'navReturn1y': null,
+        };
         var retryCount = 0;
         const maxRetries = 2;
         Exception? lastError;
@@ -1414,16 +1423,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         
         if (retryCount > maxRetries) {
           dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.error);
-          fundInfo = {
-            'fundName': '',
-            'currentNav': 0.0,
-            'navDate': DateTime.now(),
-            'isValid': false,
-            'navReturn1m': null,
-            'navReturn3m': null,
-            'navReturn6m': null,
-            'navReturn1y': null,
-          };
+          // fundInfo已经初始化为默认值，无需再次赋值
         }
 
         final fundName = fundInfo['fundName'] as String? ?? '';
