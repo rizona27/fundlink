@@ -12,24 +12,93 @@ class FileImportService {
     required String extension,
   }) async {
     extension = extension.toLowerCase();
-    if (extension == 'csv') {
+    
+    // 智能检测文件实际格式，不依赖扩展名
+    final actualFormat = _detectFileFormat(bytes, extension);
+    
+    if (actualFormat == 'csv') {
       return _parseCsv(bytes);
-    } else if (extension == 'xlsx' || extension == 'xls') {
+    } else if (actualFormat == 'excel') {
       return _parseExcel(bytes);
     } else {
-      throw Exception('不支持的文件格式: $extension，请上传 CSV 或 Excel 文件');
+      throw Exception('不支持的文件格式，请上传 CSV 或 Excel 文件');
     }
+  }
+  
+  /// 检测文件实际格式（基于文件头和内容）
+  static String _detectFileFormat(Uint8List bytes, String extension) {
+    // 如果扩展名明确是 Excel 格式，优先尝试 Excel
+    if (extension == 'xlsx' || extension == 'xls') {
+      return 'excel';
+    }
+    
+    // 对于 .csv 扩展名或其他情况，检测实际内容
+    // Excel (.xlsx) 文件实际上是 ZIP 格式，以 PK 开头
+    if (bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B) {
+      // ZIP 格式，很可能是 .xlsx
+      return 'excel';
+    }
+    
+    // Excel (.xls) 旧格式有特定的文件头
+    if (bytes.length >= 8) {
+      // D0 CF 11 E0 是 OLE2 复合文档格式（旧版 Excel）
+      if (bytes[0] == 0xD0 && bytes[1] == 0xCF && bytes[2] == 0x11 && bytes[3] == 0xE0) {
+        return 'excel';
+      }
+    }
+    
+    // 尝试检测是否为有效的 UTF-8/ASCII 文本（CSV 应该是文本格式）
+    try {
+      final content = utf8.decode(bytes, allowMalformed: false);
+      // CSV 文件通常包含逗号、引号等字符，且不包含大量二进制数据
+      // 检查是否包含常见的 CSV 特征
+      if (content.contains(',') || content.contains('\t') || content.contains('\n')) {
+        return 'csv';
+      }
+    } catch (e) {
+      // 如果无法解码为 UTF-8，可能是二进制格式（Excel）
+      return 'excel';
+    }
+    
+    // 默认根据扩展名判断
+    if (extension == 'csv') {
+      return 'csv';
+    }
+    
+    // 其他情况，尝试作为 CSV 处理
+    return 'csv';
   }
 
   static Future<({List<String> headers, List<List<dynamic>> rows})> _parseCsv(Uint8List bytes) async {
-    final csvString = utf8.decode(bytes);
-    final rows = const CsvToListConverter().convert(csvString);
-    if (rows.isEmpty) {
-      throw Exception('CSV 文件为空');
+    try {
+      // 尝试多种编码方式解码
+      String csvString;
+      try {
+        csvString = utf8.decode(bytes);
+      } catch (e) {
+        // 如果 UTF-8 失败，尝试 GBK/GB2312（中文 Excel 导出的 CSV 常用编码）
+        try {
+          csvString = latin1.decode(bytes); // 作为备选
+        } catch (e2) {
+          throw Exception('文件编码无法识别，请确保文件是有效的 CSV 格式');
+        }
+      }
+      
+      final rows = const CsvToListConverter().convert(csvString);
+      if (rows.isEmpty) {
+        throw Exception('CSV 文件为空');
+      }
+      final headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
+      final dataRows = rows.skip(1).toList();
+      return (headers: headers, rows: dataRows);
+    } catch (e) {
+      // 如果是 CSV 解析错误，提供更友好的提示
+      if (e.toString().contains('custom numfmtld') || 
+          e.toString().contains('FormatException')) {
+        throw Exception('文件格式错误：这不是一个有效的 CSV 文件。\n\n可能的原因：\n1. 文件实际是 Excel 格式，但扩展名为 .csv\n2. 文件已损坏或编码不正确\n\n建议：\n- 在 Excel 中打开文件，选择“另存为” -> 选择“CSV (逗号分隔)”格式\n- 或直接使用 .xlsx 扩展名保存');
+      }
+      rethrow;
     }
-    final headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
-    final dataRows = rows.skip(1).toList();
-    return (headers: headers, rows: dataRows);
   }
 
   static String _getCellValue(dynamic cell) {

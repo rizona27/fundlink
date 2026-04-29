@@ -142,6 +142,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                         padding: const EdgeInsets.only(top: 20),
                         child: Text(
                           "Finding Abundance Through Subtraction",
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 16, 
                             fontWeight: FontWeight.w300,

@@ -5,10 +5,11 @@ import '../widgets/adaptive_top_bar.dart';
 
 // ==================== 版本信息配置区 ====================
 /// 应用版本号
-const String APP_VERSION = 'v1.1.3';
+const String APP_VERSION = 'v1.1.4';
 
 /// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
+  'v1.1.4 - 文件导入兼容性改进，智能格式检测',
   'v1.1.3 - 优化交易记录编辑体验，精简代码结构',
   'v1.1.2 - 节假日、交易日判断优化、待确认交易提示改进',
   'v1.1.1 - 智能开市检测、市场状态监控、待确认交易优化、视图刷新修复',
@@ -564,27 +565,13 @@ class VersionView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '更新记录',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-              ),
-            ),
-            Text(
-              '点击暂停',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.4)
-                    : CupertinoColors.systemGrey.withOpacity(0.6),
-              ),
-            ),
-          ],
+        Text(
+          '更新记录',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+          ),
         ),
         const SizedBox(height: 12),
         // 根据内容数量动态计算高度，最少120，最多300

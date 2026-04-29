@@ -41,11 +41,46 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   
   // 开市时间检测
   bool get _isMarketOpen {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    
+    // 周末闭市
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
+    
+    // 检查是否为节假日（使用 DataManager 的交易日判断）
+    final today = DateTime(now.year, now.month, now.day);
+    // 这里简化处理，实际应该调用 DataManager.isTradingDay
+    // 但由于是同步 getter，我们先用基础判断
+    
+    final hour = now.hour;
+    final minute = now.minute;
+    final currentTime = hour * 60 + minute;
+    
+    // A股交易时间：9:30-11:30, 13:00-15:00
+    final morningStart = 9 * 60 + 15;  // 9:15（估值可能提前开始）
+    final morningEnd = 11 * 60 + 30;   // 11:30
+    final afternoonStart = 13 * 60;     // 13:00
+    final afternoonEnd = 15 * 60 + 30;  // 15:30（估值可能延迟更新）
+    
+    // 在交易时间段内（包含午休，因为午休期间估值仍可能更新）
+    return currentTime >= morningStart && currentTime < afternoonEnd;
+  }
+  
+  /// 判断是否应该暂停自动刷新
+  /// 返回 true 表示应该暂停，false 表示可以继续
+  bool _shouldPauseAutoRefresh() {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    
+    // 周末肯定暂停
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      return true;
+    }
+    
     // 获取所有持仓的最新估值时间
     final holdings = _dataManager.holdings;
     if (holdings.isEmpty) return false;
     
-    // 找到最新的估值时间
     DateTime? latestValuationTime;
     for (final holding in holdings) {
       final cache = _dataManager.getValuation(holding.fundCode);
@@ -53,7 +88,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         final gztimeStr = cache['gztime'] as String;
         if (gztimeStr.isNotEmpty) {
           try {
-            // gztime 格式: "2026-04-27 15:00" 或 "2026-04-27"
             final parts = gztimeStr.split(' ');
             final datePart = parts[0];
             final timePart = parts.length > 1 ? parts[1] : '15:00';
@@ -69,45 +103,32 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
     }
     
-    // 如果没有估值时间，使用当前时间判断
-    if (latestValuationTime == null) {
-      final now = DateTime.now();
-      final weekday = now.weekday;
-      if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
-      
-      final hour = now.hour;
-      final minute = now.minute;
-      final currentTime = hour * 60 + minute;
-      final morningStart = 9 * 60 + 30;
-      final morningEnd = 11 * 60 + 30;
-      final afternoonStart = 13 * 60;
-      final afternoonEnd = 15 * 60;
-      
-      return (currentTime >= morningStart && currentTime < morningEnd) ||
-             (currentTime >= afternoonStart && currentTime < afternoonEnd);
+    // 如果没有估值时间，不暂停
+    if (latestValuationTime == null) return false;
+    
+    // 判断估值时间是否是今天
+    final today = DateTime(now.year, now.month, now.day);
+    final valuationDay = DateTime(latestValuationTime!.year, latestValuationTime!.month, latestValuationTime!.day);
+    
+    // 如果估值不是今天的，说明是非交易日，暂停
+    if (!valuationDay.isAtSameMomentAs(today)) {
+      print('⏸️ 估值日期不是今天 (${valuationDay}), 暂停自动刷新');
+      return true;
     }
     
-    // 根据最新估值时间判断
-    final weekday = latestValuationTime!.weekday;
-    // 周末闭市
-    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
-      return false;
+    // 估值是今天的，检查是否已经过了交易时间
+    final valuationHour = latestValuationTime!.hour;
+    final valuationMinute = latestValuationTime!.minute;
+    final valuationTime = valuationHour * 60 + valuationMinute;
+    
+    // 如果估值时间已经达到或超过15:00，说明今日交易已结束
+    if (valuationTime >= 15 * 60) {
+      print('⏸️ 今日估值已到15:00 ($valuationHour:$valuationMinute), 暂停自动刷新');
+      return true;
     }
     
-    final hour = latestValuationTime!.hour;
-    final minute = latestValuationTime!.minute;
-    final valuationTime = hour * 60 + minute;
-    
-    // 如果估值时间在交易时间段内，说明还在交易中
-    final morningStart = 9 * 60 + 30;  // 9:30
-    final morningEnd = 11 * 60 + 30;   // 11:30
-    final afternoonStart = 13 * 60;     // 13:00
-    final afternoonEnd = 15 * 60;       // 15:00
-    
-    final isInTradingHours = (valuationTime >= morningStart && valuationTime < morningEnd) ||
-                             (valuationTime >= afternoonStart && valuationTime < afternoonEnd);
-    
-    return isInTradingHours;
+    // 其他情况不暂停
+    return false;
   }
 
   double _scrollOffset = 0;
@@ -253,9 +274,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   void _startValuationTimer() {
     _stopValuationTimer();
+    
+    // 检查是否应该暂停自动刷新
+    if (_shouldPauseAutoRefresh()) {
+      print('⏸️ 估值定时器未启动: 已暂停自动刷新');
+      return;
+    }
+    
     // 只有在开市期间才启动自动刷新
-    if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing || !_isMarketOpen) {
-      print('⏸️ 估值定时器未启动: showValuation=$_showValuationRefresh, pageVisible=$_isPageVisible, refreshing=${_dataManager.isValuationRefreshing}, marketOpen=$_isMarketOpen');
+    if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing) {
+      print('⏸️ 估值定时器未启动: showValuation=$_showValuationRefresh, pageVisible=$_isPageVisible, refreshing=${_dataManager.isValuationRefreshing}');
       return;
     }
 
@@ -263,19 +291,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        // 每次触发前再次检查是否仍在开市时间
+        // 每次触发前再次检查是否应该暂停
+        if (_shouldPauseAutoRefresh()) {
+          print('⏸️ 定时器触发但已暂停，停止定时器');
+          _stopValuationTimer();
+          return;
+        }
+        
         final now = DateTime.now();
         final shouldRefresh = _isPageVisible && mounted && _showValuationRefresh && 
             !_dataManager.isValuationRefreshing && 
-            !_dataManager.isValuationRefreshInProgress &&
-            _isMarketOpen;
+            !_dataManager.isValuationRefreshInProgress;
         
-        print('⏰ 定时器触发: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}, 应该刷新: $shouldRefresh, marketOpen: $_isMarketOpen');
+        print('⏰ 定时器触发: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}, 应该刷新: $shouldRefresh');
         
         if (shouldRefresh) {
           _onValuationRefresh();
         } else {
-          print('❌ 跳过刷新: marketOpen=$_isMarketOpen');
+          print('❌ 跳过刷新');
         }
       },
     );
@@ -287,8 +320,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _restartValuationTimer() {
+    // 检查是否应该暂停
+    if (_shouldPauseAutoRefresh()) {
+      print('⏸️ 不重启定时器: 已暂停自动刷新');
+      return;
+    }
+    
     // 只有在开市期间才重启定时器
-    if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing && _isMarketOpen) {
+    if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing) {
       _startValuationTimer();
     }
   }
@@ -299,12 +338,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _marketStatusTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (!_isPageVisible || !mounted) return;
       
-      // 如果当前应该显示估值刷新但定时器未运行，且现在是开市时间
-      if (_showValuationRefresh && _valuationTimer == null && _isMarketOpen) {
+      // 检查是否应该暂停自动刷新
+      final shouldPause = _shouldPauseAutoRefresh();
+      
+      // 如果当前应该显示估值刷新但定时器未运行，且不应该暂停
+      if (_showValuationRefresh && _valuationTimer == null && !shouldPause) {
         _restartValuationTimer();
       }
-      // 如果现在是闭市时间，停止定时器
-      else if (!_isMarketOpen && _valuationTimer != null) {
+      // 如果现在应该暂停，停止定时器
+      else if (shouldPause && _valuationTimer != null) {
+        print('⏸️ 市场状态检测: 暂停估值定时器');
         _stopValuationTimer();
       }
       
