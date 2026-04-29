@@ -1393,11 +1393,27 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           continue;
         }
 
+        // iOS优化：获取基金信息时添加重试机制
         Map<String, dynamic> fundInfo;
-        try {
-          fundInfo = await fundService.fetchFundInfo(fundCode);
-        } catch (e) {
-          dataManager.addLog('导入时获取基金$fundCode信息失败: $e', type: LogType.error);
+        var retryCount = 0;
+        const maxRetries = 2;
+        Exception? lastError;
+        
+        while (retryCount <= maxRetries) {
+          try {
+            fundInfo = await fundService.fetchFundInfo(fundCode);
+            break;
+          } catch (e) {
+            lastError = e is Exception ? e : Exception(e.toString());
+            retryCount++;
+            if (retryCount <= maxRetries) {
+              await Future.delayed(Duration(milliseconds: 500 * retryCount));
+            }
+          }
+        }
+        
+        if (retryCount > maxRetries) {
+          dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.error);
           fundInfo = {
             'fundName': '',
             'currentNav': 0.0,

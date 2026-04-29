@@ -327,30 +327,58 @@ class DataManager extends ChangeNotifier {
       final total = holdings.length;
       String latestUpdateTime = _lastValuationUpdateTime;
 
-      for (int i = 0; i < total; i++) {
-        final holding = holdings[i];
-        try {
-          final valuation = await fundService.fetchRealtimeValuation(holding.fundCode);
-          if (valuation != null && valuation['gsz'] != null && valuation['gsz'] > 0) {
-            await updateValuationCache(holding.fundCode, {
-              'gsz': valuation['gsz'],
-              'gszzl': valuation['gszzl'] ?? 0.0,
-              'gztime': valuation['gztime'] ?? '',
-            });
+      // iOS优化：分批并发处理估值刷新
+      const batchSize = 5; // 每批5个基金
+      for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
+        final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
+        final batch = holdings.sublist(batchStart, batchEnd);
+        
+        // 并发处理当前批次
+        final results = await Future.wait(
+          batch.map((holding) async {
+            try {
+              final valuation = await fundService.fetchRealtimeValuation(holding.fundCode);
+              if (valuation != null && valuation['gsz'] != null && valuation['gsz'] > 0) {
+                await updateValuationCache(holding.fundCode, {
+                  'gsz': valuation['gsz'],
+                  'gszzl': valuation['gszzl'] ?? 0.0,
+                  'gztime': valuation['gztime'] ?? '',
+                });
+                if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
+                  return {'success': true, 'gztime': valuation['gztime']};
+                }
+                return {'success': true, 'gztime': ''};
+              } else {
+                await addLog('基金 ${holding.fundCode} 估值获取失败: 数据无效', type: LogType.error);
+                return {'success': false, 'gztime': ''};
+              }
+            } catch (e) {
+              await addLog('基金 ${holding.fundCode} 估值获取异常: $e', type: LogType.error);
+              return {'success': false, 'gztime': ''};
+            }
+          }),
+        );
+        
+        // 统计结果
+        for (final result in results) {
+          if (result['success'] == true) {
             successCount++;
-            if (valuation['gztime'] != null && valuation['gztime'].toString().isNotEmpty) {
-              latestUpdateTime = _formatGzTime(valuation['gztime']);
+            final gztime = result['gztime'] as String;
+            if (gztime.isNotEmpty) {
+              latestUpdateTime = _formatGzTime(gztime);
             }
           } else {
             failCount++;
-            await addLog('基金 ${holding.fundCode} 估值获取失败: 数据无效', type: LogType.error);
           }
-        } catch (e) {
-          failCount++;
-          await addLog('基金 ${holding.fundCode} 估值获取异常: $e', type: LogType.error);
         }
-
-        updateValuationRefreshProgress((i + 1) / total);
+        
+        // 更新进度
+        updateValuationRefreshProgress(batchEnd / total);
+        
+        // iOS优化：批次间添加延迟
+        if (batchEnd < total) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
       }
 
       if (latestUpdateTime.isNotEmpty) {
@@ -636,36 +664,47 @@ class DataManager extends ChangeNotifier {
   /// 刷新所有持仓并自动确认相关待确认交易
   Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
     final total = _holdings.length;
-    for (int i = 0; i < total; i++) {
-      final holding = _holdings[i];
-      final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
-      if (fetched['isValid'] == true) {
-        await updateHoldingNav(
-          holding.clientId,
-          holding.fundCode,
-          fetched['currentNav'],
-          fetched['navDate'],
-        );
-        
-        // 同时更新收益率信息
-        final index = _holdings.indexWhere((h) => h.id == holding.id);
-        if (index != -1) {
-          final updated = _holdings[index].copyWith(
-            navReturn1m: fetched['navReturn1m'],
-            navReturn3m: fetched['navReturn3m'],
-            navReturn6m: fetched['navReturn6m'],
-            navReturn1y: fetched['navReturn1y'],
-          );
-          _holdings[index] = updated;
+    
+    // iOS优化：分批处理，避免并发请求过多
+    const batchSize = 5; // 每批5个基金
+    for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
+      final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
+      
+      // 处理当前批次
+      for (int i = batchStart; i < batchEnd; i++) {
+        final holding = _holdings[i];
+        final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
+        if (fetched['isValid'] == true) {
+          // 同时更新净值、基金名称和收益率信息
+          final index = _holdings.indexWhere((h) => h.id == holding.id);
+          if (index != -1) {
+            final updated = _holdings[index].copyWith(
+              fundName: fetched['fundName'] as String? ?? holding.fundName,
+              currentNav: fetched['currentNav'] as double? ?? holding.currentNav,
+              navDate: fetched['navDate'] as DateTime? ?? holding.navDate,
+              isValid: true,
+              navReturn1m: fetched['navReturn1m'],
+              navReturn3m: fetched['navReturn3m'],
+              navReturn6m: fetched['navReturn6m'],
+              navReturn1y: fetched['navReturn1y'],
+            );
+            _holdings[index] = updated;
+          }
+          
+          // 自动确认该基金的待确认交易
+          await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
+        } else {
+          await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
         }
-        
-        // 自动确认该基金的待确认交易
-        await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
-      } else {
-        await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
+        onProgress?.call(i + 1, total);
       }
-      onProgress?.call(i + 1, total);
+      
+      // iOS优化：批次间添加小延迟，避免触发服务器限流
+      if (batchEnd < total) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
     }
+    
     // 优化：批量保存和通知，减少I/O和重建次数
     await commitBatchUpdates();
   }
@@ -702,36 +741,47 @@ class DataManager extends ChangeNotifier {
 
   Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
     final total = _holdings.length;
-    for (int i = 0; i < total; i++) {
-      final holding = _holdings[i];
-      final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
-      if (fetched['isValid'] == true) {
-        await updateHoldingNav(
-          holding.clientId,
-          holding.fundCode,
-          fetched['currentNav'],
-          fetched['navDate'],
-        );
-        
-        // 同时更新收益率信息
-        final index = _holdings.indexWhere((h) => h.id == holding.id);
-        if (index != -1) {
-          final updated = _holdings[index].copyWith(
-            navReturn1m: fetched['navReturn1m'],
-            navReturn3m: fetched['navReturn3m'],
-            navReturn6m: fetched['navReturn6m'],
-            navReturn1y: fetched['navReturn1y'],
-          );
-          _holdings[index] = updated;
+    
+    // iOS优化：分批处理，避免并发请求过多
+    const batchSize = 5; // 每批5个基金
+    for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
+      final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
+      
+      // 处理当前批次
+      for (int i = batchStart; i < batchEnd; i++) {
+        final holding = _holdings[i];
+        final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
+        if (fetched['isValid'] == true) {
+          // 同时更新净值、基金名称和收益率信息
+          final index = _holdings.indexWhere((h) => h.id == holding.id);
+          if (index != -1) {
+            final updated = _holdings[index].copyWith(
+              fundName: fetched['fundName'] as String? ?? holding.fundName,
+              currentNav: fetched['currentNav'] as double? ?? holding.currentNav,
+              navDate: fetched['navDate'] as DateTime? ?? holding.navDate,
+              isValid: true,
+              navReturn1m: fetched['navReturn1m'],
+              navReturn3m: fetched['navReturn3m'],
+              navReturn6m: fetched['navReturn6m'],
+              navReturn1y: fetched['navReturn1y'],
+            );
+            _holdings[index] = updated;
+          }
+          
+          // 自动确认该基金的待确认交易
+          await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
+        } else {
+          await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
         }
-        
-        // 自动确认该基金的待确认交易
-        await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
-      } else {
-        await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
+        onProgress?.call(i + 1, total);
       }
-      onProgress?.call(i + 1, total);
+      
+      // iOS优化：批次间添加小延迟，避免触发服务器限流
+      if (batchEnd < total) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
     }
+    
     // 优化：批量保存和通知，减少I/O和重建次数
     await commitBatchUpdates();
   }

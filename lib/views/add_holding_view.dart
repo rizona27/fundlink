@@ -923,7 +923,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildFrostedSection(
-                title: '必填信息',
+                title: '',  // 去掉"必填信息"标题
                 isDarkMode: isDarkMode,
                 frostedBgColor: frostedBgColor,
                 children: [
@@ -1161,7 +1161,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
               ),
               const SizedBox(height: 24),
               _buildFrostedSection(
-                title: '选填信息',
+                title: '',  // 去掉"选填信息"标题
                 isDarkMode: isDarkMode,
                 frostedBgColor: frostedBgColor,
                 children: [
@@ -1238,17 +1238,19 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+        // 只有当title不为空时才显示标题
+        if (title.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 8),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
             ),
           ),
-        ),
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(

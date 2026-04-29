@@ -122,10 +122,13 @@ class _FundDetailPageState extends State<FundDetailPage> {
       print('中证1000 ETF联接: 011860');
       print('自定义基金代码: $_customFundCode');
       
+      // iOS优化：使用Future.wait并发加载对比基金数据
       final hs300Future = _fundService!.fetchNetWorthTrend('460300');
       final zz500Future = _fundService!.fetchNetWorthTrend('004348');
       final zz1000Future = _fundService!.fetchNetWorthTrend('011860');
-      final customFundFuture = _fundService!.fetchNetWorthTrend(_customFundCode);
+      final customFundFuture = _customFundCode.isNotEmpty 
+          ? _fundService!.fetchNetWorthTrend(_customFundCode) 
+          : Future.value(<NetWorthPoint>[]);
       
       final results = await Future.wait([
         hs300Future.catchError((e) {

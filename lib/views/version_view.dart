@@ -5,10 +5,11 @@ import '../widgets/adaptive_top_bar.dart';
 
 // ==================== 版本信息配置区 ====================
 /// 应用版本号
-const String APP_VERSION = 'v1.1.4';
+const String APP_VERSION = 'v1.1.5';
 
 /// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
+  'v1.1.5 - iOS端插件引用及请求并发优化，修改了部分UI',
   'v1.1.4 - 文件导入兼容性改进，智能格式检测',
   'v1.1.3 - 优化交易记录编辑体验，精简代码结构',
   'v1.1.2 - 节假日、交易日判断优化、待确认交易提示改进',
@@ -574,12 +575,12 @@ class VersionView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        // 根据内容数量动态计算高度，最少120，最多300
+        // 根据内容数量动态计算高度，调整为原来的3/5
         LayoutBuilder(
           builder: (context, constraints) {
             // 每行大约20像素高度（文本12px + 间距8px）
             final estimatedHeight = updateLogs.length * 20.0;
-            final containerHeight = estimatedHeight.clamp(120.0, 300.0);
+            final containerHeight = (estimatedHeight.clamp(120.0, 300.0)) * 0.6; // 减少为3/5高度
             
             return Container(
               height: containerHeight,

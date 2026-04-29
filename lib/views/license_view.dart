@@ -45,16 +45,37 @@ class LicenseView extends StatelessWidget {
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                      child: Text(
-                        _licenseText,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: isDarkMode
-                              ? CupertinoColors.white.withOpacity(0.9)
-                              : CupertinoColors.label,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 标题居中显示
+                          Text(
+                            'GNU AFFERO GENERAL PUBLIC LICENSE',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode
+                                  ? CupertinoColors.white
+                                  : CupertinoColors.label,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Version 3, 19 November 2007',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDarkMode
+                                  ? CupertinoColors.white.withOpacity(0.9)
+                                  : CupertinoColors.label,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // 内容段落：首行缩进，居左显示
+                          ..._buildLicenseParagraphs(isDarkMode),
+                        ],
                       ),
                     ),
                   ),
@@ -65,6 +86,66 @@ class LicenseView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 构建许可协议段落列表
+  List<Widget> _buildLicenseParagraphs(bool isDarkMode) {
+    // 将许可文本按空行分割成段落
+    final paragraphs = _licenseText.split('\n\n');
+    
+    return paragraphs.map((paragraph) {
+      if (paragraph.trim().isEmpty) {
+        return const SizedBox(height: 12);
+      }
+      
+      // 检查是否是标题或特殊行（全大写或以数字开头）
+      final trimmed = paragraph.trim();
+      final isTitle = trimmed == trimmed.toUpperCase() && trimmed.length > 10;
+      final isSectionNumber = RegExp(r'^\s*\d+\.').hasMatch(trimmed);
+      
+      if (isTitle || isSectionNumber) {
+        // 标题或章节号：居中显示，不加缩进
+        return Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 8),
+          child: Text(
+            trimmed,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.95)
+                  : CupertinoColors.label,
+            ),
+          ),
+        );
+      } else {
+        // 普通段落：首行缩进，居左显示
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 首行缩进（2个字符宽度）
+              const SizedBox(width: 24),
+              Expanded(
+                child: Text(
+                  trimmed,
+                  textAlign: TextAlign.left,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.85)
+                        : CupertinoColors.systemGrey.withOpacity(0.9),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    }).toList();
   }
 
   static const String _licenseText = '''GNU AFFERO GENERAL PUBLIC LICENSE

@@ -104,7 +104,42 @@ class FundService {
     try {
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
 
-      final response = await http.get(url).timeout(const Duration(seconds: 15));
+      // iOS优化：添加重试机制和更长的超时时间
+      http.Response? response;
+      var retryCount = 0;
+      const maxRetries = 2; // 最多重试2次
+      Exception? lastException;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          response = await http.get(
+            url,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': '*/*',
+            },
+          ).timeout(const Duration(seconds: 20)); // iOS增加到20秒
+          
+          // 如果成功，跳出重试循环
+          if (response.statusCode == 200) {
+            break;
+          }
+        } catch (e) {
+          lastException = e is Exception ? e : Exception(e.toString());
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            // 指数退避：第1次等500ms，第2次等1000ms
+            await Future.delayed(Duration(milliseconds: 500 * retryCount));
+          }
+        }
+      }
+      
+      // 如果所有重试都失败
+      if (response == null) {
+        throw lastException ?? Exception('请求失败');
+      }
+      
       final statusCode = response.statusCode;
 
       if (statusCode != 200) {
@@ -118,7 +153,8 @@ class FundService {
         };
       }
 
-      final jsString = utf8.decode(response.bodyBytes);
+      // iOS优化：使用allowMalformed处理不完整的UTF-8序列
+      final jsString = utf8.decode(response.bodyBytes, allowMalformed: true);
 
       String fundName = '未知基金';
       final namePatterns = [
