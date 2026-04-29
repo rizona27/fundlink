@@ -571,7 +571,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       
       // 检查是否已存在该客户+基金的持仓
       // 规则：1. 如果客户号相同，则一定是同一客户
-      //       2. 如果客户号为空但用户名相同，可能是同名客户，需要二次确认
+      //       2. 如果客户号为空但用户名相同，需要进一步判断
       List<FundHolding> existingHoldings = [];
       bool isSameClientId = false;
       bool isSameClientName = false;
@@ -595,7 +595,19 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             .toList();
         
         if (existingHoldings.isNotEmpty) {
-          isSameClientName = true;
+          // 只有当当前输入的客户号为空，且找到的持仓也没有客户号时，才认为是同名客户
+          // 如果找到的持仓有客户号，而当前输入没有，说明是不同的客户
+          final existingHolding = existingHoldings.first;
+          if (clientId.isEmpty && existingHolding.clientId.isEmpty) {
+            // 两者都没有客户号，可能是同一客户
+            isSameClientName = true;
+          } else if (clientId.isEmpty && existingHolding.clientId.isNotEmpty) {
+            // 当前无客户号，但已有持仓有客户号，说明是不同客户，直接创建新持仓
+            // 不设置 isSameClientName，继续执行
+          } else if (clientId.isNotEmpty && existingHolding.clientId.isEmpty) {
+            // 当前有客户号，但已有持仓没有，说明是不同客户，直接创建新持仓
+            // 不设置 isSameClientName，继续执行
+          }
         }
       }
 
