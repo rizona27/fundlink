@@ -12,6 +12,7 @@ import 'package:universal_html/html.dart' as html;
 // 仅在非Web平台导入dart:io
 import 'dart:io' as io;
 import '../models/fund_holding.dart';
+import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../widgets/toast.dart';
@@ -21,6 +22,38 @@ class FileExportService {
   
   static void setDataManager(DataManager manager) {
     _dataManager = manager;
+  }
+  
+  /// 完整备份导出（持仓 + 交易记录）
+  static Future<void> exportFullBackup({
+    required String format,
+    required BuildContext context,
+    bool shareAfterSave = false,
+  }) async {
+    if (_dataManager == null) {
+      throw Exception('DataManager未初始化');
+    }
+    
+    final holdings = _dataManager!.holdings;
+    final transactions = _dataManager!.transactions;
+    
+    if (holdings.isEmpty && transactions.isEmpty) {
+      throw Exception('没有数据可导出');
+    }
+
+    final result = await _generateFullBackup(
+      holdings: holdings,
+      transactions: transactions,
+      format: format,
+    );
+
+    await _saveAndDownloadFile(
+      bytes: result.bytes,
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+      context: context,
+      shareAfterSave: shareAfterSave,
+    );
   }
   
   static Future<void> exportAndDownload({
@@ -66,6 +99,29 @@ class FileExportService {
       bytes = await _generateCsvBytes(holdings, selectedFields);
     } else {
       bytes = await _generateExcelBytes(holdings, selectedFields);
+    }
+    return (bytes: bytes, fileName: fileName, mimeType: mimeType);
+  }
+
+  /// 生成完整备份（持仓 + 交易）
+  static Future<({Uint8List bytes, String fileName, String mimeType})> _generateFullBackup({
+    required List<FundHolding> holdings,
+    required List<TransactionRecord> transactions,
+    required String format,
+  }) async {
+    final timestamp = DateTime.now();
+    final dateStr = '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final timeStr = '${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}';
+    final fileName = 'Fundlink_FullBackup_${dateStr}_${timeStr}.${format == 'csv' ? 'csv' : 'xlsx'}';
+    final mimeType = format == 'csv'
+        ? 'text/csv'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    Uint8List bytes;
+    if (format == 'csv') {
+      bytes = await _generateFullBackupCsvBytes(holdings, transactions);
+    } else {
+      bytes = await _generateFullBackupExcelBytes(holdings, transactions);
     }
     return (bytes: bytes, fileName: fileName, mimeType: mimeType);
   }
@@ -245,6 +301,155 @@ class FileExportService {
       ExportFieldDefinition(id: 'navReturn1y', label: '近1年收益(%)', required: false),
       ExportFieldDefinition(id: 'remarks', label: '备注', required: false),
     ];
+  }
+
+  // ==================== 完整备份生成方法 ====================
+  
+  /// 生成完整备份CSV
+  static Future<Uint8List> _generateFullBackupCsvBytes(
+    List<FundHolding> holdings, 
+    List<TransactionRecord> transactions
+  ) async {
+    final rows = <List<String>>[];
+    
+    // 添加文件标识行
+    rows.add(['# FundLink Full Backup', 'Version: 1.1.7', 'Export Time: ${DateTime.now().toIso8601String()}']);
+    rows.add([]);
+    
+    // === 持仓数据部分 ===
+    rows.add(['=== HOLDINGS DATA ===']);
+    rows.add(_getFullBackupHoldingHeaders());
+    for (final h in holdings) {
+      rows.add(_getFullBackupHoldingRow(h));
+    }
+    rows.add([]);
+    
+    // === 交易记录部分 ===
+    rows.add(['=== TRANSACTIONS DATA ===']);
+    rows.add(_getFullBackupTransactionHeaders());
+    for (final tx in transactions) {
+      rows.add(_getFullBackupTransactionRow(tx));
+    }
+    
+    final csvString = const ListToCsvConverter().convert(rows);
+    return Uint8List.fromList(utf8.encode(csvString));
+  }
+
+  /// 生成完整备份Excel
+  static Future<Uint8List> _generateFullBackupExcelBytes(
+    List<FundHolding> holdings, 
+    List<TransactionRecord> transactions
+  ) async {
+    final excelFile = excel.Excel.createExcel();
+    
+    // === Sheet 1: 持仓数据 ===
+    final holdingsSheet = excelFile['Holdings'];
+    _writeFullBackupHoldingHeadersToSheet(holdingsSheet);
+    for (int i = 0; i < holdings.length; i++) {
+      _writeFullBackupHoldingRowToSheet(holdingsSheet, holdings[i], i + 1);
+    }
+    
+    // === Sheet 2: 交易记录 ===
+    final transactionsSheet = excelFile['Transactions'];
+    _writeFullBackupTransactionHeadersToSheet(transactionsSheet);
+    for (int i = 0; i < transactions.length; i++) {
+      _writeFullBackupTransactionRowToSheet(transactionsSheet, transactions[i], i + 1);
+    }
+    
+    final fileBytes = excelFile.encode();
+    if (fileBytes == null) {
+      throw Exception('生成 Excel 文件失败');
+    }
+    return Uint8List.fromList(fileBytes);
+  }
+
+  // ==================== CSV 辅助方法 ====================
+  
+  static List<String> _getFullBackupHoldingHeaders() {
+    return [
+      '客户姓名', '客户号', '基金代码', '基金名称',
+      '持有份额', '累计成本', '平均成本',
+      '备注', '是否置顶', '置顶时间',
+    ];
+  }
+
+  static List<String> _getFullBackupHoldingRow(FundHolding h) {
+    return [
+      h.clientName,
+      h.clientId,
+      h.fundCode,
+      h.fundName,
+      h.totalShares.toStringAsFixed(4),
+      h.totalCost.toStringAsFixed(2),
+      h.averageCost.toStringAsFixed(4),
+      h.remarks ?? '',
+      h.isPinned ? '是' : '否',
+      h.pinnedTimestamp?.toIso8601String() ?? '',
+    ];
+  }
+
+  static List<String> _getFullBackupTransactionHeaders() {
+    return [
+      '交易ID', '客户姓名', '客户号', '基金代码', '基金名称',
+      '交易类型', '金额', '份额', '交易日期',
+      '成交净值', '手续费率', '备注',
+      '创建时间', '是否15点后', '是否待确认', '确认净值',
+    ];
+  }
+
+  static List<String> _getFullBackupTransactionRow(TransactionRecord tx) {
+    return [
+      tx.id,
+      tx.clientName,
+      tx.clientId,
+      tx.fundCode,
+      tx.fundName,
+      tx.type.displayName,
+      tx.amount.toStringAsFixed(2),
+      tx.shares.toStringAsFixed(4),
+      tx.tradeDate.toIso8601String().split('T')[0],
+      tx.nav?.toStringAsFixed(4) ?? '',
+      tx.fee?.toStringAsFixed(4) ?? '',
+      tx.remarks ?? '',
+      tx.createdAt.toIso8601String(),
+      tx.isAfter1500 ? '是' : '否',
+      tx.isPending ? '是' : '否',
+      tx.confirmedNav?.toStringAsFixed(4) ?? '',
+    ];
+  }
+
+  // ==================== Excel 辅助方法 ====================
+  
+  static void _writeFullBackupHoldingHeadersToSheet(excel.Sheet sheet) {
+    final headers = _getFullBackupHoldingHeaders();
+    for (int i = 0; i < headers.length; i++) {
+      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
+      sheet.cell(cellIndex).value = excel.TextCellValue(headers[i]);
+    }
+  }
+
+  static void _writeFullBackupHoldingRowToSheet(excel.Sheet sheet, FundHolding h, int row) {
+    final values = _getFullBackupHoldingRow(h);
+    for (int i = 0; i < values.length; i++) {
+      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
+      sheet.cell(cellIndex).value = excel.TextCellValue(values[i]);
+    }
+  }
+
+  static void _writeFullBackupTransactionHeadersToSheet(excel.Sheet sheet) {
+    final headers = _getFullBackupTransactionHeaders();
+    for (int i = 0; i < headers.length; i++) {
+      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
+      sheet.cell(cellIndex).value = excel.TextCellValue(headers[i]);
+    }
+  }
+
+  static void _writeFullBackupTransactionRowToSheet(excel.Sheet sheet, TransactionRecord tx, int row) {
+    final values = _getFullBackupTransactionRow(tx);
+    for (int i = 0; i < values.length; i++) {
+      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
+      sheet.cell(cellIndex).value = excel.TextCellValue(values[i]);
+    }
   }
 }
 

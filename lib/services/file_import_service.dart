@@ -7,6 +7,30 @@ import '../models/transaction_record.dart';
 import 'package:uuid/uuid.dart';
 
 class FileImportService {
+  /// 解析完整备份文件（持仓 + 交易）
+  static Future<({
+    List<FundHolding> holdings,
+    List<TransactionRecord> transactions,
+    String version,
+    DateTime? exportTime,
+  })> parseFullBackup({
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    extension = extension.toLowerCase();
+    
+    // 智能检测文件实际格式
+    final actualFormat = detectFileFormat(bytes, extension);
+    
+    if (actualFormat == 'csv') {
+      return _parseFullBackupCsv(bytes);
+    } else if (actualFormat == 'excel') {
+      return _parseFullBackupExcel(bytes);
+    } else {
+      throw Exception('不支持的文件格式，请使用 CSV 或 Excel (.xlsx) 格式');
+    }
+  }
+  
   static Future<({List<String> headers, List<List<dynamic>> rows})> parseFile({
     required Uint8List bytes,
     required String extension,
@@ -23,6 +47,11 @@ class FileImportService {
     } else {
       throw Exception('不支持的文件格式，请上传 CSV 或 Excel 文件');
     }
+  }
+  
+  /// 检测文件实际格式（基于文件头和内容）- 公开方法
+  static String detectFileFormat(Uint8List bytes, String extension) {
+    return _detectFileFormat(bytes, extension);
   }
   
   /// 检测文件实际格式（基于文件头和内容）
@@ -277,6 +306,11 @@ class FileImportService {
     );
   }
 
+  /// 灵活解析日期 - 公开方法
+  static DateTime parseFlexibleDate(String dateStr) {
+    return _parseFlexibleDate(dateStr);
+  }
+  
   static DateTime _parseFlexibleDate(String dateStr) {
     String normalized = dateStr.replaceAll('/', '-').replaceAll('.', '-');
     final parts = normalized.split('-');
@@ -300,4 +334,364 @@ class FileImportService {
     }
     return DateTime(year, month, day);
   }
-}
+
+  // ==================== 完整备份解析方法 ====================
+  
+  /// 解析完整备份CSV
+  static Future<({
+    List<FundHolding> holdings,
+    List<TransactionRecord> transactions,
+    String version,
+    DateTime? exportTime,
+  })> _parseFullBackupCsv(Uint8List bytes) async {
+    String csvString;
+    try {
+      csvString = utf8.decode(bytes);
+    } catch (e) {
+      try {
+        csvString = latin1.decode(bytes);
+      } catch (e2) {
+        throw Exception('文件编码无法识别');
+      }
+    }
+    
+    final rows = const CsvToListConverter().convert(csvString);
+    if (rows.isEmpty) {
+      throw Exception('文件为空');
+    }
+
+    String version = 'unknown';
+    DateTime? exportTime;
+    final holdings = <FundHolding>[];
+    final transactions = <TransactionRecord>[];
+    
+    bool inHoldingsSection = false;
+    bool inTransactionsSection = false;
+    bool headersParsed = false;
+    Map<String, int>? holdingFieldMapping;
+    Map<String, int>? transactionFieldMapping;
+
+    for (int i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.isEmpty || row[0].toString().trim().isEmpty) continue;
+      
+      final firstCell = row[0].toString().trim();
+      
+      // 解析文件头信息
+      if (firstCell.startsWith('# FundLink Full Backup')) {
+        if (row.length > 1) {
+          version = row[1].toString().replaceAll('Version:', '').trim();
+        }
+        if (row.length > 2) {
+          final timeStr = row[2].toString().replaceAll('Export Time:', '').trim();
+          try {
+            exportTime = DateTime.parse(timeStr);
+          } catch (e) {
+            // 忽略时间解析错误
+          }
+        }
+        continue;
+      }
+      
+      // 检测持仓数据部分
+      if (firstCell == '=== HOLDINGS DATA ===') {
+        inHoldingsSection = true;
+        inTransactionsSection = false;
+        headersParsed = false;
+        continue;
+      }
+      
+      // 检测交易数据部分
+      if (firstCell == '=== TRANSACTIONS DATA ===') {
+        inHoldingsSection = false;
+        inTransactionsSection = true;
+        headersParsed = false;
+        continue;
+      }
+      
+      // 解析持仓数据
+      if (inHoldingsSection) {
+        if (!headersParsed) {
+          holdingFieldMapping = _buildFullBackupHoldingFieldMapping(row.map((e) => e.toString().trim()).toList());
+          headersParsed = true;
+          continue;
+        }
+        
+        try {
+          final holding = _csvRowToFullBackupHolding(row, holdingFieldMapping!);
+          holdings.add(holding);
+        } catch (e) {
+          print('跳过无效的持仓行 $i: $e');
+        }
+      }
+      
+      // 解析交易数据
+      if (inTransactionsSection) {
+        if (!headersParsed) {
+          transactionFieldMapping = _buildFullBackupTransactionFieldMapping(row.map((e) => e.toString().trim()).toList());
+          headersParsed = true;
+          continue;
+        }
+        
+        try {
+          final transaction = _csvRowToFullBackupTransaction(row, transactionFieldMapping!);
+          transactions.add(transaction);
+        } catch (e) {
+          print('跳过无效的交易行 $i: $e');
+        }
+      }
+    }
+
+    return (
+      holdings: holdings,
+      transactions: transactions,
+      version: version,
+      exportTime: exportTime,
+    );
+  }
+
+  /// 解析完整备份Excel
+  static Future<({
+    List<FundHolding> holdings,
+    List<TransactionRecord> transactions,
+    String version,
+    DateTime? exportTime,
+  })> _parseFullBackupExcel(Uint8List bytes) async {
+    final excelFile = excel.Excel.decodeBytes(bytes);
+    
+    final holdings = <FundHolding>[];
+    final transactions = <TransactionRecord>[];
+
+    // 解析持仓Sheet
+    if (excelFile.tables.containsKey('Holdings')) {
+      final sheet = excelFile.tables['Holdings'];
+      if (sheet != null && sheet.rows.length > 1) {
+        final headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
+        final fieldMapping = _buildFullBackupHoldingFieldMapping(headers);
+        
+        for (int i = 1; i < sheet.rows.length; i++) {
+          final row = sheet.rows[i].map((cell) => _getCellValue(cell)).toList();
+          try {
+            final holding = _excelRowToFullBackupHolding(row, fieldMapping);
+            holdings.add(holding);
+          } catch (e) {
+            print('跳过无效的持仓行 $i: $e');
+          }
+        }
+      }
+    }
+
+    // 解析交易Sheet
+    if (excelFile.tables.containsKey('Transactions')) {
+      final sheet = excelFile.tables['Transactions'];
+      if (sheet != null && sheet.rows.length > 1) {
+        final headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
+        final fieldMapping = _buildFullBackupTransactionFieldMapping(headers);
+        
+        for (int i = 1; i < sheet.rows.length; i++) {
+          final row = sheet.rows[i].map((cell) => _getCellValue(cell)).toList();
+          try {
+            final transaction = _excelRowToFullBackupTransaction(row, fieldMapping);
+            transactions.add(transaction);
+          } catch (e) {
+            print('跳过无效的交易行 $i: $e');
+          }
+        }
+      }
+    }
+
+    return (
+      holdings: holdings,
+      transactions: transactions,
+      version: '1.1.7',
+      exportTime: null,
+    );
+  }
+
+  // ==================== 字段映射 ====================
+  
+  static Map<String, int> _buildFullBackupHoldingFieldMapping(List<String> headers) {
+    final mapping = <String, int>{};
+    for (int i = 0; i < headers.length; i++) {
+      final header = headers[i];
+      switch (header) {
+        case '客户姓名': mapping['clientName'] = i; break;
+        case '客户号': mapping['clientId'] = i; break;
+        case '基金代码': mapping['fundCode'] = i; break;
+        case '基金名称': mapping['fundName'] = i; break;
+        case '持有份额': mapping['totalShares'] = i; break;
+        case '累计成本': mapping['totalCost'] = i; break;
+        case '平均成本': mapping['averageCost'] = i; break;
+        case '备注': mapping['remarks'] = i; break;
+        case '是否置顶': mapping['isPinned'] = i; break;
+        case '置顶时间': mapping['pinnedTimestamp'] = i; break;
+      }
+    }
+    return mapping;
+  }
+
+  static Map<String, int> _buildFullBackupTransactionFieldMapping(List<String> headers) {
+    final mapping = <String, int>{};
+    for (int i = 0; i < headers.length; i++) {
+      final header = headers[i];
+      switch (header) {
+        case '交易ID': mapping['id'] = i; break;
+        case '客户姓名': mapping['clientName'] = i; break;
+        case '客户号': mapping['clientId'] = i; break;
+        case '基金代码': mapping['fundCode'] = i; break;
+        case '基金名称': mapping['fundName'] = i; break;
+        case '交易类型': mapping['type'] = i; break;
+        case '金额': mapping['amount'] = i; break;
+        case '份额': mapping['shares'] = i; break;
+        case '交易日期': mapping['tradeDate'] = i; break;
+        case '成交净值': mapping['nav'] = i; break;
+        case '手续费率': mapping['fee'] = i; break;
+        case '备注': mapping['remarks'] = i; break;
+        case '创建时间': mapping['createdAt'] = i; break;
+        case '是否15点后': mapping['isAfter1500'] = i; break;
+        case '是否待确认': mapping['isPending'] = i; break;
+        case '确认净值': mapping['confirmedNav'] = i; break;
+      }
+    }
+    return mapping;
+  }
+
+  // ==================== CSV 转换方法 ====================
+  
+  static FundHolding _csvRowToFullBackupHolding(List<dynamic> row, Map<String, int> mapping) {
+    String getString(String fieldId) {
+      final idx = mapping[fieldId];
+      if (idx == null || idx >= row.length) return '';
+      final val = row[idx];
+      return val?.toString().trim() ?? '';
+    }
+
+    double? getDouble(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return double.tryParse(str);
+    }
+
+    DateTime? getDate(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return parseFlexibleDate(str);
+    }
+
+    final clientName = getString('clientName');
+    final clientId = getString('clientId');
+    final fundCode = getString('fundCode');
+    final fundName = getString('fundName');
+    
+    if (clientName.isEmpty || clientId.isEmpty || fundCode.isEmpty) {
+      throw Exception('持仓数据不完整');
+    }
+
+    return FundHolding(
+      clientName: clientName,
+      clientId: clientId,
+      fundCode: fundCode,
+      fundName: fundName.isNotEmpty ? fundName : '未知基金',
+      totalShares: getDouble('totalShares') ?? 0.0,
+      totalCost: getDouble('totalCost') ?? 0.0,
+      averageCost: getDouble('averageCost') ?? 0.0,
+      currentNav: 0.0, // 导入后通过API获取
+      navDate: DateTime.now(), // 导入后通过API获取
+      isValid: true,
+      remarks: getString('remarks'),
+      isPinned: getString('isPinned') == '是',
+      pinnedTimestamp: getString('pinnedTimestamp').isNotEmpty 
+          ? DateTime.tryParse(getString('pinnedTimestamp')) 
+          : null,
+      navReturn1m: null, // 导入后重新计算
+      navReturn3m: null,
+      navReturn6m: null,
+      navReturn1y: null,
+    );
+  }
+
+  static TransactionRecord _csvRowToFullBackupTransaction(List<dynamic> row, Map<String, int> mapping) {
+    String getString(String fieldId) {
+      final idx = mapping[fieldId];
+      if (idx == null || idx >= row.length) return '';
+      final val = row[idx];
+      return val?.toString().trim() ?? '';
+    }
+
+    double? getDouble(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return double.tryParse(str);
+    }
+
+    DateTime? getDate(String fieldId) {
+      final str = getString(fieldId);
+      if (str.isEmpty) return null;
+      return parseFlexibleDate(str);
+    }
+
+    final clientName = getString('clientName');
+    final clientId = getString('clientId');
+    final fundCode = getString('fundCode');
+    final fundName = getString('fundName');
+    
+    if (clientName.isEmpty || clientId.isEmpty || fundCode.isEmpty) {
+      throw Exception('交易数据不完整');
+    }
+
+    final tradeDate = getDate('tradeDate');
+    if (tradeDate == null) {
+      throw Exception('交易日期无效');
+    }
+
+    final amount = getDouble('amount');
+    if (amount == null || amount <= 0) {
+      throw Exception('交易金额无效');
+    }
+
+    final shares = getDouble('shares');
+    if (shares == null || shares <= 0) {
+      throw Exception('交易份额无效');
+    }
+
+    TransactionType type = TransactionType.buy;
+    final typeStr = getString('type');
+    if (typeStr == '卖出' || typeStr == 'SELL') {
+      type = TransactionType.sell;
+    }
+
+    // 优先使用原始ID，如果不存在则生成新ID
+    final id = getString('id');
+    final createdAt = getString('createdAt').isNotEmpty
+        ? DateTime.tryParse(getString('createdAt'))
+        : DateTime.now();
+
+    return TransactionRecord(
+      id: id.isNotEmpty ? id : const Uuid().v4(),
+      clientId: clientId,
+      clientName: clientName,
+      fundCode: fundCode,
+      fundName: fundName.isNotEmpty ? fundName : '未知基金',
+      type: type,
+      amount: amount,
+      shares: shares,
+      tradeDate: tradeDate,
+      nav: getDouble('nav'),
+      fee: getDouble('fee'),
+      remarks: getString('remarks'),
+      createdAt: createdAt ?? DateTime.now(),
+      isAfter1500: getString('isAfter1500') == '是',
+      isPending: getString('isPending') == '是',
+      confirmedNav: getDouble('confirmedNav'),
+    );
+  }
+
+  // ==================== Excel 转换方法 ====================
+  
+  static FundHolding _excelRowToFullBackupHolding(List<String> row, Map<String, int> mapping) {
+    return _csvRowToFullBackupHolding(row, mapping);
+  }
+
+  static TransactionRecord _excelRowToFullBackupTransaction(List<String> row, Map<String, int> mapping) {
+    return _csvRowToFullBackupTransaction(row, mapping);
+  }

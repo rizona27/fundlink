@@ -257,7 +257,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                     SizedBox(width: 8),
                     Text(
                       '请将左侧字段映射到文件中的对应列',
-                      style: TextStyle(fontSize: 13),
+                      style: TextStyle(fontSize: 13, color: CupertinoColors.label),
                     ),
                   ],
                 ),
@@ -378,7 +378,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                           style: TextStyle(
                             fontSize: 13,
                             color: config.mappedIndex != -1
-                                ? const Color(0xFF8B9DC3)
+                                ? (isDarkMode
+                                    ? CupertinoColors.white
+                                    : const Color(0xFF8B9DC3))
                                 : (isDarkMode
                                 ? CupertinoColors.white.withOpacity(0.8)
                                 : CupertinoColors.systemGrey),
@@ -435,8 +437,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                   }
                 },
                 children: [
-                  const Center(child: Text('不映射', style: TextStyle(color: CupertinoColors.label))),
-                  ..._headers.map((h) => Center(child: Text(h, style: TextStyle(color: CupertinoColors.label)))),
+                  const Center(child: Text('不映射', style: TextStyle(color: CupertinoColors.white))),
+                  ..._headers.map((h) => Center(child: Text(h, style: const TextStyle(color: CupertinoColors.white)))),
                 ],
               ),
             ),
