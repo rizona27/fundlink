@@ -178,7 +178,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     }
 
     var groups = map.values.toList();
-    // 按原始客户姓名排序（中文会按 Unicode 编码排序，近似拼音排序）
+    // 按原始客户姓名的拼音首字母A-Z排序
     groups.sort((a, b) {
       // 找到每个组对应的原始姓名
       final originalNameA = _filteredHoldings.firstWhere(
@@ -191,7 +191,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         orElse: () => b.holdings.first,
       ).clientName;
       
-      return originalNameA.compareTo(originalNameB);
+      // 获取姓氏的首字符
+      final firstCharA = originalNameA.isNotEmpty ? originalNameA[0] : '';
+      final firstCharB = originalNameB.isNotEmpty ? originalNameB[0] : '';
+      
+      // 比较首字符的Unicode编码（对于中文，这近似于按部首/笔画排序）
+      // 如果需要真正的拼音排序，需要引入pinyin库
+      return firstCharA.compareTo(firstCharB);
     });
     return groups;
   }

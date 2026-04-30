@@ -232,12 +232,7 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                 Positioned(
                   right: 16,
                   child: widget.trailing != null
-                      ? AnimatedOpacity(
-                          opacity: widget.isExpanded ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          child: widget.trailing!,
-                        )
+                      ? widget.trailing!
                       : (widget.subtitle != null || widget.countValue != null)
                           ? Row(
                               mainAxisSize: MainAxisSize.min,

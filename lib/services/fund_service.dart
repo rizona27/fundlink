@@ -407,13 +407,43 @@ class FundService {
 
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
-    final response = await http.get(
-      url,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://fund.eastmoney.com/',
-      },
-    ).timeout(const Duration(seconds: 15));
+    
+    // iOS优化：添加重试机制
+    http.Response? response;
+    var retryCount = 0;
+    const maxRetries = 2; // 最多重试2次
+    Exception? lastException;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        response = await http.get(
+          url,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://fund.eastmoney.com/',
+          },
+        ).timeout(const Duration(seconds: 15));
+        
+        // 如果成功，跳出重试循环
+        if (response.statusCode == 200) {
+          break;
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        retryCount++;
+        
+        if (retryCount <= maxRetries) {
+          // 指数退避：第1次等500ms，第2次等1000ms
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        }
+      }
+    }
+    
+    // 如果所有重试都失败
+    if (response == null) {
+      throw lastException ?? Exception('请求失败');
+    }
+    
     if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
     final htmlString = utf8.decode(response.bodyBytes);
     final document = html_parser.parse(htmlString);

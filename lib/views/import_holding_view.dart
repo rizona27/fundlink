@@ -380,7 +380,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                             color: config.mappedIndex != -1
                                 ? const Color(0xFF8B9DC3)
                                 : (isDarkMode
-                                ? CupertinoColors.white.withOpacity(0.5)
+                                ? CupertinoColors.white.withOpacity(0.8)
                                 : CupertinoColors.systemGrey),
                           ),
                         ),
@@ -388,7 +388,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                           CupertinoIcons.chevron_down,
                           size: 14,
                           color: isDarkMode
-                              ? CupertinoColors.white.withOpacity(0.4)
+                              ? CupertinoColors.white.withOpacity(0.7)
                               : CupertinoColors.systemGrey,
                         ),
                       ],

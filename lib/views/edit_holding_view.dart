@@ -306,7 +306,16 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('当前净值', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                            Row(
+                              children: [
+                                Text('当前净值', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
+                                if (holding.navDate != null)
+                                  Text(
+                                    ' (${holding.navDate!.month.toString().padLeft(2, '0')}-${holding.navDate!.day.toString().padLeft(2, '0')})',
+                                    style: TextStyle(fontSize: 11, color: secondaryTextColor),
+                                  ),
+                              ],
+                            ),
                             const SizedBox(height: 4),
                             Text(holding.currentNav.toStringAsFixed(4), 
                                 style: TextStyle(fontSize: 13, color: textColor)),

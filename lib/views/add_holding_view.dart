@@ -915,9 +915,15 @@ class _AddHoldingViewState extends State<AddHoldingView> {
 
     return CupertinoPageScaffold(
       child: SafeArea(
-        child: _isSaving
-            ? const Center(child: CupertinoActivityIndicator(radius: 20))
-            : SingleChildScrollView(
+        child: GestureDetector(
+          onTap: () {
+            // 点击外部时收起键盘
+            FocusScope.of(context).unfocus();
+          },
+          behavior: HitTestBehavior.translucent,
+          child: _isSaving
+              ? const Center(child: CupertinoActivityIndicator(radius: 20))
+              : SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -956,6 +962,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                           inputBgColor: inputBgColor,
                           textColor: textColor,
                           placeholderColor: placeholderColor,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
                         ),
                         if (_fundName.isNotEmpty) ...[
                           const SizedBox(height: 8),
@@ -1226,6 +1234,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -1322,6 +1331,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     bool error = false,
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
+    TextInputType? keyboardType,
   }) {
     Color bottomBorderColor;
     if (error) {
@@ -1347,6 +1357,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         controller: controller,
         placeholder: hint,
         onChanged: onChanged,
+        keyboardType: keyboardType,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         style: TextStyle(color: textColor),
         placeholderStyle: TextStyle(color: placeholderColor),
