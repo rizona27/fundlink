@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
@@ -25,15 +26,23 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   int _dataVersion = 0;
   double _scrollOffset = 0;
   final ScrollController _scrollController = ScrollController();
+  Timer? _scrollThrottleTimer;
 
   final TextEditingController _renameController = TextEditingController();
 
   void _onScrollUpdate(double offset) {
-    if (mounted && _scrollOffset != offset) {
-      setState(() {
-        _scrollOffset = offset;
-      });
+    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
+      return;
     }
+    // 优化：增加节流时间到16ms（约60fps），减少setState频率
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
+      if (mounted && _scrollOffset != offset) {
+        setState(() {
+          _scrollOffset = offset;
+        });
+      }
+      _scrollThrottleTimer = null;
+    });
   }
 
   @override
@@ -56,6 +65,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     _renameController.dispose();
     _scrollController.dispose();
@@ -360,98 +370,107 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                     titleFontWeight: FontWeight.normal,
                     titleFontSize: 18,
                   )
-                      : ListView.builder(
+                      : CustomScrollView(
                     controller: _scrollController,
-                    key: ValueKey(_dataVersion),
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-                    itemCount: _sortedKeys.length,
-                    cacheExtent: 500,
-                    itemBuilder: (context, index) {
-                      final key = _sortedKeys[index];
-                      final holdings = _filteredGroupedHoldings[key];
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final key = _sortedKeys[index];
+                              final holdings = _filteredGroupedHoldings[key];
 
-                      if (holdings == null || holdings.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
+                              if (holdings == null || holdings.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
 
-                      final isExpanded = _expandedClients.contains(key);
-                      final gradientColor = _getClientColor(holdings.first.clientName);
-                      final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
-                      final bool isLastClient = index == _sortedKeys.length - 1;
+                              final isExpanded = _expandedClients.contains(key);
+                              final gradientColor = _getClientColor(holdings.first.clientName);
+                              final gradient = [gradientColor, isDarkMode ? CupertinoColors.systemBackground : CupertinoColors.white];
+                              final bool isLastClient = index == _sortedKeys.length - 1;
 
-                      return Column(
-                        children: [
-                          GradientCard(
-                            title: _getClientName(key),
-                            clientId: _getClientId(key),
-                            subtitle: '持仓数:',
-                            countValue: holdings.length,
-                            gradient: gradient,
-                            isExpanded: isExpanded,
-                            isDarkMode: isDarkMode,
-                            onTap: () {
-                              setState(() {
-                                if (isExpanded) {
-                                  _expandedClients.remove(key);
-                                } else {
-                                  _expandedClients.add(key);
-                                  
-                                  // 只有当展开的是最后一个客户卡片时，才滚动到底部
-                                  final sortedKeys = _sortedKeys;
-                                  if (sortedKeys.isNotEmpty && key == sortedKeys.last) {
-                                    Future.delayed(const Duration(milliseconds: 100), () {
-                                      _scrollToBottom();
-                                    });
-                                  }
-                                }
-                              });
+                              return Column(
+                                children: [
+                                  GradientCard(
+                                    title: _getClientName(key),
+                                    clientId: _getClientId(key),
+                                    subtitle: '持仓数:',
+                                    countValue: holdings.length,
+                                    gradient: gradient,
+                                    isExpanded: isExpanded,
+                                    isDarkMode: isDarkMode,
+                                    onTap: () {
+                                      setState(() {
+                                        if (isExpanded) {
+                                          _expandedClients.remove(key);
+                                        } else {
+                                          _expandedClients.add(key);
+                                          
+                                          // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                                          final sortedKeys = _sortedKeys;
+                                          if (sortedKeys.isNotEmpty && key == sortedKeys.last) {
+                                            Future.delayed(const Duration(milliseconds: 100), () {
+                                              _scrollToBottom();
+                                            });
+                                          }
+                                        }
+                                      });
+                                    },
+                                    trailing: isExpanded
+                                        ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CupertinoButton(
+                                          padding: EdgeInsets.zero,
+                                          minSize: 0,
+                                          onPressed: () => _showRenameDialog(key),
+                                          child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        CupertinoButton(
+                                          padding: EdgeInsets.zero,
+                                          minSize: 0,
+                                          onPressed: () => _showDeleteClientDialog(key),
+                                          child: Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
+                                        ),
+                                      ],
+                                    )
+                                        : null,
+                                  ),
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                    child: isExpanded
+                                        ? Container(
+                                      margin: const EdgeInsets.only(left: 16, top: 8),
+                                      child: Column(
+                                        children: holdings.asMap().entries.map((entry) {
+                                          final holding = entry.value;
+                                          final cardIndex = entry.key;
+                                          return RepaintBoundary(
+                                            child: Column(
+                                              key: ValueKey('holding_${holding.id}'),
+                                              children: [
+                                                _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor, isDarkMode),
+                                                if (cardIndex < holdings.length - 1) const SizedBox(height: 4),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    )
+                                        : const SizedBox.shrink(),
+                                  ),
+                                  SizedBox(height: isLastClient ? 0 : 8),
+                                ],
+                              );
                             },
-                            trailing: isExpanded
-                                ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CupertinoButton(
-                                  padding: EdgeInsets.zero,
-                                  minSize: 0,
-                                  onPressed: () => _showRenameDialog(key),
-                                  child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
-                                ),
-                                const SizedBox(width: 12),
-                                CupertinoButton(
-                                  padding: EdgeInsets.zero,
-                                  minSize: 0,
-                                  onPressed: () => _showDeleteClientDialog(key),
-                                  child: Text('删除', style: TextStyle(fontSize: 12, color: CupertinoColors.systemRed)),
-                                ),
-                              ],
-                            )
-                                : null,
+                            childCount: _sortedKeys.length,
                           ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeOutCubic,
-                            child: isExpanded
-                                ? Container(
-                              margin: const EdgeInsets.only(left: 16, top: 8),
-                              child: Column(
-                                children: holdings.asMap().entries.map((entry) {
-                                  final holding = entry.value;
-                                  final cardIndex = entry.key;
-                                  return Column(
-                                    children: [
-                                      _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor, isDarkMode),
-                                      if (cardIndex < holdings.length - 1) const SizedBox(height: 4),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
-                            )
-                                : const SizedBox.shrink(),
-                          ),
-                          SizedBox(height: isLastClient ? 0 : 8),
-                        ],
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

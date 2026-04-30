@@ -5,10 +5,11 @@ import '../widgets/adaptive_top_bar.dart';
 
 // ==================== 版本信息配置区 ====================
 /// 应用版本号
-const String APP_VERSION = 'v1.1.5';
+const String APP_VERSION = 'v1.1.6';
 
 /// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
+  'v1.1.6 - 编辑持仓列表性能优化，客户排序优化，深色模式可见性改进',
   'v1.1.5 - iOS端插件引用及请求并发优化，修改了部分UI',
   'v1.1.4 - 文件导入兼容性改进，智能格式检测',
   'v1.1.3 - 优化交易记录编辑体验，精简代码结构',
