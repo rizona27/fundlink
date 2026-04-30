@@ -5,10 +5,11 @@ import '../widgets/adaptive_top_bar.dart';
 
 // ==================== 版本信息配置区 ====================
 /// 应用版本号
-const String APP_VERSION = 'v1.1.6';
+const String APP_VERSION = 'v1.1.7';
 
 /// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
+  'v1.1.7 - 优化十大重仓股布局，新增股票K线蜡烛图功能，支持查看历史数据',
   'v1.1.6 - 编辑持仓列表性能优化，客户排序优化，深色模式可见性改进',
   'v1.1.5 - iOS端插件引用及请求并发优化，修改了部分UI',
   'v1.1.4 - 文件导入兼容性改进，智能格式检测',
@@ -29,7 +30,7 @@ const List<String> UPDATE_LOGS = [
 ];
 
 /// 致谢信息
-const String ACKNOWLEDGMENT_LINE_1 = '感谢参与测试的小伙伴：miner2011m、qiu_kw、naniezy、leo_pengtao';
+const String ACKNOWLEDGMENT_LINE_1 = '感谢参与测试的小伙伴：miner2011m、qiu_kw、naniezy、leo_pengtao、JMW0802、yizhixiaozhuti';
 const String ACKNOWLEDGMENT_LINE_2 = '愿大家一基暴富～！';
 // ======================================================
 

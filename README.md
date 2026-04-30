@@ -94,8 +94,12 @@ lib/
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
     ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
     ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
+    ├── stock_candle_chart.dart            # 股票K线蜡烛图组件，支持日K/周K/月K切换，拖动查看历史数据，十字线交互，动态Y轴刻度
+    ├── stock_chart_widget.dart            # 股票图表容器组件，封装K线图和成交量图的组合显示
+    ├── stock_detail_dialog.dart           # 股票详情弹窗组件，显示实时行情、价格呼吸动画、K线图，支持交易时间自动刷新
     ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关，浅色/跟随系统/深色
     ├── toast.dart                         # Toast提示组件，全局消息提示，淡入淡出动画，自动消失
+    ├── top_holdings_widget.dart           # 前十大重仓股展示组件，左右分栏布局，显示股票名称、涨跌幅、占比、市场标识
     └── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
 ```
 

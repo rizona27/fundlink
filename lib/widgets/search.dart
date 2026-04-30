@@ -71,9 +71,12 @@ class Search extends StatelessWidget {
               onChanged: onChanged,
               onSuffixTap: () {
                 controller.clear();
-                onClear();
-                onChanged('');
                 focusNode.requestFocus();
+                // 使用微任务确保清除操作完成后再通知父组件
+                Future.microtask(() {
+                  onClear();
+                  onChanged('');
+                });
               },
             ),
           ),
