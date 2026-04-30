@@ -28,6 +28,7 @@ dependencies:
   mime: ^1.0.0
   file_save_directory: ^1.0.0
   world_holidays: ^2.0.1
+  pinyin: ^3.3.0
 
 dev_dependencies:
   flutter_test:

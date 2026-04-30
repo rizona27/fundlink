@@ -435,8 +435,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                   }
                 },
                 children: [
-                  const Center(child: Text('不映射')),
-                  ..._headers.map((h) => Center(child: Text(h))),
+                  const Center(child: Text('不映射', style: TextStyle(color: CupertinoColors.label))),
+                  ..._headers.map((h) => Center(child: Text(h, style: TextStyle(color: CupertinoColors.label)))),
                 ],
               ),
             ),

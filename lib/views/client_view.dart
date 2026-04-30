@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
+import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -191,13 +192,29 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         orElse: () => b.holdings.first,
       ).clientName;
       
-      // 获取姓氏的首字符
-      final firstCharA = originalNameA.isNotEmpty ? originalNameA[0] : '';
-      final firstCharB = originalNameB.isNotEmpty ? originalNameB[0] : '';
+      // 获取姓氏的拼音首字母
+      String pinyinA = '';
+      if (originalNameA.isNotEmpty) {
+        try {
+          final firstCharPinyin = PinyinHelper.getPinyinE(originalNameA[0]);
+          pinyinA = firstCharPinyin.isNotEmpty ? firstCharPinyin[0].toUpperCase() : '';
+        } catch (e) {
+          pinyinA = originalNameA[0];
+        }
+      }
       
-      // 比较首字符的Unicode编码（对于中文，这近似于按部首/笔画排序）
-      // 如果需要真正的拼音排序，需要引入pinyin库
-      return firstCharA.compareTo(firstCharB);
+      String pinyinB = '';
+      if (originalNameB.isNotEmpty) {
+        try {
+          final firstCharPinyin = PinyinHelper.getPinyinE(originalNameB[0]);
+          pinyinB = firstCharPinyin.isNotEmpty ? firstCharPinyin[0].toUpperCase() : '';
+        } catch (e) {
+          pinyinB = originalNameB[0];
+        }
+      }
+      
+      // 比较拼音首字母
+      return pinyinA.compareTo(pinyinB);
     });
     return groups;
   }

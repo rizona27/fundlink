@@ -28,6 +28,14 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   final TextEditingController _renameController = TextEditingController();
 
+  void _onScrollUpdate(double offset) {
+    if (mounted && _scrollOffset != offset) {
+      setState(() {
+        _scrollOffset = offset;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -305,9 +313,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is ScrollUpdateNotification) {
-                setState(() {
-                  _scrollOffset = notification.metrics.pixels;
-                });
+                _onScrollUpdate(notification.metrics.pixels);
               }
               return false;
             },
@@ -343,6 +349,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                   iconSize: 24,
                   buttonSpacing: 12,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  useMenuStyle: true,
                 ),
                 Expanded(
                   child: !hasData
@@ -432,7 +439,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                   final cardIndex = entry.key;
                                   return Column(
                                     children: [
-                                      _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor),
+                                      _buildHoldingCard(holding, cardBackgroundColor, textColor, secondaryTextColor, isDarkMode),
                                       if (cardIndex < holdings.length - 1) const SizedBox(height: 4),
                                     ],
                                   );
@@ -455,7 +462,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     );
   }
 
-  Widget _buildHoldingCard(FundHolding holding, Color cardBackgroundColor, Color textColor, Color secondaryTextColor) {
+  Widget _buildHoldingCard(FundHolding holding, Color cardBackgroundColor, Color textColor, Color secondaryTextColor, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -507,7 +514,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                     ),
                   );
                 },
-                child: const Icon(CupertinoIcons.pencil, size: 18),
+                child: Icon(CupertinoIcons.pencil, size: 18, color: isDarkMode ? CupertinoColors.activeBlue : CupertinoColors.activeBlue),
               ),
               const SizedBox(width: 12),
               CupertinoButton(

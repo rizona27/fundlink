@@ -616,7 +616,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   child: Icon(
                     CupertinoIcons.pencil,
                     size: 18,
-                    color: CupertinoColors.systemBlue,
+                    color: isDarkMode ? CupertinoColors.activeBlue : CupertinoColors.systemBlue,
                   ),
                 ),
                 const SizedBox(width: 8),
