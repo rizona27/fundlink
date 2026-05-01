@@ -14,6 +14,7 @@ import '../widgets/toast.dart';
 import '../widgets/fund_performance_dialog.dart';
 import 'add_holding_view.dart';
 import 'fund_detail_view.dart';
+import '../constants/app_constants.dart';
 
 class SummaryView extends StatefulWidget {
   const SummaryView({super.key});
@@ -122,9 +123,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   @override
   bool get wantKeepAlive => true;
 
-  static const String _keySortKey = 'summary_sort_key';
-  static const String _keySortOrder = 'summary_sort_order';
-  static const String _keyExpandedFunds = 'summary_expanded_funds'; 
+  static const String _keySortKey = AppConstants.keySortKey;
+  static const String _keySortOrder = AppConstants.keySortOrder;
+  static const String _keyExpandedFunds = AppConstants.keyExpandedFunds; 
 
   @override
   void initState() {

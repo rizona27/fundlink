@@ -14,6 +14,7 @@ import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import 'add_holding_view.dart';
+import '../constants/app_constants.dart';
 
 class _ClientGroup {
   final String key;
@@ -53,8 +54,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   bool get wantKeepAlive => true;
 
-  static const String _keyExpandedClients = 'clientview_expanded_clients';
-  static const String _keyPinnedSectionExpanded = 'clientview_pinned_section_expanded';
+  static const String _keyExpandedClients = AppConstants.keyExpandedClients;
+  static const String _keyPinnedSectionExpanded = AppConstants.keyPinnedSectionExpanded;
 
   @override
   void initState() {

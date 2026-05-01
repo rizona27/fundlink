@@ -11,6 +11,7 @@ import '../models/fund_info_cache.dart';
 import '../services/fund_service.dart';
 import '../services/china_trading_day_service.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
+import '../constants/app_constants.dart';
 
 extension ThemeModeDisplayName on ThemeMode {
   String get displayName {
@@ -26,16 +27,7 @@ extension ThemeModeDisplayName on ThemeMode {
 }
 
 class DataManager extends ChangeNotifier {
-  static const String _holdingsKey = 'fund_holdings';
-  static const String _transactionsKey = 'fund_transactions';
-  static const String _logsKey = 'logs';
-  static const String _privacyModeKey = 'privacy_mode';
-  static const String _themeModeKey = 'theme_mode';
-  static const String _valuationCacheKey = 'valuation_cache';
-  static const String _showHoldersOnSummaryCardKey = 'show_holders_on_summary_card';
-  static const String _fundInfoCacheKey = 'fund_info_cache';
-  static const int _valuationCacheValidSeconds = 180;
-  static const int _fundInfoCacheValidDays = 7;
+  // SharedPreferences Keys are now in AppConstants
 
   List<FundHolding> _holdings = [];
   List<TransactionRecord> _transactions = [];
@@ -57,7 +49,15 @@ class DataManager extends ChangeNotifier {
   
   final Map<String, ProfitResult> _profitCache = {};
   final Map<String, List<TransactionRecord>> _transactionHistoryCache = {};
-  static const int _maxCacheSize = 500; 
+  
+  // Helper to clear related caches automatically
+  void _clearRelatedCaches(String clientId, String fundCode) {
+    final cacheKey = '${clientId}_$fundCode';
+    _transactionHistoryCache.remove(cacheKey);
+    
+    // Clear profit cache for this specific holding
+    _profitCache.removeWhere((key, value) => key.startsWith('${clientId}_$fundCode'));
+  }
 
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<TransactionRecord> get transactions => List.unmodifiable(_transactions);
@@ -75,7 +75,7 @@ class DataManager extends ChangeNotifier {
     if (cached == null) return null;
     
     final now = DateTime.now();
-    if (now.difference(cached.cacheTime).inDays > _fundInfoCacheValidDays) {
+    if (now.difference(cached.cacheTime).inDays > AppConstants.fundInfoCacheValidDays) {
       _fundInfoCache.remove(fundCode);
       return null;
     }
@@ -101,44 +101,48 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final holdingsJson = prefs.getStringList(_holdingsKey);
-    if (holdingsJson != null) {
-      _holdings = holdingsJson
-          .map((json) => FundHolding.fromJson(jsonDecode(json)))
-          .toList();
+      final holdingsJson = prefs.getStringList(AppConstants.keyHoldings);
+      if (holdingsJson != null) {
+        _holdings = holdingsJson
+            .map((json) => FundHolding.fromJson(jsonDecode(json)))
+            .toList();
+      }
+
+      final transactionsJson = prefs.getStringList(AppConstants.keyTransactions);
+      if (transactionsJson != null) {
+        _transactions = transactionsJson
+            .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
+            .toList();
+      }
+
+      final logsJson = prefs.getStringList(AppConstants.keyLogs);
+      if (logsJson != null) {
+        _logs = logsJson
+            .map((json) => LogEntry.fromJson(jsonDecode(json)))
+            .toList();
+      }
+
+      _isPrivacyMode = prefs.getBool(AppConstants.keyPrivacyMode) ?? true;
+
+      final themeModeString = prefs.getString(AppConstants.keyThemeMode);
+      if (themeModeString != null) {
+        _themeMode = _parseThemeMode(themeModeString);
+      } else {
+        _themeMode = ThemeMode.system;
+      }
+
+      _showHoldersOnSummaryCard = prefs.getBool(AppConstants.keyShowHoldersOnSummaryCard) ?? true;
+
+      await loadValuationCache();
+      await loadFundInfoCache();
+
+      notifyListeners();
+    } catch (e) {
+      await addLog('数据加载异常: $e', type: LogType.error);
     }
-
-    final transactionsJson = prefs.getStringList(_transactionsKey);
-    if (transactionsJson != null) {
-      _transactions = transactionsJson
-          .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
-          .toList();
-    }
-
-    final logsJson = prefs.getStringList(_logsKey);
-    if (logsJson != null) {
-      _logs = logsJson
-          .map((json) => LogEntry.fromJson(jsonDecode(json)))
-          .toList();
-    }
-
-    _isPrivacyMode = prefs.getBool(_privacyModeKey) ?? true;
-
-    final themeModeString = prefs.getString(_themeModeKey);
-    if (themeModeString != null) {
-      _themeMode = _parseThemeMode(themeModeString);
-    } else {
-      _themeMode = ThemeMode.system;
-    }
-
-    _showHoldersOnSummaryCard = prefs.getBool(_showHoldersOnSummaryCardKey) ?? true;
-
-    await loadValuationCache();
-    await loadFundInfoCache();
-
-    notifyListeners();
   }
 
   ThemeMode _parseThemeMode(String value) {
@@ -164,66 +168,80 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> saveData() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final holdingsJson = _holdings
-        .map((holding) => jsonEncode(holding.toJson()))
-        .toList();
-    await prefs.setStringList(_holdingsKey, holdingsJson);
+      final holdingsJson = _holdings
+          .map((holding) => jsonEncode(holding.toJson()))
+          .toList();
+      await prefs.setStringList(AppConstants.keyHoldings, holdingsJson);
 
-    final transactionsJson = _transactions
-        .map((tx) => jsonEncode(tx.toJson()))
-        .toList();
-    await prefs.setStringList(_transactionsKey, transactionsJson);
+      final transactionsJson = _transactions
+          .map((tx) => jsonEncode(tx.toJson()))
+          .toList();
+      await prefs.setStringList(AppConstants.keyTransactions, transactionsJson);
 
-    final logsJson = _logs
-        .take(100)
-        .map((log) => jsonEncode(log.toJson()))
-        .toList();
-    await prefs.setStringList(_logsKey, logsJson);
+      final logsJson = _logs
+          .take(AppConstants.maxLogEntries)
+          .map((log) => jsonEncode(log.toJson()))
+          .toList();
+      await prefs.setStringList(AppConstants.keyLogs, logsJson);
 
-    await prefs.setBool(_privacyModeKey, _isPrivacyMode);
-    await prefs.setString(_themeModeKey, _themeModeToString(_themeMode));
-    await prefs.setBool(_showHoldersOnSummaryCardKey, _showHoldersOnSummaryCard);
+      await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
+      await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
+      await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
+    } catch (e) {
+      await addLog('数据保存异常: $e', type: LogType.error);
+    }
   }
 
   Future<void> loadValuationCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_valuationCacheKey);
-    if (jsonStr != null) {
-      try {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(AppConstants.keyValuationCache);
+      if (jsonStr != null) {
         final Map<String, dynamic> raw = jsonDecode(jsonStr);
         _valuationCache = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
-      } catch (e) {
       }
+    } catch (e) {
+      // Ignore cache corruption
     }
   }
 
   Future<void> saveValuationCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_valuationCacheKey, jsonEncode(_valuationCache));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(AppConstants.keyValuationCache, jsonEncode(_valuationCache));
+    } catch (e) {
+      // Ignore save error
+    }
   }
 
   Future<void> loadFundInfoCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_fundInfoCacheKey);
-    if (jsonStr != null) {
-      try {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(AppConstants.keyFundInfoCache);
+      if (jsonStr != null) {
         final List<dynamic> rawList = jsonDecode(jsonStr);
         _fundInfoCache = {};
         for (final raw in rawList) {
           final fundInfo = FundInfoCache.fromJson(Map<String, dynamic>.from(raw));
           _fundInfoCache[fundInfo.fundCode] = fundInfo;
         }
-      } catch (e) {
       }
+    } catch (e) {
+      // Ignore cache corruption
     }
   }
 
   Future<void> saveFundInfoCacheToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cacheList = _fundInfoCache.values.map((info) => info.toJson()).toList();
-    await prefs.setString(_fundInfoCacheKey, jsonEncode(cacheList));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheList = _fundInfoCache.values.map((info) => info.toJson()).toList();
+      await prefs.setString(AppConstants.keyFundInfoCache, jsonEncode(cacheList));
+    } catch (e) {
+      // Ignore save error
+    }
   }
 
   Map<String, dynamic>? getValuation(String fundCode) {
@@ -231,7 +249,7 @@ class DataManager extends ChangeNotifier {
     if (cached == null) return null;
     final cacheTime = DateTime.tryParse(cached['cacheTime'] ?? '');
     if (cacheTime == null) return null;
-    if (DateTime.now().difference(cacheTime).inSeconds > _valuationCacheValidSeconds) {
+    if (DateTime.now().difference(cacheTime).inSeconds > AppConstants.valuationCacheValidSeconds) {
       return null;
     }
     return {
@@ -417,8 +435,8 @@ class DataManager extends ChangeNotifier {
 
     _transactions = [..._transactions, transaction];
     
-    final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
-    _transactionHistoryCache.remove(cacheKey);
+    // Automatic cache invalidation
+    _clearRelatedCaches(transaction.clientId, transaction.fundCode);
 
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
@@ -491,7 +509,7 @@ class DataManager extends ChangeNotifier {
         .toList()
       ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate));
     
-    if (_transactionHistoryCache.length >= _maxCacheSize) {
+    if (_transactionHistoryCache.length >= AppConstants.maxCacheSize) {
       final oldestKey = _transactionHistoryCache.keys.first;
       _transactionHistoryCache.remove(oldestKey);
     }
@@ -510,8 +528,8 @@ class DataManager extends ChangeNotifier {
     final transaction = _transactions[index];
     _transactions = List.from(_transactions)..removeAt(index);
     
-    final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
-    _transactionHistoryCache.remove(cacheKey);
+    // Automatic cache invalidation
+    _clearRelatedCaches(transaction.clientId, transaction.fundCode);
 
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
@@ -816,7 +834,7 @@ class DataManager extends ChangeNotifier {
     final annualizedReturn = (absoluteProfit / holding.totalCost) / days * 365 * 100;
     final result = ProfitResult(absolute: absoluteProfit, annualized: annualizedReturn);
     
-    if (_profitCache.length >= _maxCacheSize) {
+    if (_profitCache.length >= AppConstants.maxCacheSize) {
       final oldestKey = _profitCache.keys.first;
       _profitCache.remove(oldestKey);
     }
@@ -845,57 +863,65 @@ class DataManager extends ChangeNotifier {
   }
   
   Future<void> confirmPendingTransaction(String transactionId, double confirmedNav) async {
-    final index = _transactions.indexWhere((tx) => tx.id == transactionId);
-    if (index == -1) {
-      throw Exception('交易记录不存在');
-    }
-    
-    final transaction = _transactions[index];
-    if (!transaction.isPending) {
-      throw Exception('该交易已经确认');
-    }
-    
-    double calculatedShares = transaction.shares;
-    double calculatedAmount = transaction.amount;
-    
-    if (transaction.type == TransactionType.buy) {
-      if (transaction.shares <= 0 && transaction.amount > 0 && confirmedNav > 0) {
-        final feeRate = transaction.fee ?? 0.0; 
-        calculatedShares = transaction.amount / (1 + feeRate / 100) / confirmedNav;
+    try {
+      final index = _transactions.indexWhere((tx) => tx.id == transactionId);
+      if (index == -1) {
+        throw Exception('交易记录不存在');
       }
-    } else {
-      if (transaction.amount <= 0 && transaction.shares > 0 && confirmedNav > 0) {
-        final feeRate = transaction.fee ?? 0.0; 
-        calculatedAmount = transaction.shares * confirmedNav * (1 - feeRate / 100);
+      
+      final transaction = _transactions[index];
+      if (!transaction.isPending) {
+        throw Exception('该交易已经确认');
       }
+      
+      double calculatedShares = transaction.shares;
+      double calculatedAmount = transaction.amount;
+      
+      if (transaction.type == TransactionType.buy) {
+        if (transaction.shares <= 0 && transaction.amount > 0 && confirmedNav > 0) {
+          final feeRate = transaction.fee ?? 0.0; 
+          calculatedShares = transaction.amount / (1 + feeRate / 100) / confirmedNav;
+        }
+      } else {
+        if (transaction.amount <= 0 && transaction.shares > 0 && confirmedNav > 0) {
+          final feeRate = transaction.fee ?? 0.0; 
+          calculatedAmount = transaction.shares * confirmedNav * (1 - feeRate / 100);
+        }
+      }
+      
+      final updatedTransaction = transaction.copyWith(
+        isPending: false,
+        confirmedNav: confirmedNav,
+        shares: calculatedShares,
+        amount: calculatedAmount,
+      );
+      
+      _transactions[index] = updatedTransaction;
+      
+      // Automatic cache invalidation
+      _clearRelatedCaches(transaction.clientId, transaction.fundCode);
+      
+      await _rebuildHolding(transaction.clientId, transaction.fundCode);
+      
+      await saveData();
+      
+      final confirmDate = DateTime.now();
+      await addLog(
+        '✅ 确认交易: ${transaction.fundName}(${transaction.fundCode})\n'
+        '客户: ${transaction.clientName}(${transaction.clientId})\n'
+        '类型: ${transaction.type.displayName}\n'
+        '交易日期: ${transaction.tradeDate.year}-${transaction.tradeDate.month.toString().padLeft(2, '0')}-${transaction.tradeDate.day.toString().padLeft(2, '0')}\n'
+        '金额: ${calculatedAmount.toStringAsFixed(2)}元 | 份额: ${calculatedShares.toStringAsFixed(2)}份\n'
+        '确认净值: $confirmedNav\n'
+        '确认时间: ${confirmDate.year}-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')} ${confirmDate.hour.toString().padLeft(2, '0')}:${confirmDate.minute.toString().padLeft(2, '0')}',
+        type: LogType.success,
+      );
+      
+      notifyListeners();
+    } catch (e) {
+      await addLog('确认交易异常: $e', type: LogType.error);
+      rethrow;
     }
-    
-    final updatedTransaction = transaction.copyWith(
-      isPending: false,
-      confirmedNav: confirmedNav,
-      shares: calculatedShares,
-      amount: calculatedAmount,
-    );
-    
-    _transactions[index] = updatedTransaction;
-    
-    await _rebuildHolding(transaction.clientId, transaction.fundCode);
-    
-    await saveData();
-    
-    final confirmDate = DateTime.now();
-    await addLog(
-      '✅ 确认交易: ${transaction.fundName}(${transaction.fundCode})\n'
-      '客户: ${transaction.clientName}(${transaction.clientId})\n'
-      '类型: ${transaction.type.displayName}\n'
-      '交易日期: ${transaction.tradeDate.year}-${transaction.tradeDate.month.toString().padLeft(2, '0')}-${transaction.tradeDate.day.toString().padLeft(2, '0')}\n'
-      '金额: ${calculatedAmount.toStringAsFixed(2)}元 | 份额: ${calculatedShares.toStringAsFixed(2)}份\n'
-      '确认净值: $confirmedNav\n'
-      '确认时间: ${confirmDate.year}-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')} ${confirmDate.hour.toString().padLeft(2, '0')}:${confirmDate.minute.toString().padLeft(2, '0')}',
-      type: LogType.success,
-    );
-    
-    notifyListeners();
   }
   
   Future<int> autoConfirmPendingTransactions(FundService fundService) async {

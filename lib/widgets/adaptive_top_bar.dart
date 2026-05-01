@@ -11,6 +11,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
+import '../constants/app_constants.dart';
 
 enum SortCycleType {
   fundReturns,
@@ -413,12 +414,19 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   void _onSearchChanged(String value) {
+    // Implement debounce logic
     if (_externallyControlSearchText) {
       widget.onSearchChanged?.call(value);
     } else {
       setState(() => _internalSearchText = value);
-      widget.onSearchChanged?.call(value);
     }
+    
+    // Reset timer
+    _autoCloseTimer?.cancel();
+    _autoCloseTimer = Timer(AppConstants.searchDebounceDuration, () {
+      widget.onSearchChanged?.call(_currentSearchText);
+    });
+    
     _resetAutoCloseTimer();
   }
 

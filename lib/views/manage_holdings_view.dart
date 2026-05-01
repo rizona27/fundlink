@@ -10,6 +10,7 @@ import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/empty_state.dart';
 import 'edit_holding_view.dart';
+import '../widgets/batch_rename_dialog.dart';
 
 class ManageHoldingsView extends StatefulWidget {
   const ManageHoldingsView({super.key});
@@ -27,8 +28,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   double _scrollOffset = 0;
   final ScrollController _scrollController = ScrollController();
   Timer? _scrollThrottleTimer;
-
-  final TextEditingController _renameController = TextEditingController();
 
   void _onScrollUpdate(double offset) {
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
@@ -66,7 +65,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   void dispose() {
     _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
-    _renameController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -184,6 +182,25 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     context.showToast('已修改 ${holdings.length} 条记录');
   }
 
+  void _navigateToBatchRename(String key) {
+    final holdings = _groupedHoldings[key] ?? [];
+    if (holdings.isEmpty) return;
+
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => BatchRenameDialog(
+        clientKey: key,
+        currentName: holdings.first.clientName,
+        holdings: holdings,
+      ),
+    ).then((result) {
+      if (result == true && mounted) {
+        setState(() {});
+      }
+    });
+  }
+
   Future<void> _deleteClient(String key) async {
     final holdings = _groupedHoldings[key] ?? [];
     for (final holding in holdings) {
@@ -204,54 +221,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     }
   }
 
-  void _showRenameDialog(String key) {
-    final parts = key.split('|');
-    final oldName = parts[0];
-    _renameController.text = oldName;
-
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: null,
-        content: Container(
-          width: 280,
-          child: Row(
-            children: [
-              const Text('批量重命名: '),
-              Expanded(
-                child: CupertinoTextField(
-                  controller: _renameController,
-                  placeholder: '请输入新客户姓名',
-                  autofocus: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () {
-              final newName = _renameController.text.trim();
-              if (newName.isNotEmpty && newName != oldName) {
-                _renameClient(key, newName);
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showDeleteClientDialog(String key) {
     final displayName = _getDisplayName(key);
     showCupertinoDialog(
       context: context,
+      barrierDismissible: true,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('确认删除'),
         content: Text('确定要删除客户 "$displayName" 的所有持仓吗？此操作不可撤销。'),
@@ -276,6 +250,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   void _showDeleteHoldingDialog(FundHolding holding) {
     showCupertinoDialog(
       context: context,
+      barrierDismissible: true,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('确认删除'),
         content: Text('确定要删除基金 "${holding.fundName}" 吗？此操作不可撤销。'),
@@ -419,8 +394,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                         CupertinoButton(
                                           padding: EdgeInsets.zero,
                                           minSize: 0,
-                                          onPressed: () => _showRenameDialog(key),
-                                          child: Text('改名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
+                                          onPressed: () => _navigateToBatchRename(key),
+                                          child: Text('批量重命名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
                                         ),
                                         const SizedBox(width: 12),
                                         CupertinoButton(

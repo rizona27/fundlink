@@ -11,6 +11,7 @@ import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
 import 'views/splash_view.dart';
+import 'constants/app_constants.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,10 +41,14 @@ Future<void> _requestPermissionsOnStart() async {
     }
 
     if (status.isGranted) {
+      debugPrint('Storage permission granted');
     } else if (status.isPermanentlyDenied) {
+      debugPrint('Storage permission permanently denied');
     } else {
+      debugPrint('Storage permission denied');
     }
   } catch (e) {
+    debugPrint('Permission request error: $e');
   }
 }
 

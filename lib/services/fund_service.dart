@@ -10,6 +10,7 @@ import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
 import '../models/fund_info_cache.dart';
 import 'data_manager.dart';
+import '../constants/app_constants.dart';
 
 class FundService {
   final DataManager? _dataManager;
@@ -29,6 +30,10 @@ class FundService {
     }
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false}) async {
     if (forceRefresh) clearCache(code);
 
@@ -37,7 +42,12 @@ class FundService {
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
-        _dataManager?.addLog('基金代码 $code: 使用持久化缓存数据', type: LogType.cache);
+        final cacheAge = DateTime.now().difference(cachedInfo.cacheTime).inHours;
+        _dataManager?.addLog(
+          '基金 $code 使用持久化缓存: ${cachedInfo.fundName} '
+          '(缓存于${cacheAge}小时前)',
+          type: LogType.cache,
+        );
         return {
           'fundName': cachedInfo.fundName,
           'currentNav': cachedInfo.currentNav,
@@ -53,12 +63,15 @@ class FundService {
 
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
-      _dataManager?.addLog('基金代码 $code: 使用内存缓存数据', type: LogType.cache);
+      _dataManager?.addLog(
+        '基金 $code 使用内存缓存: ${cached['fundName']}',
+        type: LogType.cache,
+      );
       return cached;
     }
 
     if (_activeRequests.containsKey(code)) {
-      _dataManager?.addLog('基金代码 $code: 使用进行中的请求', type: LogType.cache);
+      _dataManager?.addLog('基金 $code 复用进行中请求', type: LogType.cache);
       return await _activeRequests[code]!;
     }
 
@@ -296,7 +309,13 @@ class FundService {
     
     final cachedPoints = await loadNavFromCache(code);
     if (cachedPoints != null && cachedPoints.isNotEmpty) {
-      _dataManager?.addLog('使用缓存数据 ${cachedPoints.length} 条', type: LogType.cache);
+      final firstDate = cachedPoints.first.date;
+      final lastDate = cachedPoints.last.date;
+      _dataManager?.addLog(
+        '基金 $code 使用净值缓存: ${cachedPoints.length}条 '
+        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        type: LogType.cache,
+      );
       
       _incrementalUpdateNav(code, cachedPoints);
       
@@ -336,7 +355,13 @@ class FundService {
     
     if (result.isNotEmpty) {
       await saveNavToCache(code, result);
-      _dataManager?.addLog('已缓存 ${result.length} 条净值数据', type: LogType.cache);
+      final firstDate = result.first.date;
+      final lastDate = result.last.date;
+      _dataManager?.addLog(
+        '基金 $code 已缓存净值: ${result.length}条 '
+        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        type: LogType.cache,
+      );
     }
     
     return result;
@@ -369,7 +394,13 @@ class FundService {
         final mergedPoints = [...cachedPoints, ...newerPoints];
         
         await saveNavToCache(code, mergedPoints);
-        _dataManager?.addLog('增量更新 ${newerPoints.length} 条净值', type: LogType.network);
+        final newFirstDate = newerPoints.first.date;
+        final newLastDate = newerPoints.last.date;
+        _dataManager?.addLog(
+          '基金 $code 增量更新净值: +${newerPoints.length}条 '
+          '(${_formatDate(newFirstDate)} ~ ${_formatDate(newLastDate)})',
+          type: LogType.network,
+        );
       }
     } catch (e) {
       _dataManager?.addLog('增量更新异常: $e', type: LogType.error);
@@ -538,6 +569,9 @@ class FundService {
 
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
     if (stockCodes.isEmpty) return {};
+    
+    _dataManager?.addLog('获取 ${stockCodes.length}只股票行情', type: LogType.network);
+    
     final codesParam = stockCodes.map((code) {
       if (code.length == 5 && RegExp(r'^\d{5}$').hasMatch(code)) {
         return 'hk$code';
@@ -547,9 +581,12 @@ class FundService {
       if (code.startsWith('5')) return 'sz$code';
       return code;
     }).join(',');
-    final url = Uri.parse('https://qt.gtimg.cn/q=$codesParam');
+    final url = Uri.parse(AppConstants.apiGtimgStockQuote.replaceAll('{codes}', codesParam));
     final response = await http.get(url).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return {};
+    if (response.statusCode != 200) {
+      _dataManager?.addLog('股票行情获取失败: HTTP ${response.statusCode}', type: LogType.error);
+      return {};
+    }
     String body;
     try {
       body = utf8.decode(response.bodyBytes);
@@ -572,6 +609,14 @@ class FundService {
         }
       }
     }
+    
+    if (quoteMap.isNotEmpty) {
+      _dataManager?.addLog(
+        '股票行情获取成功: ${quoteMap.length}只',
+        type: LogType.cache,
+      );
+    }
+    
     return quoteMap;
   }
 
@@ -580,102 +625,112 @@ class FundService {
       return null;
     }
 
-    final url = Uri.parse('https://fundgz.1234567.com.cn/js/$code.js?rt=${DateTime.now().millisecondsSinceEpoch}');
-
-    try {
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode != 200) {
-        return null;
-      }
-
-      final bodyBytes = response.bodyBytes;
-      if (bodyBytes.isEmpty) {
-        return null;
-      }
-
-      String jsString;
+    // Try multiple sources for redundancy
+    for (int i = 0; i < AppConstants.apiValuationSources.length; i++) {
+      final sourceUrl = AppConstants.apiValuationSources[i];
+      final sourceName = i == 0 ? '主源' : '备用源${i}';
+      
       try {
-        jsString = utf8.decode(bodyBytes);
-      } catch (e) {
+        final url = Uri.parse(sourceUrl
+            .replaceAll('{code}', code)
+            .replaceAll('{timestamp}', DateTime.now().millisecondsSinceEpoch.toString()));
+
+        final response = await http.get(url).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) {
+          _dataManager?.addLog(
+            '基金 $code 估值获取失败($sourceName): HTTP ${response.statusCode}',
+            type: LogType.error,
+          );
+          continue;
+        }
+
+        final bodyBytes = response.bodyBytes;
+        if (bodyBytes.isEmpty) continue;
+
+        String jsString;
         try {
-          jsString = String.fromCharCodes(bodyBytes);
-        } catch (e2) {
-          return null;
+          jsString = utf8.decode(bodyBytes);
+        } catch (e) {
+          try {
+            jsString = String.fromCharCodes(bodyBytes);
+          } catch (e2) {
+            continue;
+          }
         }
-      }
 
-      final trimmed = jsString.trim();
-      if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') {
-        return null;
-      }
+        final trimmed = jsString.trim();
+        if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') continue;
+        if (!trimmed.contains('{') || !trimmed.contains('}')) continue;
 
-      if (!trimmed.contains('{') || !trimmed.contains('}')) {
-        return null;
-      }
-
-      String jsonStr = trimmed;
-      if (trimmed.contains('(') && trimmed.contains(')')) {
-        final startIdx = trimmed.indexOf('(');
-        final endIdx = trimmed.lastIndexOf(')');
-        if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
-          jsonStr = trimmed.substring(startIdx + 1, endIdx);
+        String jsonStr = trimmed;
+        if (trimmed.contains('(') && trimmed.contains(')')) {
+          final startIdx = trimmed.indexOf('(');
+          final endIdx = trimmed.lastIndexOf(')');
+          if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
+            jsonStr = trimmed.substring(startIdx + 1, endIdx);
+          }
         }
-      }
 
-      jsonStr = jsonStr.trim();
-      if (jsonStr.endsWith(';')) {
-        jsonStr = jsonStr.substring(0, jsonStr.length - 1);
-      }
+        jsonStr = jsonStr.trim();
+        if (jsonStr.endsWith(';')) {
+          jsonStr = jsonStr.substring(0, jsonStr.length - 1);
+        }
 
-      if (jsonStr.isEmpty) {
-        return null;
-      }
+        if (jsonStr.isEmpty) continue;
 
-      Map<String, dynamic> data;
-      try {
-        data = jsonDecode(jsonStr);
-      } on FormatException catch (e) {
-        return null;
+        Map<String, dynamic> data;
+        try {
+          data = jsonDecode(jsonStr);
+        } on FormatException catch (e) {
+          continue;
+        } catch (e) {
+          continue;
+        }
+
+        final fundName = data['name']?.toString() ?? '';
+        if (fundName.isEmpty || fundName == 'null' || fundName == 'undefined') continue;
+
+        String gszStr = data['gsz']?.toString() ?? '';
+        if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') continue;
+
+        double gsz;
+        double gszzl;
+        try {
+          gsz = double.tryParse(gszStr) ?? 0.0;
+          gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
+        } catch (e) {
+          continue;
+        }
+
+        final gztime = data['gztime']?.toString() ?? '';
+        _dataManager?.addLog(
+          '基金 $code 估值获取成功($sourceName): $fundName ${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+          type: LogType.cache,
+        );
+
+        return {
+          'fundCode': code,
+          'name': fundName,
+          'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
+          'gsz': gsz,
+          'gszzl': gszzl,
+          'gztime': gztime,
+          'jzrq': data['jzrq']?.toString() ?? '',
+        };
       } catch (e) {
-        return null;
+        _dataManager?.addLog(
+          '基金 $code 估值获取异常($sourceName): $e',
+          type: LogType.error,
+        );
+        continue;
       }
-
-      final returnedFundCode = data['fundcode']?.toString() ?? '';
-
-      final fundName = data['name']?.toString() ?? '';
-      if (fundName.isEmpty || fundName == 'null' || fundName == 'undefined') {
-        return null;
-      }
-
-      String gszStr = data['gsz']?.toString() ?? '';
-      if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') {
-        return null;
-      }
-
-      double gsz;
-      double gszzl;
-      try {
-        gsz = double.tryParse(gszStr) ?? 0.0;
-        gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
-      } catch (e) {
-        return null;
-      }
-
-      return {
-        'fundCode': code,
-        'name': fundName,
-        'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
-        'gsz': gsz,
-        'gszzl': gszzl,
-        'gztime': data['gztime']?.toString() ?? '',
-        'jzrq': data['jzrq']?.toString() ?? '',
-      };
-    } on TimeoutException catch (e) {
-      return null;
-    } catch (e) {
-      return null;
     }
+    
+    _dataManager?.addLog(
+      '基金 $code 估值获取失败: 所有数据源均不可用',
+      type: LogType.error,
+    );
+    return null;
   }
 
   Future<List<NetWorthPoint>> fetchIndexData(String indexCode) async {

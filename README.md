@@ -41,17 +41,20 @@ flutter run
 
 ## 📝 项目结构
 
-
-```text
+```
+text
 lib/
 ├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统）
 │
+├── constants/
+│   └── app_constants.dart                 # 全局常量管理，统一管理API地址、缓存键名、业务常量等，支持API冗余设计
+│
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略（专业API → world_holidays → 基础判断），内置内存缓存优化性能
-│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算、持久化
+│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算、持久化、自动化缓存失效
 │   ├── file_export_service.dart           # 支持导出组件，解析格式类型CSV/Excel
 │   ├── file_import_service.dart           # 支持导入组件，解析格式类型CSV/Excel
-│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含缓存和重试机制
+│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含多源冗余、缓存和重试机制
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性
@@ -73,7 +76,7 @@ lib/
 │   ├── import_holding_view.dart           # 导入文件页面，支持CSV/Excel
 │   ├── license_view.dart                  # 本程序应用的开源协议AGPL v3
 │   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
-│   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息
+│   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量重命名
 │   ├── pending_transactions_view.dart     # 待确认交易管理页，展示T+1/T+2待确认的交易列表，支持手动刷新确认，显示预计确认日期和状态
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
@@ -81,13 +84,14 @@ lib/
 │   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明
 │
 └── widgets/
-    ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
+    ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能，支持防抖搜索
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入，自动计算预估数据
+    ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测和提示
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值，间隔可设置
     ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，弹出式页面，支持基金代码验证和存在性检查
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供"交易记录"入口
+    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供“交易记录”入口
     ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用，支持多指标对比（本基金/同类平均/沪深300/中证500/中证1000/自定义基金）
     ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现（近1周~成立来），优先使用API数据，自动计算补充周期
     ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
