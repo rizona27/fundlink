@@ -367,9 +367,9 @@ class FileExportService {
   
   static List<String> _getFullBackupHoldingHeaders() {
     return [
-      '客户姓名', '客户号', '基金代码', '基金名称',
-      '持有份额', '累计成本', '平均成本',
-      '备注', '是否置顶', '置顶时间',
+      '客户姓名(clientName)', '客户号(clientId)', '基金代码(fundCode)', '基金名称(fundName)',
+      '持有份额(totalShares)', '累计成本(totalCost)', '平均成本(averageCost)',
+      '备注(remarks)', '是否置顶(isPinned)', '置顶时间(pinnedTimestamp)',
     ];
   }
 
@@ -390,10 +390,10 @@ class FileExportService {
 
   static List<String> _getFullBackupTransactionHeaders() {
     return [
-      '交易ID', '客户姓名', '客户号', '基金代码', '基金名称',
-      '交易类型', '金额', '份额', '交易日期',
-      '成交净值', '手续费率', '备注',
-      '创建时间', '是否15点后', '是否待确认', '确认净值',
+      '交易ID(id)', '客户姓名(clientName)', '客户号(clientId)', '基金代码(fundCode)', '基金名称(fundName)',
+      '交易类型(type)', '金额(amount)', '份额(shares)', '交易日期(tradeDate)',
+      '成交净值(nav)', '手续费率(fee)', '备注(remarks)',
+      '创建时间(createdAt)', '是否15点后(isAfter1500)', '是否待确认(isPending)', '确认净值(confirmedNav)',
     ];
   }
 

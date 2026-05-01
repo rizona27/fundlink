@@ -142,6 +142,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   static const String _keySortKey = 'summary_sort_key';
   static const String _keySortOrder = 'summary_sort_order';
+  static const String _keyExpandedFunds = 'summary_expanded_funds'; // 展开的基金代码
 
   @override
   void initState() {
@@ -208,6 +209,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       } else {
         _sortOrder = SortOrder.descending;
       }
+      
+      // 加载展开状态（重启app后重置，所以不加载）
+      // 展开状态只在会话期间保持，应用重启后清空
     } catch (e) {
     }
   }
@@ -217,8 +221,15 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keySortKey, _sortKey.toString());
       await prefs.setString(_keySortOrder, _sortOrder.toString());
+      // 不保存展开状态，重启app后重置
     } catch (e) {
     }
+  }
+  
+  /// 保存展开状态（仅在当前会话中保持）
+  void _saveExpandedState() {
+    // 展开状态不持久化到SharedPreferences，只在内存中保持
+    // 应用重启后会自动清空
   }
 
   @override
@@ -630,6 +641,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _expandedFundCodes.addAll(_sortedFundCodes);
       }
     });
+    _saveExpandedState(); // 保存展开状态
   }
 
   void _toggleExpand(String fundCode) {
@@ -648,6 +660,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         }
       }
     });
+    _saveExpandedState(); // 保存展开状态
   }
 
   // 滚动到底部

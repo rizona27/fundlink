@@ -418,66 +418,71 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
 
     showCupertinoModalPopup(
       context: context,
-      builder: (context) => Container(
-        height: 350,
-        color: CupertinoTheme.of(context).scaffoldBackgroundColor,
-        child: Column(
-          children: [
-            Expanded(
-              child: CupertinoPicker(
-                itemExtent: 44,
-                scrollController: FixedExtentScrollController(
-                  initialItem: _tempMappedIndex != -1 ? _tempMappedIndex! + 1 : 0,
+      builder: (context) {
+        final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.black;
+        
+        return Container(
+          height: 350,
+          color: CupertinoTheme.of(context).scaffoldBackgroundColor,
+          child: Column(
+            children: [
+              Expanded(
+                child: CupertinoPicker(
+                  itemExtent: 44,
+                  scrollController: FixedExtentScrollController(
+                    initialItem: _tempMappedIndex != -1 ? _tempMappedIndex! + 1 : 0,
+                  ),
+                  onSelectedItemChanged: (index) {
+                    if (index == 0) {
+                      _tempMappedIndex = -1;
+                    } else {
+                      _tempMappedIndex = index - 1;
+                    }
+                  },
+                  children: [
+                    Center(child: Text('不映射', style: TextStyle(color: textColor))),
+                    ..._headers.map((h) => Center(child: Text(h, style: TextStyle(color: textColor)))),
+                  ],
                 ),
-                onSelectedItemChanged: (index) {
-                  if (index == 0) {
-                    _tempMappedIndex = -1;
-                  } else {
-                    _tempMappedIndex = index - 1;
-                  }
-                },
-                children: [
-                  const Center(child: Text('不映射', style: TextStyle(color: CupertinoColors.white))),
-                  ..._headers.map((h) => Center(child: Text(h, style: const TextStyle(color: CupertinoColors.white)))),
-                ],
               ),
-            ),
-            Container(
-              height: 0.5,
-              color: CupertinoColors.separator,
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GlassButton(
-                      label: '取消',
-                      onPressed: () => Navigator.pop(context),
-                      isPrimary: false,
-                      height: 44,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GlassButton(
-                      label: '确定',
-                      onPressed: () {
-                        setState(() {
-                          config.mappedIndex = _tempMappedIndex ?? -1;
-                        });
-                        Navigator.pop(context);
-                      },
-                      isPrimary: true,
-                      height: 44,
-                    ),
-                  ),
-                ],
+              Container(
+                height: 0.5,
+                color: CupertinoColors.separator,
               ),
-            ),
-          ],
-        ),
-      ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GlassButton(
+                        label: '取消',
+                        onPressed: () => Navigator.pop(context),
+                        isPrimary: false,
+                        height: 44,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GlassButton(
+                        label: '确定',
+                        onPressed: () {
+                          setState(() {
+                            config.mappedIndex = _tempMappedIndex ?? -1;
+                          });
+                          Navigator.pop(context);
+                        },
+                        isPrimary: true,
+                        height: 44,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -488,19 +493,25 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         final header = _headers[i].toLowerCase();
 
         if (config.id == 'clientName') {
-          if (header.contains('客户姓名') || header.contains('客户名') || header == '姓名') {
+          if (header.contains('客户姓名') || header.contains('客户名') || header == '姓名' ||
+              header == 'clientname' || header == 'client_name' ||
+              header.contains('clientname')) {
             config.mappedIndex = i;
             break;
           }
         }
         else if (config.id == 'clientId') {
-          if (header.contains('客户号') || header.contains('客户编号') || header.contains('核心客户号')) {
+          if (header.contains('客户号') || header.contains('客户编号') || header.contains('核心客户号') ||
+              header == 'clientid' || header == 'client_id' ||
+              header.contains('clientid')) {
             config.mappedIndex = i;
             break;
           }
         }
         else if (config.id == 'fundCode') {
-          if (header.contains('基金代码') || header.contains('产品代码')) {
+          if (header.contains('基金代码') || header.contains('产品代码') ||
+              header == 'fundcode' || header == 'fund_code' ||
+              header.contains('fundcode')) {
             config.mappedIndex = i;
             break;
           }
@@ -512,7 +523,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
               header.contains('成交金额') ||
               header.contains('购买成本') ||
               header.contains('持仓成本') ||
-              (header.contains('成本') && !header.contains('成本价'))) {
+              (header.contains('成本') && !header.contains('成本价')) ||
+              header == 'purchaseamount' || header == 'purchase_amount' ||
+              header.contains('purchaseamount')) {
             config.mappedIndex = i;
             break;
           }
@@ -521,19 +534,25 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           if (header.contains('份额') ||
               header.contains('当前份额') ||
               header.contains('持仓份额') ||
-              header == '份数') {
+              header == '份数' ||
+              header == 'purchaseshares' || header == 'purchase_shares' ||
+              header.contains('purchaseshares')) {
             config.mappedIndex = i;
             break;
           }
         }
         else if (config.id == 'purchaseDate') {
-          if (header.contains('购买日期') || header.contains('申购日期') || header.contains('成交日期')) {
+          if (header.contains('购买日期') || header.contains('申购日期') || header.contains('成交日期') ||
+              header == 'purchasedate' || header == 'purchase_date' ||
+              header.contains('purchasedate')) {
             config.mappedIndex = i;
             break;
           }
         }
         else if (config.id == 'transactionType') {
-          if (header.contains('交易类型') || header.contains('加减仓')) {
+          if (header.contains('交易类型') || header.contains('加减仓') ||
+              header == 'transactiontype' || header == 'transaction_type' ||
+              header.contains('transactiontype')) {
             config.mappedIndex = i;
             break;
           }
@@ -541,7 +560,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         else if (config.id == 'transactionAmount') {
           if (header.contains('交易金额') || 
               (header.contains('加仓') && header.contains('金额')) ||
-              (header.contains('减仓') && header.contains('金额'))) {
+              (header.contains('减仓') && header.contains('金额')) ||
+              header == 'transactionamount' || header == 'transaction_amount' ||
+              header.contains('transactionamount')) {
             config.mappedIndex = i;
             break;
           }
@@ -549,7 +570,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         else if (config.id == 'transactionShares') {
           if (header.contains('交易份额') ||
               (header.contains('加仓') && header.contains('份额')) ||
-              (header.contains('减仓') && header.contains('份额'))) {
+              (header.contains('减仓') && header.contains('份额')) ||
+              header == 'transactionshares' || header == 'transaction_shares' ||
+              header.contains('transactionshares')) {
             config.mappedIndex = i;
             break;
           }
@@ -557,7 +580,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         else if (config.id == 'transactionDate') {
           if (header.contains('交易日期') ||
               (header.contains('加仓') && header.contains('日期')) ||
-              (header.contains('减仓') && header.contains('日期'))) {
+              (header.contains('减仓') && header.contains('日期')) ||
+              header == 'transactiondate' || header == 'transaction_date' ||
+              header.contains('transactiondate')) {
             config.mappedIndex = i;
             break;
           }

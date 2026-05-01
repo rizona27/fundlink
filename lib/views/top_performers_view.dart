@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -76,14 +77,61 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   @override
   bool get wantKeepAlive => true;
 
+  // SharedPreferences keys for state persistence
+  static const String _keySortKey = 'topperformers_sort_key';
+  static const String _keySortOrder = 'topperformers_sort_order';
+  static const String _keyShowFilter = 'topperformers_show_filter';
+
   @override
   void initState() {
     super.initState();
+    _loadState(); // Load persisted state
     _dataListener = () {
       if (mounted) {
         _updateCachedItems();
       }
     };
+  }
+
+  /// Load persisted state from SharedPreferences
+  Future<void> _loadState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Load sort key and order (persisted across restarts)
+      final sortKeyStr = prefs.getString(_keySortKey);
+      if (sortKeyStr != null) {
+        _sortKey = SortKey.values.firstWhere(
+          (e) => e.toString() == sortKeyStr,
+          orElse: () => SortKey.none,
+        );
+      }
+      
+      final sortOrderStr = prefs.getString(_keySortOrder);
+      if (sortOrderStr != null) {
+        _sortOrder = SortOrder.values.firstWhere(
+          (e) => e.toString() == sortOrderStr,
+          orElse: () => SortOrder.descending,
+        );
+      }
+      
+      // Note: Filter visibility (_showFilter) is NOT persisted
+      // It resets on app restart as per requirements
+    } catch (e) {
+      // Ignore errors during state loading
+    }
+  }
+
+  /// Save state to SharedPreferences
+  Future<void> _saveSortState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySortKey, _sortKey.toString());
+      await prefs.setString(_keySortOrder, _sortOrder.toString());
+      // Filter visibility is NOT saved (reset on restart)
+    } catch (e) {
+      // Ignore errors during state saving
+    }
   }
 
   @override
@@ -360,7 +408,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     context.showToast('筛选条件已重置');
   }
 
-  void _onSortKeyChanged(SortKey key) {
+  void _onSortKeyChanged(SortKey key) async {
     setState(() {
       if (_sortKey == key) {
         _sortOrder = _sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
@@ -369,16 +417,18 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _sortOrder = SortOrder.descending;
       }
     });
+    await _saveSortState(); // Save sort state
     _updateCachedItems();
     String sortType = key.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
     context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
   }
 
-  void _onSortOrderChanged(SortOrder order) {
+  void _onSortOrderChanged(SortOrder order) async {
     setState(() {
       _sortOrder = order;
     });
+    await _saveSortState(); // Save sort state
     _updateCachedItems();
     String sortType = _sortKey.displayName;
     String orderText = order == SortOrder.ascending ? '升序' : '降序';

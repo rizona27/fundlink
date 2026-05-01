@@ -1023,40 +1023,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                           },
                           isDarkMode: isDarkMode,
                         ),
-                        // 对于历史日期，显示提示信息
-                        if (!_isTodayTransaction && _purchaseDate.isBefore(DateTime.now()))
-                          Container(
-                            margin: const EdgeInsets.only(top: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemBlue.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: CupertinoColors.systemBlue.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.info_circle,
-                                  size: 12,
-                                  color: CupertinoColors.systemBlue,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    _buildNavDateHint(),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: CupertinoColors.systemBlue,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -1099,7 +1065,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     child: FutureBuilder<String>(
                       future: _getOrCreatePendingHintFuture(),
                       builder: (context, snapshot) {
-                        final hint = snapshot.data ?? (_isTodayTransaction ? '加载中...' : '可修改，默认当前净值');
+                        // 如果是待确认交易，始终显示待确认净值提示
+                        final hint = _isTodayTransaction 
+                            ? (snapshot.data ?? '加载中...')
+                            : '可修改，默认当前净值';
                         return _buildAmountField(
                           controller: _confirmNavController,
                           hint: hint,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:pinyin/pinyin.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
@@ -52,6 +53,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   bool get wantKeepAlive => true;
 
+  // SharedPreferences keys for state persistence
+  static const String _keyExpandedClients = 'clientview_expanded_clients';
+  static const String _keyPinnedSectionExpanded = 'clientview_pinned_section_expanded';
+
   @override
   void initState() {
     super.initState();
@@ -59,9 +64,40 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
+    _loadState(); // Load persisted state
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
     });
+  }
+
+  /// Load persisted state from SharedPreferences
+  Future<void> _loadState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Load pinned section expanded state (persisted across restarts)
+      final pinnedExpanded = prefs.getBool(_keyPinnedSectionExpanded);
+      if (pinnedExpanded != null) {
+        _isPinnedSectionExpanded = pinnedExpanded;
+      }
+      
+      // Note: Individual client expanded states are NOT persisted
+      // They reset on app restart as per requirements
+    } catch (e) {
+      // Ignore errors during state loading
+    }
+  }
+
+  /// Save state to SharedPreferences
+  Future<void> _saveState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Only save pinned section expanded state
+      await prefs.setBool(_keyPinnedSectionExpanded, _isPinnedSectionExpanded);
+      // Individual client expanded states are NOT saved (reset on restart)
+    } catch (e) {
+      // Ignore errors during state saving
+    }
   }
 
   Future<void> _checkAndFixGarbledFundNames() async {
@@ -225,12 +261,32 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     setState(() {
       _expandedClients.addAll(_clientGroups.map((g) => g.key));
     });
+    // Note: Individual expanded states are NOT persisted (reset on restart)
   }
 
   void _collapseAll() {
     setState(() {
       _expandedClients.clear();
     });
+    // Note: Individual expanded states are NOT persisted (reset on restart)
+  }
+
+  void _toggleClientExpand(String clientKey) {
+    setState(() {
+      if (_expandedClients.contains(clientKey)) {
+        _expandedClients.remove(clientKey);
+      } else {
+        _expandedClients.add(clientKey);
+      }
+    });
+    // Note: Individual expanded states are NOT persisted (reset on restart)
+  }
+
+  void _togglePinnedSection() {
+    setState(() {
+      _isPinnedSectionExpanded = !_isPinnedSectionExpanded;
+    });
+    _saveState(); // Save pinned section state
   }
 
   // 滚动到底部
@@ -423,7 +479,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                     gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
                                     isExpanded: _isPinnedSectionExpanded,
                                     isDarkMode: isDarkMode,
-                                    onTap: () => setState(() => _isPinnedSectionExpanded = !_isPinnedSectionExpanded),
+                                    onTap: _togglePinnedSection,
                                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -551,21 +607,18 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   isExpanded: isExpanded,
                   isDarkMode: isDarkMode,
                   onTap: () {
-                    setState(() {
-                      if (isExpanded) {
-                        _expandedClients.remove(group.key);
-                      } else {
-                        _expandedClients.add(group.key);
-                        
-                        // 只有当展开的是最后一个客户卡片时，才滚动到底部
-                        final groups = _clientGroups;
-                        if (groups.isNotEmpty && group.key == groups.last.key) {
-                          Future.delayed(const Duration(milliseconds: 100), () {
-                            _scrollToBottom();
-                          });
-                        }
+                    final wasExpanded = _expandedClients.contains(group.key);
+                    _toggleClientExpand(group.key);
+                    
+                    // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                    if (!wasExpanded) {
+                      final groups = _clientGroups;
+                      if (groups.isNotEmpty && group.key == groups.last.key) {
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          _scrollToBottom();
+                        });
                       }
-                    });
+                    }
                   },
                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                   trailing: trailing,
@@ -641,21 +694,18 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               isExpanded: isExpanded,
               isDarkMode: isDarkMode,
               onTap: () {
-                setState(() {
-                  if (isExpanded) {
-                    _expandedClients.remove(group.key);
-                  } else {
-                    _expandedClients.add(group.key);
-                    
-                    // 只有当展开的是最后一个客户卡片时，才滚动到底部
-                    final groups = _clientGroups;
-                    if (groups.isNotEmpty && group.key == groups.last.key) {
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        _scrollToBottom();
-                      });
-                    }
+                final wasExpanded = _expandedClients.contains(group.key);
+                _toggleClientExpand(group.key);
+                
+                // 只有当展开的是最后一个客户卡片时，才滚动到底部
+                if (!wasExpanded) {
+                  final groups = _clientGroups;
+                  if (groups.isNotEmpty && group.key == groups.last.key) {
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      _scrollToBottom();
+                    });
                   }
-                });
+                }
               },
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
               trailing: trailing,

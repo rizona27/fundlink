@@ -92,8 +92,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _updatePendingStatus().then((_) {
-      _checkTimeAndSetNav();
-      _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+      if (mounted) {
+        _checkTimeAndSetNav();
+        _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+      }
     });
   }
 
@@ -140,6 +142,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 
   void _checkTimeAndSetNav() {
+    if (!mounted) return; // 检查是否已销毁
+    
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
@@ -1055,8 +1059,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       height: 44,
                       child: CupertinoButton(
                         color: widget.type == TransactionType.buy 
-                            ? const Color(0xFF34C759)
-                            : const Color(0xFFFF3B30),
+                            ? const Color(0xFFFF3B30) // 红色 - 加仓
+                            : const Color(0xFF34C759), // 绿色 - 减仓
                         borderRadius: BorderRadius.circular(12),
                         onPressed: _isLoading ? null : _submit,
                         padding: EdgeInsets.zero,

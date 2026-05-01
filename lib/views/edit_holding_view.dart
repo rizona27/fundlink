@@ -355,15 +355,15 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                const Color(0xFF34C759).withOpacity(0.8),
-                                const Color(0xFF34C759).withOpacity(0.6),
+                                const Color(0xFFFF3B30).withOpacity(0.8), // 红色 - 加仓
+                                const Color(0xFFFF3B30).withOpacity(0.6),
                               ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF34C759).withOpacity(0.3),
+                              color: const Color(0xFFFF3B30).withOpacity(0.3),
                               width: 1,
                             ),
                           ),
@@ -394,15 +394,15 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                const Color(0xFFFF3B30).withOpacity(0.8),
-                                const Color(0xFFFF3B30).withOpacity(0.6),
+                                const Color(0xFF34C759).withOpacity(0.8), // 绿色 - 减仓
+                                const Color(0xFF34C759).withOpacity(0.6),
                               ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFFFF3B30).withOpacity(0.3),
+                              color: const Color(0xFF34C759).withOpacity(0.3),
                               width: 1,
                             ),
                           ),
@@ -491,8 +491,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   Widget _buildTransactionCard(TransactionRecord tx, int index, bool isDarkMode, Color textColor, Color secondaryTextColor) {
     final typeColor = tx.type == TransactionType.buy 
-        ? const Color(0xFF34C759)
-        : const Color(0xFFFF3B30);
+        ? const Color(0xFFFF3B30) // 红色 - 加仓
+        : const Color(0xFF34C759); // 绿色 - 减仓
     
     // 判断是否是第一笔买入交易（基石交易）
     // 找到所有买入交易中最早的那一笔
@@ -678,11 +678,16 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
     await showCupertinoModalPopup(
       context: context,
-      builder: (context) => Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: StatefulBuilder(
+      builder: (context) => GestureDetector(
+        onTap: () {
+          // 点击对话框外部时收起键盘
+          FocusScope.of(context).unfocus();
+        },
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: StatefulBuilder(
             builder: (context, setDialogState) {
               final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
               final textColor = isDark ? CupertinoColors.white : const Color(0xFF1C1C1E);
@@ -966,7 +971,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

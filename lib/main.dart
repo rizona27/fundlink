@@ -181,7 +181,6 @@ class _MainTabViewState extends State<MainTabView> {
           switchInCurve: Curves.easeInOutCubic,
           switchOutCurve: Curves.easeInOutCubic,
           child: IndexedStack(
-            key: ValueKey(_selectedIndex),
             index: _selectedIndex,
             children: _pages,
           ),

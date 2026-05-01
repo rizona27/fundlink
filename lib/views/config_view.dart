@@ -594,11 +594,12 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   }
 
   void _showClearAllConfirmDialog() {
+    final holdingCount = _dataManager.holdings.length;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('清空所有持仓'),
-        content: const Text('此操作将删除所有持仓数据，且不可恢复。确定要继续吗？'),
+        content: Text('此操作将删除所有持仓数据($holdingCount条)，且不可恢复。确定要继续吗？'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(context),

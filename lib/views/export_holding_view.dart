@@ -269,7 +269,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       _exportSuccess = true;
       _exportedFileName = fileName;
       _saveToHistory(fileName, _filteredHoldings.length);
-      context.showToast('导出成功，共${_filteredHoldings.length}条记录');
+      // Toast已在FileExportService中显示，此处不再重复提示
       _dataManager.addLog('导出成功: $fileName (${_filteredHoldings.length}条)', type: LogType.success);
     } catch (e) {
       _exportError = e.toString();
