@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// K线数据模型
 class CandleData {
@@ -40,10 +41,10 @@ class StockCandleChart extends StatefulWidget {
   });
 
   @override
-  State<StockCandleChart> createState() => _StockCandleChartState();
+  State<StockCandleChart> createState() => StockCandleChartState();
 }
 
-class _StockCandleChartState extends State<StockCandleChart> {
+class StockCandleChartState extends State<StockCandleChart> {
   String _selectedPeriod = 'day'; // day, week, month
   final Map<String, String> _periodLabels = {
     'day': '日K',
@@ -69,6 +70,10 @@ class _StockCandleChartState extends State<StockCandleChart> {
   // 常量
   static const int visibleCandleCount = 45; // 默认显示45根蜡烛
   
+  // 加载阶段标记
+  bool _hasLoadedInitial = false;  // 是否已加载初始数据
+  bool _hasPreloaded = false;      // 是否已预加载历史数据
+  
   /// 根据周期获取可见蜡烛数量（周K和月K更粗）
   int get _actualVisibleCount {
     switch (_selectedPeriod) {
@@ -86,15 +91,330 @@ class _StockCandleChartState extends State<StockCandleChart> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // 阶段1: 先尝试从缓存加载
+    _loadFromCache().then((_) {
+      // 阶段2: 然后加载最新的视口数据
+      _loadInitialData();
+    });
   }
   
   @override
   void dispose() {
     super.dispose();
   }
+  
+  /// 清除十字交叉线（供外部调用）
+  void clearCrosshair() {
+    if (_selectedIndex != -1) {
+      setState(() {
+        _selectedIndex = -1;
+      });
+    }
+  }
+  
+  /// 生成缓存key
+  String _getCacheKey() {
+    return 'candle_cache_${widget.stockCode}_$_selectedPeriod';
+  }
+  
+  /// 阶段1: 从缓存加载历史数据
+  Future<void> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getCacheKey();
+      final cachedData = prefs.getString(cacheKey);
+      
+      if (cachedData != null && cachedData.isNotEmpty) {
+        final List<dynamic> jsonList = jsonDecode(cachedData);
+        final cachedCandles = jsonList.map((json) => CandleData(
+          date: json['date'] as String,
+          open: (json['open'] as num).toDouble(),
+          close: (json['close'] as num).toDouble(),
+          high: (json['high'] as num).toDouble(),
+          low: (json['low'] as num).toDouble(),
+          volume: (json['volume'] as num).toDouble(),
+        )).toList();
+        
+        if (cachedCandles.isNotEmpty) {
+          print('✅ 从缓存加载 ${cachedCandles.length} 条K线数据');
+          setState(() {
+            _candleDataList = cachedCandles;
+            _earliestDate = DateTime.parse(cachedCandles.first.date);
+            _displayOffset = cachedCandles.length > _actualVisibleCount
+                ? cachedCandles.length - _actualVisibleCount
+                : 0;
+            _hasLoadedInitial = true;
+          });
+        }
+      } else {
+        print('⚠️ 无缓存数据');
+      }
+    } catch (e) {
+      print('❌ 缓存加载失败: $e');
+    }
+  }
+  
+  /// 阶段2: 加载最新的视口数据（增量更新）
+  Future<void> _loadInitialData() async {
+    if (_isLoading) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      // 只请求最近的数据用于增量更新
+      final now = DateTime.now();
+      final startDate = now.subtract(const Duration(days: 60)); // 最近60天
+      
+      final begDate = '${startDate.year}${startDate.month.toString().padLeft(2, '0')}${startDate.day.toString().padLeft(2, '0')}';
+      final endDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      
+      String formattedSecid = widget.stockCode;
+      if (widget.stockCode.startsWith('sh')) {
+        formattedSecid = '1.${widget.stockCode.substring(2)}';
+      } else if (widget.stockCode.startsWith('sz')) {
+        formattedSecid = '0.${widget.stockCode.substring(2)}';
+      } else if (widget.stockCode.startsWith('hk')) {
+        formattedSecid = '116.${widget.stockCode.substring(2)}';
+      }
+      
+      int klt;
+      switch (_selectedPeriod) {
+        case 'day':
+          klt = 101;
+          break;
+        case 'week':
+          klt = 102;
+          break;
+        case 'month':
+          klt = 103;
+          break;
+        default:
+          klt = 101;
+      }
+      
+      final url = Uri.parse(
+        'https://push2his.eastmoney.com/api/qt/stock/kline/get'
+        '?secid=$formattedSecid'
+        '&klt=$klt'
+        '&fqt=0'
+        '&beg=$begDate'
+        '&end=$endDate'
+        '&lmt=100'
+        '&fields1=f1,f2,f3,f4,f5,f6'
+        '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
+        '&ut=b2884a393a59ad64002292a3e90d46a5',
+      );
+      
+      print('🔄 加载最新数据: $url');
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        final data = json['data'];
+        
+        if (data != null && data['klines'] != null) {
+          final klines = List<String>.from(data['klines']);
+          final newCandles = <CandleData>[];
+          
+          for (final line in klines) {
+            final parts = line.split(',');
+            if (parts.length >= 6) {
+              newCandles.add(CandleData(
+                date: parts[0],
+                open: double.tryParse(parts[1]) ?? 0,
+                close: double.tryParse(parts[2]) ?? 0,
+                high: double.tryParse(parts[3]) ?? 0,
+                low: double.tryParse(parts[4]) ?? 0,
+                volume: double.tryParse(parts[5]) ?? 0,
+              ));
+            }
+          }
+          
+          if (newCandles.isNotEmpty) {
+            print('✅ 获取到 ${newCandles.length} 条新数据');
+            
+            // 合并缓存数据和新数据（去重）
+            final mergedList = _mergeCandleData(_candleDataList, newCandles);
+            
+            setState(() {
+              _candleDataList = mergedList;
+              _earliestDate = DateTime.parse(mergedList.first.date);
+              _displayOffset = mergedList.length > _actualVisibleCount
+                  ? mergedList.length - _actualVisibleCount
+                  : 0;
+              _hasLoadedInitial = true;
+            });
+            
+            // 保存到缓存
+            _saveToCache(mergedList);
+            
+            // 阶段3: 后台预加载更多历史数据
+            _preloadMoreHistory();
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ 加载最新数据失败: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+  
+  /// 阶段3: 后台预加载更多历史数据（用户无感）
+  Future<void> _preloadMoreHistory() async {
+    if (_hasPreloaded || _earliestDate == null) return;
+    
+    print('📥 后台预加载历史数据...');
+    
+    try {
+      String formattedSecid = widget.stockCode;
+      if (widget.stockCode.startsWith('sh')) {
+        formattedSecid = '1.${widget.stockCode.substring(2)}';
+      } else if (widget.stockCode.startsWith('sz')) {
+        formattedSecid = '0.${widget.stockCode.substring(2)}';
+      } else if (widget.stockCode.startsWith('hk')) {
+        formattedSecid = '116.${widget.stockCode.substring(2)}';
+      }
+      
+      int klt;
+      int loadCount;
+      switch (_selectedPeriod) {
+        case 'day':
+          klt = 101;
+          loadCount = 200;  // 预加载200天
+          break;
+        case 'week':
+          klt = 102;
+          loadCount = 150;  // 预加载150周
+          break;
+        case 'month':
+          klt = 103;
+          loadCount = 120;  // 预加载120个月
+          break;
+        default:
+          klt = 101;
+          loadCount = 200;
+      }
+      
+      final newStartDate = _earliestDate!.subtract(
+        _selectedPeriod == 'day' 
+            ? Duration(days: loadCount)
+            : _selectedPeriod == 'week'
+                ? Duration(days: loadCount * 7)
+                : Duration(days: loadCount * 30),
+      );
+      
+      final endDate = _earliestDate!.subtract(const Duration(days: 1));
+      final begDate = '${newStartDate.year}${newStartDate.month.toString().padLeft(2, '0')}${newStartDate.day.toString().padLeft(2, '0')}';
+      final endDateStr = '${endDate.year}${endDate.month.toString().padLeft(2, '0')}${endDate.day.toString().padLeft(2, '0')}';
+      
+      final url = Uri.parse(
+        'https://push2his.eastmoney.com/api/qt/stock/kline/get'
+        '?secid=$formattedSecid'
+        '&klt=$klt'
+        '&fqt=0'
+        '&beg=$begDate'
+        '&end=$endDateStr'
+        '&lmt=$loadCount'
+        '&fields1=f1,f2,f3,f4,f5,f6'
+        '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
+        '&ut=b2884a393a59ad64002292a3e90d46a5',
+      );
+      
+      final res = await http.get(url).timeout(const Duration(seconds: 15));
+      
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        final data = json['data'];
+        
+        if (data != null && data['klines'] != null) {
+          final klines = List<String>.from(data['klines']);
+          final historyCandles = <CandleData>[];
+          
+          for (final line in klines) {
+            final parts = line.split(',');
+            if (parts.length >= 6) {
+              historyCandles.add(CandleData(
+                date: parts[0],
+                open: double.tryParse(parts[1]) ?? 0,
+                close: double.tryParse(parts[2]) ?? 0,
+                high: double.tryParse(parts[3]) ?? 0,
+                low: double.tryParse(parts[4]) ?? 0,
+                volume: double.tryParse(parts[5]) ?? 0,
+              ));
+            }
+          }
+          
+          if (historyCandles.isNotEmpty) {
+            print('✅ 预加载 ${historyCandles.length} 条历史数据');
+            
+            final mergedList = _mergeCandleData(historyCandles, _candleDataList);
+            
+            setState(() {
+              _candleDataList = mergedList;
+              _earliestDate = DateTime.parse(mergedList.first.date);
+              _displayOffset += historyCandles.length;
+              _hasPreloaded = true;
+            });
+            
+            // 更新缓存
+            _saveToCache(mergedList);
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ 预加载失败: $e');
+    }
+  }
+  
+  /// 合并K线数据（去重）
+  List<CandleData> _mergeCandleData(List<CandleData> existing, List<CandleData> newData) {
+    if (existing.isEmpty) return newData;
+    if (newData.isEmpty) return existing;
+    
+    // 使用Map去重（以日期为key）
+    final Map<String, CandleData> mergedMap = {};
+    
+    // 先加入现有数据
+    for (final candle in existing) {
+      mergedMap[candle.date] = candle;
+    }
+    
+    // 再加入新数据（覆盖重复的）
+    for (final candle in newData) {
+      mergedMap[candle.date] = candle;
+    }
+    
+    // 转换为列表并按日期排序
+    final mergedList = mergedMap.values.toList();
+    mergedList.sort((a, b) => a.date.compareTo(b.date));
+    
+    return mergedList;
+  }
+  
+  /// 保存数据到缓存
+  Future<void> _saveToCache(List<CandleData> candles) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getCacheKey();
+      
+      final jsonList = candles.map((c) => {
+        'date': c.date,
+        'open': c.open,
+        'close': c.close,
+        'high': c.high,
+        'low': c.low,
+        'volume': c.volume,
+      }).toList();
+      
+      await prefs.setString(cacheKey, jsonEncode(jsonList));
+      print('💾 已缓存 ${candles.length} 条K线数据');
+    } catch (e) {
+      print('❌ 缓存保存失败: $e');
+    }
+  }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({int retryCount = 0}) async {
     if (_isLoading) return;
     
     setState(() => _isLoading = true);
@@ -136,31 +456,15 @@ class _StockCandleChartState extends State<StockCandleChart> {
           preloadLmt = 120;
       }
 
-      final now = DateTime.now();
-      // 计算开始日期，确保获取足够的数据铺满图表
-      DateTime startDate;
-      switch (_selectedPeriod) {
-        case 'day':
-          startDate = now.subtract(const Duration(days: 180)); // 6个月，保证有足够交易日
-          break;
-        case 'week':
-          startDate = now.subtract(const Duration(days: 730)); // 2年，保证有足够周K数据
-          break;
-        case 'month':
-          startDate = now.subtract(const Duration(days: 2190)); // 6年，保证有足够月K数据
-          break;
-        default:
-          startDate = now.subtract(const Duration(days: 180));
-      }
-      
-      final begDate = '${startDate.year}${startDate.month.toString().padLeft(2, '0')}${startDate.day.toString().padLeft(2, '0')}';
-      final endDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      // 初始加载时获取全部可用数据（不限制日期范围）
+      final begDate = '0';  // 从最早开始
+      final endDate = '20500101';  // 到未来
 
       final url = Uri.parse(
         'https://push2his.eastmoney.com/api/qt/stock/kline/get'
         '?secid=$formattedSecid'
         '&klt=$klt'
-        '&fqt=0'  // 不复权，使用原始价格
+        '&fqt=0'  // 不复权，显示真实股价
         '&beg=$begDate'
         '&end=$endDate'
         '&lmt=$preloadLmt'  // 使用预加载数量，获取更多历史数据
@@ -169,7 +473,10 @@ class _StockCandleChartState extends State<StockCandleChart> {
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
 
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      print('请求K线数据 (尝试 ${retryCount + 1}/3): $url');
+      
+      // 增加超时时间到15秒，适应慢速网络
+      final res = await http.get(url).timeout(const Duration(seconds: 15));
       
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
@@ -193,23 +500,60 @@ class _StockCandleChartState extends State<StockCandleChart> {
             }
           }
 
-          // API返回的是从旧到新，不需要反转
-          setState(() {
-            _candleDataList = candles;
-            // 记录最早日期，用于懒加载
-            if (candles.isNotEmpty) {
-              final firstDate = candles.first.date;
-              _earliestDate = DateTime.parse(firstDate);
-              // 初始显示最新的数据（offset指向末尾）
-              _displayOffset = candles.length > _actualVisibleCount 
-                  ? candles.length - _actualVisibleCount 
-                  : 0;
+          if (candles.isNotEmpty) {
+            print('成功加载 ${candles.length} 条K线数据');
+            // API返回的是从旧到新，不需要反转
+            setState(() {
+              _candleDataList = candles;
+              // 记录最早日期，用于懒加载
+              if (candles.isNotEmpty) {
+                final firstDate = candles.first.date;
+                _earliestDate = DateTime.parse(firstDate);
+                // 初始显示最新的数据（offset指向末尾）
+                _displayOffset = candles.length > _actualVisibleCount 
+                    ? candles.length - _actualVisibleCount 
+                    : 0;
+              }
+            });
+          } else {
+            print('警告: K线数据为空');
+            // 重试机制
+            if (retryCount < 2) {
+              print('准备重试...');
+              await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
+              await _loadData(retryCount: retryCount + 1);
+              return;
             }
-          });
+          }
+        } else {
+          print('警告: API返回数据格式错误');
+          // 重试机制
+          if (retryCount < 2) {
+            print('准备重试...');
+            await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
+            await _loadData(retryCount: retryCount + 1);
+            return;
+          }
+        }
+      } else {
+        print('警告: HTTP请求失败，状态码: ${res.statusCode}');
+        // 重试机制
+        if (retryCount < 2) {
+          print('准备重试...');
+          await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
+          await _loadData(retryCount: retryCount + 1);
+          return;
         }
       }
     } catch (e) {
       print('加载K线数据失败: $e');
+      // 网络错误或超时，重试机制
+      if (retryCount < 2) {
+        print('网络错误，准备重试...');
+        await Future.delayed(Duration(seconds: 2 * (retryCount + 1)));
+        await _loadData(retryCount: retryCount + 1);
+        return;
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -221,7 +565,7 @@ class _StockCandleChartState extends State<StockCandleChart> {
       _selectedPeriod = period;
       // 不清空数据，保持显示直到新数据加载完成
       _selectedIndex = -1;
-      _displayOffset = 0; // 重置偏移量，显示最新数据
+      // 注意：不重置 _displayOffset，等待 _loadData() 重新计算
     });
     _loadData();
   }
@@ -274,7 +618,7 @@ class _StockCandleChartState extends State<StockCandleChart> {
   Future<void> _loadMoreHistory() async {
     if (_isLoading || _earliestDate == null) return;
     
-    setState(() => _isLoading = true);
+    // 注意：这里不设置 _isLoading = true，避免显示转圈动画
 
     try {
       String formattedSecid = widget.stockCode;
@@ -316,16 +660,19 @@ class _StockCandleChartState extends State<StockCandleChart> {
                 : Duration(days: loadCount * 30),
       );
       
+      // endDate 设置为最早日期的前一天，避免数据重叠
+      final endDate = _earliestDate!.subtract(const Duration(days: 1));
+      
       final begDate = '${newStartDate.year}${newStartDate.month.toString().padLeft(2, '0')}${newStartDate.day.toString().padLeft(2, '0')}';
-      final endDate = '${_earliestDate!.year}${_earliestDate!.month.toString().padLeft(2, '0')}${_earliestDate!.day.toString().padLeft(2, '0')}';
+      final endDateStr = '${endDate.year}${endDate.month.toString().padLeft(2, '0')}${endDate.day.toString().padLeft(2, '0')}';
 
       final url = Uri.parse(
         'https://push2his.eastmoney.com/api/qt/stock/kline/get'
         '?secid=$formattedSecid'
         '&klt=$klt'
-        '&fqt=0'  // 不使用复权，使用原始价格
+        '&fqt=0'  // 不复权，显示真实股价
         '&beg=$begDate'
-        '&end=$endDate'
+        '&end=$endDateStr'
         '&lmt=$loadCount'  // 增量加载一个视口的数据
         '&fields1=f1,f2,f3,f4,f5,f6'
         '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
@@ -356,22 +703,30 @@ class _StockCandleChartState extends State<StockCandleChart> {
             }
           }
 
-          // 将新数据添加到现有数据前面
+          // 将新数据添加到现有数据前面（需要去重）
           if (newCandles.isNotEmpty) {
             setState(() {
-              _candleDataList = [...newCandles, ..._candleDataList];
-              _earliestDate = DateTime.parse(newCandles.first.date);
-              // 更新偏移量，保持当前视图位置
-              _displayOffset += newCandles.length;
+              // 过滤掉与已有数据重复的日期
+              final existingDates = _candleDataList.map((c) => c.date).toSet();
+              final uniqueNewCandles = newCandles.where((c) => !existingDates.contains(c.date)).toList();
+              
+              if (uniqueNewCandles.isNotEmpty) {
+                _candleDataList = [...uniqueNewCandles, ..._candleDataList];
+                _earliestDate = DateTime.parse(uniqueNewCandles.first.date);
+                // 更新偏移量，保持当前视图位置
+                _displayOffset += uniqueNewCandles.length;
+                
+                // 保存更新后的数据到缓存
+                _saveToCache(_candleDataList);
+              }
             });
           }
         }
       }
     } catch (e) {
       print('加载历史数据失败: $e');
-    } finally {
-      setState(() => _isLoading = false);
     }
+    // 注意：这里不设置 _isLoading = false，因为根本没设置为true
   }
 
   @override
@@ -535,6 +890,19 @@ class _StockCandleChartState extends State<StockCandleChart> {
                         }
                       }
                     },
+                    onTapDown: (details) {
+                      // 点击图表区域时，如果已经显示十字线且再次点击相同位置，则清除十字线
+                      if (_isPanning == false && _selectedIndex != -1) {
+                        final dx = details.localPosition.dx;
+                        final visualIndex = (dx / barWidth).floor();
+                        final actualIndex = actualOffset + visualIndex;
+                        if (actualIndex == _selectedIndex) {
+                          setState(() {
+                            _selectedIndex = -1;
+                          });
+                        }
+                      }
+                    },
                     onHorizontalDragStart: (details) {
                       // 开始平移（PC端和移动端）
                       setState(() {
@@ -644,11 +1012,7 @@ class _StockCandleChartState extends State<StockCandleChart> {
           ),
         ],
 
-        // 加载更多提示
-        if (_isLoading) ...[
-          const SizedBox(height: 8),
-          const CupertinoActivityIndicator(radius: 10),
-        ],
+
       ],
     );
   }
@@ -734,15 +1098,23 @@ class _GridPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       );
       
-      final barWidth = size.width / candleDataList.length;
-      final labelCount = candleDataList.length > 6 ? 3 : (candleDataList.length > 3 ? 2 : 1);
-      final interval = (candleDataList.length / labelCount).floor();
+      // 只考虑可见范围内的蜡烛
+      final startIndex = displayOffset;
+      final endIndex = (displayOffset + visibleCount).clamp(0, candleDataList.length - 1);
+      final visibleCandlesCount = endIndex - startIndex + 1;
+      
+      if (visibleCandlesCount <= 0) return;
+      
+      final barWidth = size.width / visibleCount;  // 使用可见数量计算宽度
+      final labelCount = visibleCandlesCount > 6 ? 3 : (visibleCandlesCount > 3 ? 2 : 1);
+      final interval = (visibleCandlesCount / labelCount).floor();
       
       for (int i = 0; i < labelCount; i++) {
-        final index = i * interval;
-        if (index >= candleDataList.length) break;
+        final visibleIndex = i * interval;
+        final actualIndex = startIndex + visibleIndex;  // 转换为实际索引
+        if (actualIndex >= candleDataList.length) break;
         
-        final candle = candleDataList[index];
+        final candle = candleDataList[actualIndex];
         String displayDate;
         
         if (selectedPeriod == 'month') {
@@ -755,7 +1127,8 @@ class _GridPainter extends CustomPainter {
               : candle.date;
         }
         
-        final x = index * barWidth + barWidth / 2;
+        // 使用可见索引计算x位置
+        final x = visibleIndex * barWidth + barWidth / 2;
         
         datePaint.text = TextSpan(
           text: displayDate,

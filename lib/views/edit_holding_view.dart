@@ -157,6 +157,15 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+  
+  /// 脱敏客户姓名
+  String _maskClientName(String name) {
+    if (name.isEmpty) return '';
+    if (name.length == 1) return '*';
+    if (name.length == 2) return '${name[0]}*';
+    // 3个字符及以上，只显示首尾，中间用*代替
+    return '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -240,13 +249,16 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Text(holding.clientName, 
+                                Text(
+                                  _dataManager.isPrivacyMode 
+                                      ? _maskClientName(holding.clientName)
+                                      : holding.clientName, 
                                     style: TextStyle(
                                       fontSize: 13, 
                                       fontWeight: FontWeight.w500,
                                       color: textColor,
                                     )),
-                                if (holding.clientId.isNotEmpty) ...[
+                                if (holding.clientId.isNotEmpty && !_dataManager.isPrivacyMode) ...[
                                   const SizedBox(width: 4),
                                   Text('(${holding.clientId})', 
                                       style: TextStyle(

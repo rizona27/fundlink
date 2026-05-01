@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
@@ -299,6 +300,24 @@ class FundService {
 
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
     print('正在获取基金 $code 的净值趋势...');
+    
+    // 阶段1: 先尝试从缓存加载
+    final cachedPoints = await loadNavFromCache(code);
+    if (cachedPoints != null && cachedPoints.isNotEmpty) {
+      print('✅ 使用缓存数据，共 ${cachedPoints.length} 条');
+      
+      // 阶段2: 后台增量更新（检查是否有新数据）
+      _incrementalUpdateNav(code, cachedPoints);
+      
+      return cachedPoints;
+    }
+    
+    // 无缓存，直接从API加载
+    return await _fetchNetWorthFromAPI(code);
+  }
+  
+  /// 从 API 获取历史净值（完整加载）
+  Future<List<NetWorthPoint>> _fetchNetWorthFromAPI(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
@@ -336,7 +355,57 @@ class FundService {
     // 如果过滤后没有数据（可能是新基金），则返回原始数据
     final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
     print('基金 $code 最终返回数据点数: ${result.length}');
+    
+    // 保存到缓存
+    if (result.isNotEmpty) {
+      await saveNavToCache(code, result);
+    }
+    
     return result;
+  }
+  
+  /// 阶段2: 增量更新最新净值（后台静默）
+  Future<void> _incrementalUpdateNav(String code, List<NetWorthPoint> cachedPoints) async {
+    try {
+      // 只请求最近的数据用于增量更新
+      final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode != 200) {
+        print('⚠️ 增量更新失败: HTTP ${response.statusCode}');
+        return;
+      }
+      
+      final jsString = utf8.decode(response.bodyBytes);
+      final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
+      final match = trendRegex.firstMatch(jsString);
+      
+      if (match == null) return;
+      
+      final trendArrayStr = match.group(1)!;
+      final List<dynamic> trendList = jsonDecode(trendArrayStr);
+      final newPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
+      
+      // 过滤出比缓存更新的数据
+      final lastCachedDate = cachedPoints.last.date;
+      final newerPoints = newPoints.where((p) => p.date.isAfter(lastCachedDate)).toList();
+      
+      if (newerPoints.isNotEmpty) {
+        print('🔄 发现 ${newerPoints.length} 条新净值数据');
+        
+        // 合并数据
+        final mergedPoints = [...cachedPoints, ...newerPoints];
+        
+        // 更新缓存
+        await saveNavToCache(code, mergedPoints);
+        
+        print('✅ 增量更新完成，总计 ${mergedPoints.length} 条');
+      } else {
+        print('✅ 缓存已是最新');
+      }
+    } catch (e) {
+      print('❌ 增量更新失败: $e');
+    }
   }
 
   Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {
@@ -704,5 +773,69 @@ class FundService {
     }
     
     return points;
+  }
+  
+  // ==================== 基金历史净值缓存功能 ====================
+  
+  /// 生成缓存key
+  String _getNavCacheKey(String code) {
+    return 'fund_nav_cache_$code';
+  }
+  
+  /// 从缓存加载历史净值
+  Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getNavCacheKey(code);
+      final cachedData = prefs.getString(cacheKey);
+      
+      if (cachedData != null && cachedData.isNotEmpty) {
+        final List<dynamic> jsonList = jsonDecode(cachedData);
+        final cachedPoints = jsonList.map((json) => NetWorthPoint(
+          date: DateTime.fromMillisecondsSinceEpoch(json['date'] as int),
+          nav: (json['nav'] as num).toDouble(),
+          growth: json['growth'] != null ? (json['growth'] as num).toDouble() : null,
+          series: json['series'] as String? ?? 'fund',
+        )).toList();
+        
+        print('✅ 从缓存加载 ${cachedPoints.length} 条基金 $code 历史净值');
+        return cachedPoints;
+      }
+    } catch (e) {
+      print('❌ 缓存加载失败: $e');
+    }
+    return null;
+  }
+  
+  /// 保存历史净值到缓存
+  Future<void> saveNavToCache(String code, List<NetWorthPoint> points) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getNavCacheKey(code);
+      
+      final jsonList = points.map((p) => {
+        'date': p.date.millisecondsSinceEpoch,
+        'nav': p.nav,
+        'growth': p.growth,
+        'series': p.series,
+      }).toList();
+      
+      await prefs.setString(cacheKey, jsonEncode(jsonList));
+      print('💾 已缓存 ${points.length} 条基金 $code 历史净值');
+    } catch (e) {
+      print('❌ 缓存保存失败: $e');
+    }
+  }
+  
+  /// 清除指定基金的净值缓存
+  Future<void> clearNavCache(String code) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getNavCacheKey(code);
+      await prefs.remove(cacheKey);
+      print('🗑️ 已清除基金 $code 的净值缓存');
+    } catch (e) {
+      print('❌ 清除缓存失败: $e');
+    }
   }
 }

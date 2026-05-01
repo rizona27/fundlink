@@ -30,6 +30,9 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   AnimationController? _priceAnimationController;
   double _previousPrice = 0;
   double _previousChangePercent = 0;
+  
+  // 蜡烛图Key，用于清除十字线
+  final GlobalKey<StockCandleChartState> _candleChartKey = GlobalKey();
 
   @override
   void initState() {
@@ -261,113 +264,120 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
         ? CupertinoColors.white.withOpacity(0.6)
         : const Color(0xFF8E8E93);
 
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        constraints: const BoxConstraints(maxWidth: 420),
-        height: 520, // 固定弹窗高度
-        child: CupertinoPopupSurface(
-          isSurfacePainted: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 标题栏
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.stockName,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: textColor,
+    return GestureDetector(
+      // 点击弹窗外部区域时清除十字线
+      onTap: () {
+        _candleChartKey.currentState?.clearCrosshair();
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 420),
+          height: 520, // 固定弹窗高度
+          child: CupertinoPopupSurface(
+            isSurfacePainted: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 标题栏
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.stockName,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatStockCode(widget.stockCode),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: secondaryTextColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 0,
-                      onPressed: () => Navigator.pop(context),
-                      child: Icon(
-                        CupertinoIcons.xmark_circle_fill,
-                        size: 24,
-                        color: secondaryTextColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // 内容区域（固定高度，内部可滚动）
-              Expanded(
-                child: _loading
-                    ? const Center(child: CupertinoActivityIndicator())
-                    : _error != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32),
-                              child: Text(
-                                '加载失败',
-                                style: TextStyle(color: secondaryTextColor),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatStockCode(widget.stockCode),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: secondaryTextColor,
                               ),
                             ),
-                          )
-                        : SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(), // 允许滚动
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildPriceCard(isDark, textColor, secondaryTextColor),
-                                const SizedBox(height: 10),
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? CupertinoColors.white.withOpacity(0.1)
-                                          : CupertinoColors.systemGrey.withOpacity(0.2),
+                          ],
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 0,
+                        onPressed: () => Navigator.pop(context),
+                        child: Icon(
+                          CupertinoIcons.xmark_circle_fill,
+                          size: 24,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // 内容区域（固定高度，内部可滚动）
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CupertinoActivityIndicator())
+                      : _error != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Text(
+                                  '加载失败',
+                                  style: TextStyle(color: secondaryTextColor),
+                                ),
+                              ),
+                            )
+                          : SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(), // 允许滚动
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildPriceCard(isDark, textColor, secondaryTextColor),
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? CupertinoColors.white.withOpacity(0.1)
+                                            : CupertinoColors.systemGrey.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        StockCandleChart(
+                                          key: _candleChartKey,
+                                          stockCode: widget.stockCode,
+                                          isDark: isDark,
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      StockCandleChart(
-                                        key: ValueKey('candle_chart'),
-                                        stockCode: widget.stockCode,
-                                        isDark: isDark,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

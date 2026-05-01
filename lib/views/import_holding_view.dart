@@ -1051,23 +1051,33 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                 child: Column(
                   children: [
                     if (_isImporting) ...[
-                      Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? CupertinoColors.systemGrey5
-                              : CupertinoColors.systemGrey4,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: FractionallySizedBox(
-                          widthFactor: _importProgress,
-                          child: Container(
+                      Stack(
+                        children: [
+                          // 背景轨道
+                          Container(
+                            height: 4,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF8B9DC3),
+                              color: isDarkMode
+                                  ? CupertinoColors.systemGrey5
+                                  : CupertinoColors.systemGrey4,
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                        ),
+                          // 进度条（从左到右）
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: _importProgress,
+                              child: Container(
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B9DC3),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Text(
