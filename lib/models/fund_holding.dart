@@ -172,6 +172,51 @@ class FundHolding {
     );
   }
 
+  /// 转换为 SQLite Map（用于数据库存储）
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'client_name': clientName,
+      'client_id': clientId,
+      'fund_code': fundCode,
+      'fund_name': fundName,
+      'total_shares': totalShares,
+      'total_cost': totalCost,
+      'avg_cost': averageCost,
+      'nav_date': navDate.toIso8601String(),
+      'current_nav': currentNav,
+      'remarks': remarks,
+      'is_pinned': isPinned ? 1 : 0,
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// 从 SQLite Map 创建对象（用于数据库读取）
+  factory FundHolding.fromMap(Map<String, dynamic> map) {
+    return FundHolding(
+      id: map['id'] as String,
+      clientName: map['client_name'] as String,
+      clientId: map['client_id'] as String? ?? '',
+      fundCode: map['fund_code'] as String,
+      fundName: map['fund_name'] as String,
+      totalShares: (map['total_shares'] as num?)?.toDouble() ?? 0.0,
+      totalCost: (map['total_cost'] as num?)?.toDouble() ?? 0.0,
+      averageCost: (map['avg_cost'] as num?)?.toDouble() ?? 0.0,
+      navDate: DateTime.parse(map['nav_date'] as String),
+      currentNav: (map['current_nav'] as num?)?.toDouble() ?? 0.0,
+      isValid: true,
+      remarks: map['remarks'] as String? ?? '',
+      isPinned: (map['is_pinned'] as int?) == 1,
+      pinnedTimestamp: null,
+      navReturn1m: null,
+      navReturn3m: null,
+      navReturn6m: null,
+      navReturn1y: null,
+      transactionIds: [],
+    );
+  }
+
   static FundHolding invalid({required String fundCode}) {
     return FundHolding(
       clientName: '',

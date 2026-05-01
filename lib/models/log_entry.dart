@@ -93,6 +93,28 @@ class LogEntry {
     );
   }
 
+  /// 转换为 SQLite Map（用于数据库存储）
+  Map<String, dynamic> toMap() {
+    return {
+      'message': message,
+      'type': type.name,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  /// 从 SQLite Map 创建对象（用于数据库读取）
+  factory LogEntry.fromMap(Map<String, dynamic> map) {
+    return LogEntry(
+      id: (map['id'] as int?)?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      message: map['message'] as String,
+      type: LogType.values.firstWhere(
+        (e) => e.name == map['type'],
+        orElse: () => LogType.info,
+      ),
+      timestamp: DateTime.parse(map['timestamp'] as String),
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;

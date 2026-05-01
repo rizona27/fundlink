@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart' show Colors, Divider;
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
@@ -11,6 +12,8 @@ import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
 import 'pending_transactions_view.dart';
+import '../widgets/alert_edit_dialog.dart';
+import '../services/biometric_guard.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -22,6 +25,8 @@ class ConfigView extends StatefulWidget {
 class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late AnimationController _fadeController;
+  bool _biometricEnabled = false;
+  bool _isBiometricSupported = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -39,6 +44,18 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
+    _loadBiometricSettings();
+  }
+
+  Future<void> _loadBiometricSettings() async {
+    final supported = await BiometricGuard.canCheckBiometrics();
+    final enabled = await BiometricGuard.isEnabled();
+    if (mounted) {
+      setState(() {
+        _isBiometricSupported = supported;
+        _biometricEnabled = enabled;
+      });
+    }
   }
 
   @override
@@ -78,6 +95,10 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   }
 
   Widget _buildGeneralSection(bool isDarkMode) {
+    final isDesktop = defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    
     return _buildSection(
       title: '基础配置',
       icon: '通用',
@@ -108,6 +129,20 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         ),
         _buildDivider(isDarkMode),
         _buildThemeItem(isDarkMode),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.bell_fill,
+          title: '估值预警',
+          subtitle: '设置净值变动提醒',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            _showAlertEditDialog();
+          },
+        ),
+        if (!isDesktop) ...[
+          _buildDivider(isDarkMode),
+          _buildBiometricSwitchItem(isDarkMode),
+        ],
       ],
     );
   }
@@ -563,6 +598,47 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBiometricSwitchItem(bool isDarkMode) {
+    return _buildSwitchItem(
+      icon: CupertinoIcons.person_crop_circle_badge_checkmark,
+      title: '生物识别',
+      subtitle: _isBiometricSupported ? '应用锁定保护' : '设备不支持',
+      value: _biometricEnabled,
+      isDarkMode: isDarkMode,
+      onChanged: (value) async {
+        if (value && !_isBiometricSupported) {
+          showCupertinoDialog(
+            context: context,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('不支持'),
+              content: const Text('您的设备不支持生物识别功能'),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('确定'),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+        
+        await BiometricGuard.setEnabled(value);
+        setState(() {
+          _biometricEnabled = value;
+        });
+      },
+    );
+  }
+
+  void _showAlertEditDialog() {
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const AlertEditDialog(),
     );
   }
 

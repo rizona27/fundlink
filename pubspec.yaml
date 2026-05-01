@@ -29,6 +29,16 @@ dependencies:
   file_save_directory: ^1.0.0
   world_holidays: ^2.0.1
   pinyin: ^3.3.0
+  # 数据库相关
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0  # Windows/macOS/Linux 支持
+  path: ^1.8.3
+  # 本地通知
+  flutter_local_notifications: ^16.3.0
+  # 生物识别
+  local_auth: ^2.1.7
+  # 后台任务
+  workmanager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +52,7 @@ flutter:
   # 添加资源目录
   assets:
     - assets/icon/
+    - assets/database/
 
 # 图标配置
 flutter_launcher_icons:

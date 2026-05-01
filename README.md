@@ -1,5 +1,18 @@
 # FundLink | 一基暴富 📈
 
+一款专业的基金持仓管理与分析工具，支持多平台部署（iOS/Android/Windows/macOS/Linux）。
+
+------
+
+## 📋 目录
+
+- [✨ 核心特性](#-核心特性)
+- [🚀 快速开始](#-快速开始)
+- [📁 项目结构](#-项目结构)
+- [📝 开发指南](#-开发指南)
+- [⚖️ 开源协议](#️-开源协议)
+- [📜 免责声明](#-免责声明)
+
 ------
 
 ## ✨ 核心特性
@@ -16,28 +29,61 @@
 - 🔒 **信息安全**：
   - **隐私模式**：脱敏展示基金信息，方便截屏转发。
   - **本地化存储**：数据全量存储于本地，不经过第三方。
+- 🔔 **智能预警**（移动端）：
+  - **估值预警**：设置基金净值涨跌阈值，交易时段自动监控并推送通知。
+  - **智能时段控制**：仅在交易日9:30-15:30检查，闭市前1小时发送紧急通知。
+  - **省电优化**：非交易时段自动休眠，减少电量消耗。
+- 👤 **生物识别**（移动端）：
+  - **应用锁定**：支持Face ID/Touch ID/指纹识别保护应用安全。
+  - **后台检测**：应用切换到后台后自动锁定，返回时需验证身份。
+  - **灵活配置**：可设置锁定延迟时间（立即/30秒/1分钟/5分钟）。
 
 ------
 
-## 🚀 部署与运行
+## 🚀 快速开始
 
+### 环境要求
 
+- Flutter SDK >= 3.0.0
+- Dart SDK >= 2.17.0
+- 支持的平台：iOS / Android / Windows / macOS / Linux
 
-Bash
+### 安装与运行
 
-```
-# 克隆仓库
+```bash
+# 1. 克隆仓库
 git clone https://github.com/rizona27/fundlink.git
+cd fundlink
 
-# 安装依赖
+# 2. 安装依赖
 flutter pub get
 
-# 运行生成代码 (如果使用了 build_runner)
+# 3. 生成代码（如果使用了 build_runner）
 flutter pub run build_runner build
 
-# 启动项目
+# 4. 启动项目
 flutter run
+
+# 5. 指定平台运行
+flutter run -d windows    # Windows
+flutter run -d chrome     # Web
+flutter run -d <device>   # 其他设备
 ```
+
+### 构建发布版本
+
+```bash
+# Android APK (arm64)
+flutter build apk --release --split-per-abi --target-platform android-arm64
+
+# Windows 应用
+flutter build windows --release
+
+# iOS 应用
+flutter build ios --release
+```
+
+------
 
 ## 📝 项目结构
 
@@ -50,20 +96,24 @@ lib/
 │   └── app_constants.dart                 # 全局常量管理，统一管理API地址、缓存键名、业务常量等，支持API冗余设计
 │
 ├── services/
+│   ├── alert_service.dart                 # 估值预警服务，管理预警规则、智能时段控制、本地推送通知
+│   ├── biometric_guard.dart               # 生物识别保护服务，监听应用生命周期、触发身份验证、管理锁定状态
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略（专业API → world_holidays → 基础判断），内置内存缓存优化性能
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算、持久化、自动化缓存失效
+│   ├── database_helper.dart               # SQLite数据库帮助类，跨平台数据库支持（iOS/Android/Windows/macOS/Linux），提供CRUD操作和Schema管理
 │   ├── file_export_service.dart           # 支持导出组件，解析格式类型CSV/Excel
 │   ├── file_import_service.dart           # 支持导入组件，解析格式类型CSV/Excel
 │   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含多源冗余、缓存和重试机制
 │
 ├── models/
-│   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性
+│   ├── fund_holding.dart                  # 持仓数据模型（聚合视图），客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益计算属性，支持SQLite序列化(toMap/fromMap)
 │   ├── fund_info_cache.dart               # 基金信息缓存模型，存储基金代码、名称、当前净值、估值等数据的本地缓存结构
-│   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型（信息/成功/错误/警告/网络/缓存）、时间戳
+│   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型（信息/成功/错误/警告/网络/缓存）、时间戳，支持SQLite序列化(toMap/fromMap)
 │   ├── net_worth_point.dart               # 净值及趋势
 │   ├── profit_result.dart                 # 收益结果模型，绝对收益、年化收益率
 │   ├── top_holding.dart                   # 十大重仓情况
-│   └── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息（金额、份额、日期、净值、手续费等）
+│   ├── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息（金额、份额、日期、净值、手续费等），支持SQLite序列化(toMap/fromMap)
+│   └── valuation_alert.dart               # 估值预警规则模型，基金代码/名称、涨跌阈值、启用状态、创建时间
 │
 ├── views/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户信息、基金代码、交易金额/份额/日期，支持重复持仓检测与合并，自动查询基金名称和净值
@@ -86,12 +136,14 @@ lib/
 └── widgets/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能，支持防抖搜索
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入，自动计算预估数据
+    ├── alert_edit_dialog.dart             # 估值预警编辑弹窗组件，支持新建/编辑预警规则，表单验证和错误提示
     ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测和提示
+    ├── biometric_lock_overlay.dart        # 生物识别锁定覆盖层组件，显示锁定界面、验证按钮、解锁动画
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值，间隔可设置
     ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，弹出式页面，支持基金代码验证和存在性检查
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
     ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度，磨玻璃和阴影效果
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供“交易记录”入口
+    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率，提供"交易记录"入口
     ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，在基金详情页中调用，支持多指标对比（本基金/同类平均/沪深300/中证500/中证1000/自定义基金）
     ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现（近1周~成立来），优先使用API数据，自动计算补充周期
     ├── glass_button.dart                  # 全局磨玻璃风格按钮组件

@@ -160,6 +160,52 @@ class TransactionRecord {
     );
   }
 
+  /// 转换为 SQLite Map（用于数据库存储）
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'holding_id': '${clientId}_$fundCode',
+      'client_id': clientId,
+      'client_name': clientName,
+      'fund_code': fundCode,
+      'fund_name': fundName,
+      'type': type.code,
+      'amount': amount,
+      'shares': shares,
+      'nav': nav,
+      'fee_rate': 0.0,
+      'fee_amount': fee ?? 0.0,
+      'trade_date': tradeDate.toIso8601String(),
+      'confirm_date': null,
+      'is_after_1500': isAfter1500 ? 1 : 0,
+      'status': isPending ? 'pending' : 'confirmed',
+      'remarks': remarks,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
+  /// 从 SQLite Map 创建对象（用于数据库读取）
+  factory TransactionRecord.fromMap(Map<String, dynamic> map) {
+    return TransactionRecord(
+      id: map['id'] as String,
+      clientId: map['client_id'] as String? ?? '',
+      clientName: map['client_name'] as String? ?? '',
+      fundCode: map['fund_code'] as String? ?? '',
+      fundName: map['fund_name'] as String? ?? '',
+      type: TransactionTypeExtension.fromCode(map['type'] as String),
+      amount: (map['amount'] as num).toDouble(),
+      shares: (map['shares'] as num?)?.toDouble() ?? 0.0,
+      tradeDate: DateTime.parse(map['trade_date'] as String),
+      nav: map['nav'] != null ? (map['nav'] as num).toDouble() : null,
+      fee: map['fee_amount'] != null ? (map['fee_amount'] as num).toDouble() : null,
+      remarks: map['remarks'] as String? ?? '',
+      createdAt: DateTime.parse(map['created_at'] as String),
+      isAfter1500: (map['is_after_1500'] as int?) == 1,
+      isPending: (map['status'] as String?) == 'pending',
+      confirmedNav: map['confirmed_nav'] != null ? (map['confirmed_nav'] as num).toDouble() : null,
+    );
+  }
+
   @override
   String toString() {
     return 'TransactionRecord(id: $id, type: ${type.displayName}, '
