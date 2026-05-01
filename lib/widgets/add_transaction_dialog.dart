@@ -1053,28 +1053,23 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
                     const SizedBox(height: 20),
 
-                    // 提交按钮
-                    SizedBox(
-                      width: double.infinity,
+                    // 提交按钮 - 使用GlassButton统一风格
+                    GlassButton(
+                      label: _isLoading 
+                          ? (widget.type == TransactionType.buy ? '加仓中...' : '减仓中...')
+                          : (widget.type == TransactionType.buy ? '确认加仓' : '确认减仓'),
+                      onPressed: _isLoading ? null : _submit,
+                      isPrimary: true,
                       height: 44,
-                      child: CupertinoButton(
-                        color: widget.type == TransactionType.buy 
-                            ? const Color(0xFFFF3B30) // 红色 - 加仓
-                            : const Color(0xFF34C759), // 绿色 - 减仓
-                        borderRadius: BorderRadius.circular(12),
-                        onPressed: _isLoading ? null : _submit,
-                        padding: EdgeInsets.zero,
-                        child: _isLoading
-                            ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                            : Text(
-                                widget.type == TransactionType.buy ? '确认加仓' : '确认减仓',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: CupertinoColors.white,
-                                ),
-                              ),
-                      ),
+                      borderRadius: 12,
+                      expand: true,
+                      // 根据交易类型自定义颜色
+                      backgroundColorOverride: widget.type == TransactionType.buy 
+                          ? const Color(0xFFFF3B30).withOpacity(0.15) // 红色 - 加仓
+                          : const Color(0xFF34C759).withOpacity(0.15), // 绿色 - 减仓
+                      textColorOverride: widget.type == TransactionType.buy 
+                          ? const Color(0xFFFF3B30) // 红色文字
+                          : const Color(0xFF34C759), // 绿色文字
                     ),
                   ],
                 ), // SingleChildScrollView Column

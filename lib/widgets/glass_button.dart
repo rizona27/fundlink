@@ -12,6 +12,8 @@ class GlassButton extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final bool expand;
   final double minWidth;
+  final Color? backgroundColorOverride; // 自定义背景色
+  final Color? textColorOverride; // 自定义文字颜色
 
   const GlassButton({
     super.key,
@@ -25,6 +27,8 @@ class GlassButton extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     this.expand = false,
     this.minWidth = 120.0,
+    this.backgroundColorOverride,
+    this.textColorOverride,
   });
 
   @override
@@ -37,6 +41,9 @@ class GlassButton extends StatelessWidget {
     Color? effectiveBgColor;
     if (onPressed == null) {
       effectiveBgColor = isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey5;
+    } else if (backgroundColorOverride != null) {
+      // 使用自定义背景色
+      effectiveBgColor = backgroundColorOverride;
     } else if (isPrimary) {
       effectiveBgColor = CupertinoColors.activeBlue.withValues(alpha: 0.15);
     } else {
@@ -45,16 +52,18 @@ class GlassButton extends StatelessWidget {
 
     final textColor = (onPressed == null)
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label).withValues(alpha: 0.5)
-        : (isPrimary ? CupertinoColors.activeBlue : (isDarkMode ? CupertinoColors.white : CupertinoColors.label));
+        : (textColorOverride ?? (isPrimary ? CupertinoColors.activeBlue : (isDarkMode ? CupertinoColors.white : CupertinoColors.label)));
 
     Widget buttonContent;
     if (icon != null && label.isEmpty) {
+      // 只有图标
       buttonContent = Icon(
         icon,
         size: 18,
         color: textColor,
       );
     } else if (icon != null) {
+      // 图标 + 文字
       buttonContent = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -75,6 +84,7 @@ class GlassButton extends StatelessWidget {
         ],
       );
     } else {
+      // 只有文字
       buttonContent = Text(
         label,
         style: TextStyle(

@@ -346,80 +346,28 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       child: Row(
                 children: [
                   Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFFFF3B30).withOpacity(0.8), // 红色 - 加仓
-                                const Color(0xFFFF3B30).withOpacity(0.6),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFFF3B30).withOpacity(0.3),
-                              width: 1,
-                            ),
-                          ),
-                          child: CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => _showAddTransactionDialog(TransactionType.buy),
-                            child: const Text(
-                              '加仓',
-                              style: TextStyle(
-                                color: CupertinoColors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                    child: GlassButton(
+                      label: '加仓',
+                      onPressed: () => _showAddTransactionDialog(TransactionType.buy),
+                      isPrimary: true,
+                      height: 48,
+                      borderRadius: 12,
+                      // 自定义红色主题
+                      backgroundColorOverride: const Color(0xFFFF3B30).withOpacity(0.15),
+                      textColorOverride: const Color(0xFFFF3B30),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF34C759).withOpacity(0.8), // 绿色 - 减仓
-                                const Color(0xFF34C759).withOpacity(0.6),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFF34C759).withOpacity(0.3),
-                              width: 1,
-                            ),
-                          ),
-                          child: CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => _showAddTransactionDialog(TransactionType.sell),
-                            child: const Text(
-                              '减仓',
-                              style: TextStyle(
-                                color: CupertinoColors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                    child: GlassButton(
+                      label: '减仓',
+                      onPressed: () => _showAddTransactionDialog(TransactionType.sell),
+                      isPrimary: true,
+                      height: 48,
+                      borderRadius: 12,
+                      // 自定义绿色主题
+                      backgroundColorOverride: const Color(0xFF34C759).withOpacity(0.15),
+                      textColorOverride: const Color(0xFF34C759),
                     ),
                   ),
                 ],

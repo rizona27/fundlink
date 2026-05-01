@@ -620,7 +620,7 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              '带*号为估算数据，仅供参考，实际收益以基金公司公布为准',
+              '带*周期为计算数据，仅供参考(更新T日更为准确)。',
               style: TextStyle(
                 fontSize: 11,
                 color: isDark 
