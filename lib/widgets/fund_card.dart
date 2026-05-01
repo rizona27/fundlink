@@ -5,6 +5,7 @@ import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
 import '../views/fund_detail_view.dart';
 import '../widgets/transaction_history_dialog.dart';
+import '../utils/animation_config.dart';
 
 class FundCard extends StatefulWidget {
   final FundHolding holding;
@@ -33,6 +34,7 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   static const double _maxSwipeOffset = 70;
   DataManager? _dataManager;
   bool _isListenerRegistered = false;
+  bool _isPressed = false;
 
   @override
   void didChangeDependencies() {
@@ -188,8 +190,8 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
 
   void _onNavigateToDetail() {
     Navigator.of(context).push(
-      CupertinoPageRoute(
-        builder: (context) => FundDetailPage(holding: widget.holding),
+      AnimationConfig.createPageRoute(
+        page: FundDetailPage(holding: widget.holding),
       ),
     );
   }
@@ -271,8 +273,15 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     return GestureDetector(
       onHorizontalDragUpdate: _handleHorizontalDragUpdate,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
-      onTap: _resetSwipe,
-      child: Stack(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        _resetSwipe();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimationConfig.cardTapFeedback(
+        isPressed: _isPressed,
+        child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned(
@@ -482,6 +491,7 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
             ),
           ),
         ],
+      ),
       ),
     );
   }

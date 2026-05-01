@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'utils/animation_config.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
@@ -182,9 +183,9 @@ class _MainTabViewState extends State<MainTabView> {
     return Stack(
       children: [
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          switchInCurve: Curves.easeInOutCubic,
-          switchOutCurve: Curves.easeInOutCubic,
+          duration: AnimationConfig.durationMedium,
+          switchInCurve: AnimationConfig.curveEaseInOutCubic,
+          switchOutCurve: AnimationConfig.curveEaseInOutCubic,
           child: IndexedStack(
             index: _selectedIndex,
             children: _pages,

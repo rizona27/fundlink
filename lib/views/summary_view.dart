@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import '../utils/animation_config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
@@ -898,9 +899,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                 ),
               )
                   : AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
+                duration: AnimationConfig.durationMedium,
+                switchInCurve: AnimationConfig.curveEaseInOutCubic,
+                switchOutCurve: AnimationConfig.curveEaseInOutCubic,
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (notification is ScrollUpdateNotification) {
@@ -1032,8 +1033,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             GestureDetector(
                               onTap: () {
                                 Navigator.of(context).push(
-                                  CupertinoPageRoute(
-                                    builder: (context) => FundDetailPage(holding: first),
+                                  AnimationConfig.createPageRoute(
+                                    page: FundDetailPage(holding: first),
                                   ),
                                 );
                               },
@@ -1070,15 +1071,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             trailing: finalTrailing, 
                             maxTitleLength: 6,
                           ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeOutCubic,
-                            child: isExpanded
-                                ? Container(
-                                    margin: const EdgeInsets.only(left: 16, top: 8), 
-                                    child: _buildExpandedContent(first, holdings, isDark),
-                                  )
-                                : const SizedBox.shrink(),
+                          AnimationConfig.listExpandTransition(
+                            isExpanded: isExpanded,
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 16, top: 8), 
+                              child: _buildExpandedContent(first, holdings, isDark),
+                            ),
                           ),
                           const SizedBox(height: 8),
                         ],

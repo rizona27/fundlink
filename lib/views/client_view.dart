@@ -13,6 +13,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
+import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import '../constants/app_constants.dart';
 
@@ -488,19 +489,16 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                       ],
                                     ),
                                   ),
-                                  AnimatedSize(
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutCubic,
-                                    child: _isPinnedSectionExpanded
-                                        ? Column(
-                                            children: [
-                                              const SizedBox(height: 8),
-                                              ..._buildPinnedCards(),
-                                              const SizedBox(height: 16),
-                                            ],
-                                          )
-                                        : const SizedBox(height: 8), 
+                                  AnimationConfig.listExpandTransition(
+                                    isExpanded: _isPinnedSectionExpanded,
+                                    child: Column(
+                                      children: [
+                                        const SizedBox(height: 8),
+                                        ..._buildPinnedCards(),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(height: 16),
                                 ],
                               );
                             }
@@ -597,15 +595,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   trailing: trailing,
                   maxTitleLength: 10,
                 ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeOutCubic,
-                  child: isExpanded
-                      ? Container(
+                AnimationConfig.listExpandTransition(
+                  isExpanded: isExpanded,
+                  child: Container(
                     margin: const EdgeInsets.only(left: 16, top: 8), 
                     child: Column(children: _buildFundCards(group.holdings)),
-                  )
-                      : const SizedBox.shrink(),
+                  ),
                 ),
               ],
             ),
@@ -682,15 +677,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               trailing: trailing,
               maxTitleLength: 10,
             ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              child: isExpanded
-                  ? Container(
+            AnimationConfig.listExpandTransition(
+              isExpanded: isExpanded,
+              child: Container(
                 margin: const EdgeInsets.only(left: 16, top: 8), 
                 child: Column(children: _buildFundCards(group.holdings)),
-              )
-                  : const SizedBox.shrink(),
+              ),
             ),
           ],
         ),

@@ -82,6 +82,36 @@ class ChinaTradingDayService {
     return previous;
   }
   
+  DateTime getNextTradingDaySync({DateTime? from}) {
+    DateTime next = from ?? DateTime.now();
+    next = DateTime(next.year, next.month, next.day).add(const Duration(days: 1));
+    
+    for (int i = 0; i < 30; i++) {
+      final dateKey = _formatDate(next);
+      bool isTrading;
+      
+      if (_cache.containsKey(dateKey)) {
+        isTrading = _cache[dateKey]!;
+      } else {
+        // 使用与 _checkByWorldHolidays 相同的逻辑
+        if (next.weekday == DateTime.saturday || next.weekday == DateTime.sunday) {
+          isTrading = false;
+        } else {
+          final isHoliday = _worldHolidays.isHoliday('CN', next);
+          isTrading = !isHoliday;
+        }
+        _cache[dateKey] = isTrading;
+      }
+      
+      if (isTrading) {
+        return next;
+      }
+      next = next.add(const Duration(days: 1));
+    }
+    
+    return next;
+  }
+  
   
   Future<bool?> _checkByApi(DateTime date) async {
     try {

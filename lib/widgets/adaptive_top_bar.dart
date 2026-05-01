@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, Tar
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
+import '../utils/animation_config.dart';
 import 'search.dart';
 import 'countdown_refresh_button.dart';
 import 'glass_button.dart';
@@ -721,8 +722,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(
         AnimatedOpacity(
           opacity: widget.showReset ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
+          duration: AnimationConfig.durationFade,
+          curve: AnimationConfig.curveFade,
           child: _buildResetButton(),
         ),
       );
@@ -734,8 +735,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(
         AnimatedOpacity(
           opacity: widget.showFilter ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
+          duration: AnimationConfig.durationFade,
+          curve: AnimationConfig.curveFade,
           child: _buildFilterButton(),
         ),
       );
@@ -747,8 +748,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(
         AnimatedOpacity(
           opacity: widget.showSearch ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
+          duration: AnimationConfig.durationFade,
+          curve: AnimationConfig.curveFade,
           child: _buildSearchButton(),
         ),
       );
@@ -760,8 +761,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       children.add(
         AnimatedOpacity(
           opacity: widget.showExpandCollapse ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
+          duration: AnimationConfig.durationFade,
+          curve: AnimationConfig.curveFade,
           child: _buildExpandCollapseButton(),
         ),
       );
@@ -1215,8 +1216,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                     curve: Curves.easeInOutCubic,
                     child: AnimatedOpacity(
                       opacity: _currentSearchVisible ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
+                      duration: AnimationConfig.durationFade,
+                      curve: AnimationConfig.curveFade,
                       child: Container(
                         height: _currentSearchVisible ? 52 : 0,
                         child: SingleChildScrollView(
@@ -1706,9 +1707,9 @@ class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTicke
             color: textColor,
           ),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            switchInCurve: Curves.easeInOut,
-            switchOutCurve: Curves.easeInOut,
+            duration: AnimationConfig.durationMedium,
+            switchInCurve: AnimationConfig.curveEaseInOutCubic,
+            switchOutCurve: AnimationConfig.curveEaseInOutCubic,
             child: _isHovered
                 ? Padding(
                     key: ValueKey('text_${widget.item.label}'),

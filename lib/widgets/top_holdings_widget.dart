@@ -1,3 +1,4 @@
+import '../utils/animation_config.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../models/top_holding.dart';
@@ -106,9 +107,9 @@ class TopHoldingsWidget extends StatelessWidget {
 
         return ClipRect(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeInOut,
-            switchOutCurve: Curves.easeInOut,
+            duration: AnimationConfig.durationStandard,
+            switchInCurve: AnimationConfig.curveEaseInOutCubic,
+            switchOutCurve: AnimationConfig.curveEaseInOutCubic,
             child: GridView.builder(
               key: ValueKey('grid_$crossAxisCount'), 
               shrinkWrap: true,

@@ -1053,13 +1053,17 @@ class DataManager extends ChangeNotifier {
     final isTradeWeekday = isWeekday(tradeDay);
     final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
     
+    DateTime actualNavDate;
     if (effectiveIsAfter1500) {
-      final actualNavDate = getNextWeekday(tradeDay); 
-      return getNextWeekday(actualNavDate); 
+      actualNavDate = getNextWeekday(tradeDay); 
     } else {
-      final actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); 
-      return getNextWeekday(actualNavDate); 
+      actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); 
     }
+    
+    final confirmDate = getNextWeekday(actualNavDate);
+    
+    final service = ChinaTradingDayService();
+    return service.getNextTradingDaySync(from: confirmDate);
   }
   
   static Future<DateTime> calculateConfirmDateAsync(DateTime tradeDate, bool isAfter1500) async {
