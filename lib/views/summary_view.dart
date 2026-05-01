@@ -112,7 +112,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     // 如果估值不是今天的，说明是非交易日，暂停
     if (!valuationDay.isAtSameMomentAs(today)) {
-      print('⏸️ 估值日期不是今天 (${valuationDay}), 暂停自动刷新');
       return true;
     }
     
@@ -123,7 +122,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     // 如果估值时间已经达到或超过15:00，说明今日交易已结束
     if (valuationTime >= 15 * 60) {
-      print('⏸️ 今日估值已到15:00 ($valuationHour:$valuationMinute), 暂停自动刷新');
       return true;
     }
     
@@ -277,23 +275,19 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     // 检查是否应该暂停自动刷新
     if (_shouldPauseAutoRefresh()) {
-      print('⏸️ 估值定时器未启动: 已暂停自动刷新');
       return;
     }
     
     // 只有在开市期间才启动自动刷新
     if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing) {
-      print('⏸️ 估值定时器未启动: showValuation=$_showValuationRefresh, pageVisible=$_isPageVisible, refreshing=${_dataManager.isValuationRefreshing}');
       return;
     }
 
-    print('▶️ 启动估值定时器，间隔: ${_valuationRefreshIntervalSeconds}秒');
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
         // 每次触发前再次检查是否应该暂停
         if (_shouldPauseAutoRefresh()) {
-          print('⏸️ 定时器触发但已暂停，停止定时器');
           _stopValuationTimer();
           return;
         }
@@ -303,12 +297,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
             !_dataManager.isValuationRefreshing && 
             !_dataManager.isValuationRefreshInProgress;
         
-        print('⏰ 定时器触发: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}, 应该刷新: $shouldRefresh');
         
         if (shouldRefresh) {
           _onValuationRefresh();
         } else {
-          print('❌ 跳过刷新');
         }
       },
     );
@@ -322,7 +314,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void _restartValuationTimer() {
     // 检查是否应该暂停
     if (_shouldPauseAutoRefresh()) {
-      print('⏸️ 不重启定时器: 已暂停自动刷新');
       return;
     }
     
@@ -347,7 +338,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
       // 如果现在应该暂停，停止定时器
       else if (shouldPause && _valuationTimer != null) {
-        print('⏸️ 市场状态检测: 暂停估值定时器');
         _stopValuationTimer();
       }
       
@@ -385,14 +375,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final pendingCount = _dataManager.getPendingTransactions().length;
       if (pendingCount == 0) return;
       
-      print('发现 $pendingCount 笔待确认交易，尝试自动确认...');
       final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);
       
       if (confirmedCount > 0 && mounted) {
         context.showToast('已自动确认 $confirmedCount 笔交易');
       }
     } catch (e) {
-      print('自动确认交易失败: $e');
     }
   }
 

@@ -299,12 +299,12 @@ class FundService {
 
 
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
-    print('正在获取基金 $code 的净值趋势...');
+    _dataManager?.addLog('获取基金 $code 净值趋势', type: LogType.network);
     
     // 阶段1: 先尝试从缓存加载
     final cachedPoints = await loadNavFromCache(code);
     if (cachedPoints != null && cachedPoints.isNotEmpty) {
-      print('✅ 使用缓存数据，共 ${cachedPoints.length} 条');
+      _dataManager?.addLog('使用缓存数据 ${cachedPoints.length} 条', type: LogType.cache);
       
       // 阶段2: 后台增量更新（检查是否有新数据）
       _incrementalUpdateNav(code, cachedPoints);
@@ -321,19 +321,18 @@ class FundService {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
-      print('基金 $code HTTP错误: ${response.statusCode}');
+      _dataManager?.addLog('基金 $code HTTP错误: ${response.statusCode}', type: LogType.error);
       throw Exception('HTTP ${response.statusCode}');
     }
     final jsString = utf8.decode(response.bodyBytes);
     final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
     final match = trendRegex.firstMatch(jsString);
     if (match == null) {
-      print('基金 $code 未找到Data_netWorthTrend数据');
+      _dataManager?.addLog('基金 $code 未找到净值数据', type: LogType.error);
       return [];
     }
     final trendArrayStr = match.group(1)!;
     final List<dynamic> trendList = jsonDecode(trendArrayStr);
-    print('基金 $code 原始数据点数: ${trendList.length}');
     
     // 解析所有净值点
     final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
@@ -347,18 +346,13 @@ class FundService {
       return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
     }).toList();
     
-    print('基金 $code 过滤后数据点数: ${confirmedPoints.length}');
-    if (confirmedPoints.isNotEmpty) {
-      print('基金 $code 最早日期: ${confirmedPoints.first.date}, 最新日期: ${confirmedPoints.last.date}');
-    }
-    
     // 如果过滤后没有数据（可能是新基金），则返回原始数据
     final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
-    print('基金 $code 最终返回数据点数: ${result.length}');
     
     // 保存到缓存
     if (result.isNotEmpty) {
       await saveNavToCache(code, result);
+      _dataManager?.addLog('已缓存 ${result.length} 条净值数据', type: LogType.cache);
     }
     
     return result;
@@ -372,7 +366,7 @@ class FundService {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
       
       if (response.statusCode != 200) {
-        print('⚠️ 增量更新失败: HTTP ${response.statusCode}');
+        _dataManager?.addLog('增量更新失败: HTTP ${response.statusCode}', type: LogType.error);
         return;
       }
       
@@ -391,20 +385,15 @@ class FundService {
       final newerPoints = newPoints.where((p) => p.date.isAfter(lastCachedDate)).toList();
       
       if (newerPoints.isNotEmpty) {
-        print('🔄 发现 ${newerPoints.length} 条新净值数据');
-        
         // 合并数据
         final mergedPoints = [...cachedPoints, ...newerPoints];
         
         // 更新缓存
         await saveNavToCache(code, mergedPoints);
-        
-        print('✅ 增量更新完成，总计 ${mergedPoints.length} 条');
-      } else {
-        print('✅ 缓存已是最新');
+        _dataManager?.addLog('增量更新 ${newerPoints.length} 条净值', type: LogType.network);
       }
     } catch (e) {
-      print('❌ 增量更新失败: $e');
+      _dataManager?.addLog('增量更新异常: $e', type: LogType.error);
     }
   }
 
@@ -798,11 +787,10 @@ class FundService {
           series: json['series'] as String? ?? 'fund',
         )).toList();
         
-        print('✅ 从缓存加载 ${cachedPoints.length} 条基金 $code 历史净值');
         return cachedPoints;
       }
     } catch (e) {
-      print('❌ 缓存加载失败: $e');
+      _dataManager?.addLog('缓存加载失败: $e', type: LogType.error);
     }
     return null;
   }
@@ -821,9 +809,8 @@ class FundService {
       }).toList();
       
       await prefs.setString(cacheKey, jsonEncode(jsonList));
-      print('💾 已缓存 ${points.length} 条基金 $code 历史净值');
     } catch (e) {
-      print('❌ 缓存保存失败: $e');
+      _dataManager?.addLog('缓存保存失败: $e', type: LogType.error);
     }
   }
   
@@ -833,9 +820,8 @@ class FundService {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getNavCacheKey(code);
       await prefs.remove(cacheKey);
-      print('🗑️ 已清除基金 $code 的净值缓存');
     } catch (e) {
-      print('❌ 清除缓存失败: $e');
+      _dataManager?.addLog('清除缓存失败: $e', type: LogType.error);
     }
   }
 }

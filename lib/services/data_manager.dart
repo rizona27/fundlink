@@ -600,8 +600,6 @@ class DataManager extends ChangeNotifier {
       
       if (pendingTransactions.isEmpty) return;
       
-      print('发现 ${pendingTransactions.length} 笔待确认交易涉及基金 $fundCode，尝试自动确认...');
-      
       int confirmedCount = 0;
       final now = DateTime.now();
       
@@ -620,7 +618,7 @@ class DataManager extends ChangeNotifier {
             }
           }
         } catch (e) {
-          print('自动确认交易失败: $e');
+          // 自动确认失败，静默处理
         }
       }
       
@@ -629,7 +627,7 @@ class DataManager extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('自动确认相关待确认交易失败: $e');
+      await addLog('自动确认相关待确认交易失败: $e', type: LogType.error);
     }
   }
 
@@ -929,7 +927,6 @@ class DataManager extends ChangeNotifier {
         // 使用内扣法计算份额：份额 = 金额 / (1 + 费率%) / 净值
         final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
         calculatedShares = transaction.amount / (1 + feeRate / 100) / confirmedNav;
-        print('确认买入交易时计算份额: 金额=${transaction.amount}, 费率=$feeRate%, 净值=$confirmedNav, 份额=$calculatedShares');
       }
     } else {
       // 卖出：如果金额为0，根据份额和净值计算金额
@@ -937,7 +934,6 @@ class DataManager extends ChangeNotifier {
         // 金额 = 份额 * 净值 * (1 - 费率%)
         final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
         calculatedAmount = transaction.shares * confirmedNav * (1 - feeRate / 100);
-        print('确认卖出交易时计算金额: 份额=${transaction.shares}, 费率=$feeRate%, 净值=$confirmedNav, 金额=$calculatedAmount');
       }
     }
     
@@ -995,7 +991,7 @@ class DataManager extends ChangeNotifier {
           }
         }
       } catch (e) {
-        print('自动确认交易失败: $e');
+        await addLog('自动确认交易失败: $e', type: LogType.error);
       }
     }
     

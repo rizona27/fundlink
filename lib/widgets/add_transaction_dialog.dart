@@ -100,7 +100,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   Future<void> _fetchCurrentNavIfNeeded() async {
     // 如果是待确认交易，不自动填充净值
     if (_isTodayTransaction) {
-      print('待确认交易，不自动填充净值');
       setState(() => _isFetchingNav = false);
       return;
     }
@@ -162,7 +161,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         _navController.text = widget.currentNav!.toStringAsFixed(4);
       }
     } else {
-      print('待确认交易，_checkTimeAndSetNav 不自动填充净值');
     }
   }
 
@@ -179,7 +177,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   void _calculateEstimated() {
     // 如果是待确认交易，不自动计算份额
     if (_isTodayTransaction) {
-      print('待确认交易，不自动计算份额');
       return;
     }
     
@@ -256,7 +253,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             _fetchNavByDate().then((_) {
               // 净值更新后，重新计算预估份额/金额
               if (!_isTodayTransaction && mounted) {
-                print('日期已变更，重新计算预估值');
                 _calculateEstimated();
               }
             });
@@ -277,7 +273,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       
       // 如果是待确认交易(今天或未来),不自动填充净值
       if (isPending) {
-        print('待确认交易(今天或未来日期),不自动填充净值');
         // 不清空用户手动输入的净值，只是不自动填充
         if (_navController.text.isEmpty) {
           setState(() {
@@ -328,16 +323,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         setState(() {
           _navController.text = selectedPoint!.nav.toStringAsFixed(4);
         });
-        print('加仓/减仓 - 选择日期: $_tradeDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
         
         // 净值变化后，自动重新计算预估份额/金额
         if (!_isTodayTransaction) {
-          print('净值已更新，重新计算预估值');
           _calculateEstimated();
         }
       }
     } catch (e) {
-      print('获取历史净值失败: $e');
     }
   }
 
@@ -456,7 +448,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     
     if (isPending) {
       confirmedNav = null;
-      print('创建待确认交易: 今天或未来日期');
     }
 
     setState(() => _isLoading = true);

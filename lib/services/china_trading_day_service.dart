@@ -42,31 +42,24 @@ class ChinaTradingDayService {
       // 第一层：尝试使用专业 API
       final apiResult = await _checkByApi(date);
       if (apiResult != null) {
-        print('[ChinaTradingDayService] 使用 API 判断结果: $apiResult');
         result = apiResult;
       } else {
         // API 返回 null，继续下一层
         throw Exception('API 返回 null');
       }
     } catch (e) {
-      print('[ChinaTradingDayService] API 请求失败: $e');
-      
       try {
         // 第二层：使用 world_holidays 包
         final holidayResult = _checkByWorldHolidays(date);
         if (holidayResult != null) {
-          print('[ChinaTradingDayService] 使用 world_holidays 判断结果: $holidayResult');
           result = holidayResult;
         } else {
           // world_holidays 返回 null，使用兜底方案
           result = _checkByWeekday(date);
-          print('[ChinaTradingDayService] 使用基础判断结果: $result');
         }
       } catch (e) {
-        print('[ChinaTradingDayService] world_holidays 判断失败: $e');
         // 第三层：使用基础判断（兜底方案）
         result = _checkByWeekday(date);
-        print('[ChinaTradingDayService] 使用基础判断结果: $result');
       }
     }
     
@@ -166,7 +159,7 @@ class ChinaTradingDayService {
         }
       }
     } catch (e) {
-      print('[ChinaTradingDayService] API 异常: $e');
+      // API 异常，返回 null 让上层处理
     }
     
     return null;
@@ -199,7 +192,6 @@ class ChinaTradingDayService {
       // 这里我们保守地认为是交易日
       return true;
     } catch (e) {
-      print('[ChinaTradingDayService] world_holidays 异常: $e');
       return null;
     }
   }

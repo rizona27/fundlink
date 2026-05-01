@@ -359,16 +359,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             // 待确认交易时，不自动填充净值
             _confirmNav = null;
             _confirmNavController.clear();
-            print('待确认交易，不自动填充净值');
           }
-          
-          // 调试信息
-          print('基金代码: $fundCode');
-          print('基金名称: $_fundName');
-          print('当前净值: $_currentNav');
-          print('确认净值: $_confirmNav');
-          print('净值日期: $_navDate');
-          print('是否待确认: $_isTodayTransaction');
         });
         
         // 后台缓存净值趋势数据，用于后续根据日期查找
@@ -376,7 +367,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         await _cacheTrendDataAndUpdateLatest(fundCode);
       }
     } catch (e) {
-      print('获取基金信息失败: $e');
+      // 获取基金信息失败，静默处理
     }
   }
   
@@ -388,10 +379,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         setState(() {
           _cachedTrendData = trendData;
         });
-        print('已缓存 ${trendData.length} 条净值数据');
       }
     } catch (e) {
-      print('缓存净值趋势数据失败: $e');
+      // 缓存净值趋势数据失败，静默处理
     }
   }
   
@@ -418,14 +408,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                 _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
               }
             }
-            
-            print('从缓存数据更新最新净值: $_currentNav ($_navDate)');
           }
         });
-        print('已缓存 ${trendData.length} 条净值数据，最新: ${latestPoint.nav} (${latestPoint.date})');
       }
     } catch (e) {
-      print('缓存净值趋势数据失败: $e');
+      // 缓存净值趋势数据失败，静默处理
     }
   }
   
@@ -433,7 +420,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   void _calculateShares() {
     // 如果是待确认交易，不自动计算份额
     if (_isTodayTransaction) {
-      print('待确认交易，不自动计算份额');
       return;
     }
     
@@ -710,7 +696,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         if (sharesText.isEmpty) {
           transactionShares = 0;
         }
-        print('创建待确认交易(新增持仓): 今天或未来日期, 份额: $transactionShares');
       }
 
       // 创建交易记录（买入）- 使用确认净值
@@ -780,7 +765,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             await _fetchNavByDate(_fundCodeController.text.trim(), newDate);
             // 净值更新后，重新计算份额
             if (!_isTodayTransaction) {
-              print('日期已变更，重新计算份额');
               _calculateShares();
             }
           }
@@ -806,7 +790,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       // 关键修复：只检查净值日期是否可用，不检查交易是否待确认
       // 即使是待确认交易，如果净值日期是过去（已有净值），也应该填充
       if (navDateNotAvailable) {
-        print('净值未公布 - 交易日期: $targetDate, 净值日期: $targetNavDate, 净值是否可用: false');
         setState(() {
           _confirmNavController.clear();
           _confirmNav = null;
@@ -817,7 +800,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       // 优先使用缓存的数据
       if (_cachedTrendData != null && _cachedTrendData!.isNotEmpty) {
         trendData = _cachedTrendData!;
-        print('使用缓存的净值数据');
       } else {
         // 如果没有缓存，则重新获取
         trendData = await _fundService.fetchNetWorthTrend(fundCode);
@@ -886,18 +868,14 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _currentNav = selectedPoint!.nav;
         });
         final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
-        print('$timeLabel交易 - $matchType - 选择日期: $targetDate, 使用净值日期: ${selectedPoint!.date}, 净值: ${selectedPoint!.nav}');
         
         // 净值变化后，自动重新计算份额
         if (!_isTodayTransaction) {
-          print('净值已更新，重新计算份额');
           _calculateShares();
         }
       } else {
-        print('未找到 $targetNavDate 附近的净值数据（最近的是 ${closestPoint?.date}，相差${minDiff}天）');
       }
     } catch (e) {
-      print('获取历史净值失败: $e');
     }
   }
 
@@ -1040,9 +1018,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                             if (_fundCodeController.text.trim().length == 6) {
                               await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);
                               // 净值更新后，重新计算份额
-                              print('切换15:00前后，重新计算份额。当前确认净值: $_confirmNav, 金额: ${_purchaseAmountController.text}, 费率: ${_feeRateController.text}');
                               _calculateShares();
-                              print('计算后份额: ${_purchaseSharesController.text}');
                             }
                           },
                           isDarkMode: isDarkMode,

@@ -118,11 +118,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
         ..sort((a, b) => a.date.compareTo(b.date));
 
       // 获取对比基金数据（并行加载）- 使用ETF联接基金
-      print('开始加载对比基金数据...');
-      print('沪深300 ETF联接: 460300 (华泰柏瑞沪深300ETF联接A)');
-      print('中证500 ETF联接: 004348');
-      print('中证1000 ETF联接: 011860');
-      print('自定义基金代码: $_customFundCode');
       
       // iOS优化：使用Future.wait并发加载对比基金数据
       final hs300Future = _fundService!.fetchNetWorthTrend('460300');
@@ -134,19 +129,15 @@ class _FundDetailPageState extends State<FundDetailPage> {
       
       final results = await Future.wait([
         hs300Future.catchError((e) {
-          print('沪深300加载失败: $e');
           return <NetWorthPoint>[];
         }),
         zz500Future.catchError((e) {
-          print('中证500加载失败: $e');
           return <NetWorthPoint>[];
         }),
         zz1000Future.catchError((e) {
-          print('中证1000加载失败: $e');
           return <NetWorthPoint>[];
         }),
         customFundFuture.catchError((e) {
-          print('自定义基金加载失败: $e');
           return <NetWorthPoint>[];
         }),
       ]);
@@ -156,26 +147,16 @@ class _FundDetailPageState extends State<FundDetailPage> {
       _zz1000Points = (results[2] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
       _customFundPoints = (results[3] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
       
-      print('同类平均数据点数: ${_avgPoints.length}');
-      print('沪深300数据点数: ${_hsPoints.length}');
-      print('中证500数据点数: ${_zz500Points?.length ?? 0}');
-      print('中证1000数据点数: ${_zz1000Points?.length ?? 0}');
-      print('自定义基金数据点数: ${_customFundPoints?.length ?? 0}');
       
       if (_avgPoints.isNotEmpty) {
-        print('同类平均最新日期: ${_avgPoints.last.date}, 净值: ${_avgPoints.last.nav}');
       }
       if (_hsPoints.isNotEmpty) {
-        print('沪深300最新日期: ${_hsPoints.last.date}, 净值: ${_hsPoints.last.nav}');
       }
       if (_zz500Points != null && _zz500Points!.isNotEmpty) {
-        print('中证500最新日期: ${_zz500Points!.last.date}, 净值: ${_zz500Points!.last.nav}');
       }
       if (_zz1000Points != null && _zz1000Points!.isNotEmpty) {
-        print('中证1000最新日期: ${_zz1000Points!.last.date}, 净值: ${_zz1000Points!.last.nav}');
       }
       if (_customFundPoints != null && _customFundPoints!.isNotEmpty) {
-        print('自定义基金最新日期: ${_customFundPoints!.last.date}, 净值: ${_customFundPoints!.last.nav}');
       }
 
       final holdings = await _fundService!.fetchTopHoldingsFromHtml(widget.holding.fundCode);

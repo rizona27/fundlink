@@ -136,7 +136,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         )).toList();
         
         if (cachedCandles.isNotEmpty) {
-          print('✅ 从缓存加载 ${cachedCandles.length} 条K线数据');
           setState(() {
             _candleDataList = cachedCandles;
             _earliestDate = DateTime.parse(cachedCandles.first.date);
@@ -147,10 +146,8 @@ class StockCandleChartState extends State<StockCandleChart> {
           });
         }
       } else {
-        print('⚠️ 无缓存数据');
       }
     } catch (e) {
-      print('❌ 缓存加载失败: $e');
     }
   }
   
@@ -205,7 +202,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
       
-      print('🔄 加载最新数据: $url');
       final res = await http.get(url).timeout(const Duration(seconds: 10));
       
       if (res.statusCode == 200) {
@@ -231,7 +227,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           }
           
           if (newCandles.isNotEmpty) {
-            print('✅ 获取到 ${newCandles.length} 条新数据');
             
             // 合并缓存数据和新数据（去重）
             final mergedList = _mergeCandleData(_candleDataList, newCandles);
@@ -254,7 +249,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
-      print('❌ 加载最新数据失败: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -264,7 +258,6 @@ class StockCandleChartState extends State<StockCandleChart> {
   Future<void> _preloadMoreHistory() async {
     if (_hasPreloaded || _earliestDate == null) return;
     
-    print('📥 后台预加载历史数据...');
     
     try {
       String formattedSecid = widget.stockCode;
@@ -346,7 +339,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           }
           
           if (historyCandles.isNotEmpty) {
-            print('✅ 预加载 ${historyCandles.length} 条历史数据');
             
             final mergedList = _mergeCandleData(historyCandles, _candleDataList);
             
@@ -363,7 +355,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
-      print('❌ 预加载失败: $e');
     }
   }
   
@@ -408,9 +399,7 @@ class StockCandleChartState extends State<StockCandleChart> {
       }).toList();
       
       await prefs.setString(cacheKey, jsonEncode(jsonList));
-      print('💾 已缓存 ${candles.length} 条K线数据');
     } catch (e) {
-      print('❌ 缓存保存失败: $e');
     }
   }
 
@@ -473,7 +462,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
 
-      print('请求K线数据 (尝试 ${retryCount + 1}/3): $url');
       
       // 增加超时时间到15秒，适应慢速网络
       final res = await http.get(url).timeout(const Duration(seconds: 15));
@@ -501,7 +489,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           }
 
           if (candles.isNotEmpty) {
-            print('成功加载 ${candles.length} 条K线数据');
             // API返回的是从旧到新，不需要反转
             setState(() {
               _candleDataList = candles;
@@ -516,40 +503,32 @@ class StockCandleChartState extends State<StockCandleChart> {
               }
             });
           } else {
-            print('警告: K线数据为空');
             // 重试机制
             if (retryCount < 2) {
-              print('准备重试...');
               await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
               await _loadData(retryCount: retryCount + 1);
               return;
             }
           }
         } else {
-          print('警告: API返回数据格式错误');
           // 重试机制
           if (retryCount < 2) {
-            print('准备重试...');
             await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
             await _loadData(retryCount: retryCount + 1);
             return;
           }
         }
       } else {
-        print('警告: HTTP请求失败，状态码: ${res.statusCode}');
         // 重试机制
         if (retryCount < 2) {
-          print('准备重试...');
           await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
           await _loadData(retryCount: retryCount + 1);
           return;
         }
       }
     } catch (e) {
-      print('加载K线数据失败: $e');
       // 网络错误或超时，重试机制
       if (retryCount < 2) {
-        print('网络错误，准备重试...');
         await Future.delayed(Duration(seconds: 2 * (retryCount + 1)));
         await _loadData(retryCount: retryCount + 1);
         return;
@@ -724,7 +703,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
-      print('加载历史数据失败: $e');
     }
     // 注意：这里不设置 _isLoading = false，因为根本没设置为true
   }

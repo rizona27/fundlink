@@ -152,12 +152,10 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
         '&fields=f43,f57,f58,f169,f170,f46,f44,f51,f168,f47,f164,f163,f116,f60,f45,f52,f50,f48,f167,f117,f71,f161,f49,f530',
       );
       
-      print('请求股票行情: $url');
       final res = await http.get(url).timeout(const Duration(seconds: 10));
       
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
-        print('行情响应: ${json.toString().substring(0, json.toString().length > 200 ? 200 : json.toString().length)}');
         
         final data = json['data'];
         if (data != null) {
@@ -177,15 +175,12 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
             'amount': (data['f48'] ?? 0).toDouble(),
           };
         } else {
-          print('行情数据为空');
           return null;
         }
       } else {
-        print('行情请求失败，状态码: ${res.statusCode}');
         return null;
       }
     } catch (e) {
-      print('获取股票行情失败: $e');
       return null;
     }
   }
@@ -216,29 +211,23 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
       
-      print('请求K线数据: $url');
       final res = await http.get(url).timeout(const Duration(seconds: 10));
       
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
-        print('K线响应: ${json.toString().substring(0, json.toString().length > 200 ? 200 : json.toString().length)}');
         
         // 安全检查数据结构
         final data = json['data'];
         if (data != null && data['klines'] != null) {
           final klines = List<String>.from(data['klines']);
-          print('成功获取 ${klines.length} 条K线数据');
           return klines;
         } else {
-          print('K线数据为空或结构错误: data=$data');
           return [];
         }
       } else {
-        print('K线请求失败，状态码: ${res.statusCode}');
         return [];
       }
     } catch (e) {
-      print('获取K线数据失败: $e');
       return [];
     }
   }

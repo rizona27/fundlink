@@ -421,7 +421,7 @@ class FileImportService {
           final holding = _csvRowToFullBackupHolding(row, holdingFieldMapping!);
           holdings.add(holding);
         } catch (e) {
-          print('跳过无效的持仓行 $i: $e');
+          // 跳过无效的持仓行
         }
       }
       
@@ -437,7 +437,7 @@ class FileImportService {
           final transaction = _csvRowToFullBackupTransaction(row, transactionFieldMapping!);
           transactions.add(transaction);
         } catch (e) {
-          print('跳过无效的交易行 $i: $e');
+          // 跳过无效的交易行
         }
       }
     }
@@ -475,7 +475,7 @@ class FileImportService {
             final holding = _excelRowToFullBackupHolding(row, fieldMapping);
             holdings.add(holding);
           } catch (e) {
-            print('跳过无效的持仓行 $i: $e');
+            // 跳过无效的持仓行
           }
         }
       }
@@ -494,7 +494,7 @@ class FileImportService {
             final transaction = _excelRowToFullBackupTransaction(row, fieldMapping);
             transactions.add(transaction);
           } catch (e) {
-            print('跳过无效的交易行 $i: $e');
+            // 跳过无效的交易行
           }
         }
       }
@@ -695,3 +695,4 @@ class FileImportService {
   static TransactionRecord _excelRowToFullBackupTransaction(List<String> row, Map<String, int> mapping) {
     return _csvRowToFullBackupTransaction(row, mapping);
   }
+}
