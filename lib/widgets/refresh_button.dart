@@ -196,13 +196,11 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
             : needsRefreshHoldings.length;
         final batch = needsRefreshHoldings.sublist(i, end);
 
-        // iOS优化：并发获取基金信息
         final batchResults = await Future.wait(
             batch.map((holding) => _fetchHoldingWithRetry(holding, forceRefresh: forceAll))
         );
         results.addAll(batchResults);
         
-        // iOS优化：批次间添加延迟，避免触发服务器限流
         if (end < needsRefreshHoldings.length) {
           await Future.delayed(const Duration(milliseconds: 300));
         }

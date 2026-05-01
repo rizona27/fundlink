@@ -36,7 +36,6 @@ extension TransactionTypeExtension on TransactionType {
   }
 }
 
-/// 交易记录模型
 class TransactionRecord {
   final String id;
   final String clientId;

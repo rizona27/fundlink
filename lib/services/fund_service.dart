@@ -34,7 +34,6 @@ class FundService {
 
     _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
 
-    // 优先检查 DataManager 的持久化缓存
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
@@ -69,7 +68,6 @@ class FundService {
     try {
       final result = await future;
       
-      // 保存到 DataManager 的持久化缓存
       if (_dataManager != null && result['isValid'] == true) {
         final fundInfo = FundInfoCache(
           fundCode: code,
@@ -105,10 +103,9 @@ class FundService {
     try {
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
 
-      // iOS优化：添加重试机制和更长的超时时间
       http.Response? response;
       var retryCount = 0;
-      const maxRetries = 2; // 最多重试2次
+      const maxRetries = 2; 
       Exception? lastException;
       
       while (retryCount <= maxRetries) {
@@ -119,9 +116,8 @@ class FundService {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': '*/*',
             },
-          ).timeout(const Duration(seconds: 20)); // iOS增加到20秒
+          ).timeout(const Duration(seconds: 20)); 
           
-          // 如果成功，跳出重试循环
           if (response.statusCode == 200) {
             break;
           }
@@ -130,13 +126,11 @@ class FundService {
           retryCount++;
           
           if (retryCount <= maxRetries) {
-            // 指数退避：第1次等500ms，第2次等1000ms
             await Future.delayed(Duration(milliseconds: 500 * retryCount));
           }
         }
       }
       
-      // 如果所有重试都失败
       if (response == null) {
         throw lastException ?? Exception('请求失败');
       }
@@ -154,7 +148,6 @@ class FundService {
         };
       }
 
-      // iOS优化：使用allowMalformed处理不完整的UTF-8序列
       final jsString = utf8.decode(response.bodyBytes, allowMalformed: true);
 
       String fundName = '未知基金';
@@ -301,22 +294,18 @@ class FundService {
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
     _dataManager?.addLog('获取基金 $code 净值趋势', type: LogType.network);
     
-    // 阶段1: 先尝试从缓存加载
     final cachedPoints = await loadNavFromCache(code);
     if (cachedPoints != null && cachedPoints.isNotEmpty) {
       _dataManager?.addLog('使用缓存数据 ${cachedPoints.length} 条', type: LogType.cache);
       
-      // 阶段2: 后台增量更新（检查是否有新数据）
       _incrementalUpdateNav(code, cachedPoints);
       
       return cachedPoints;
     }
     
-    // 无缓存，直接从API加载
     return await _fetchNetWorthFromAPI(code);
   }
   
-  /// 从 API 获取历史净值（完整加载）
   Future<List<NetWorthPoint>> _fetchNetWorthFromAPI(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
     final response = await http.get(url).timeout(const Duration(seconds: 15));
@@ -334,11 +323,8 @@ class FundService {
     final trendArrayStr = match.group(1)!;
     final List<dynamic> trendList = jsonDecode(trendArrayStr);
     
-    // 解析所有净值点
     final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
     
-    // 过滤掉今天及未来的数据，只保留已确认的净值
-    // 使用昨天的日期作为截止点（因为今天的净值通常还没出来）
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     final cutoffDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
     
@@ -346,10 +332,8 @@ class FundService {
       return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
     }).toList();
     
-    // 如果过滤后没有数据（可能是新基金），则返回原始数据
     final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
     
-    // 保存到缓存
     if (result.isNotEmpty) {
       await saveNavToCache(code, result);
       _dataManager?.addLog('已缓存 ${result.length} 条净值数据', type: LogType.cache);
@@ -358,10 +342,8 @@ class FundService {
     return result;
   }
   
-  /// 阶段2: 增量更新最新净值（后台静默）
   Future<void> _incrementalUpdateNav(String code, List<NetWorthPoint> cachedPoints) async {
     try {
-      // 只请求最近的数据用于增量更新
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
       final response = await http.get(url).timeout(const Duration(seconds: 10));
       
@@ -380,15 +362,12 @@ class FundService {
       final List<dynamic> trendList = jsonDecode(trendArrayStr);
       final newPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
       
-      // 过滤出比缓存更新的数据
       final lastCachedDate = cachedPoints.last.date;
       final newerPoints = newPoints.where((p) => p.date.isAfter(lastCachedDate)).toList();
       
       if (newerPoints.isNotEmpty) {
-        // 合并数据
         final mergedPoints = [...cachedPoints, ...newerPoints];
         
-        // 更新缓存
         await saveNavToCache(code, mergedPoints);
         _dataManager?.addLog('增量更新 ${newerPoints.length} 条净值', type: LogType.network);
       }
@@ -466,10 +445,9 @@ class FundService {
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
     
-    // iOS优化：添加重试机制
     http.Response? response;
     var retryCount = 0;
-    const maxRetries = 2; // 最多重试2次
+    const maxRetries = 2; 
     Exception? lastException;
     
     while (retryCount <= maxRetries) {
@@ -482,7 +460,6 @@ class FundService {
           },
         ).timeout(const Duration(seconds: 15));
         
-        // 如果成功，跳出重试循环
         if (response.statusCode == 200) {
           break;
         }
@@ -491,13 +468,11 @@ class FundService {
         retryCount++;
         
         if (retryCount <= maxRetries) {
-          // 指数退避：第1次等500ms，第2次等1000ms
           await Future.delayed(Duration(milliseconds: 500 * retryCount));
         }
       }
     }
     
-    // 如果所有重试都失败
     if (response == null) {
       throw lastException ?? Exception('请求失败');
     }
@@ -703,10 +678,7 @@ class FundService {
     }
   }
 
-  /// 获取指数K线数据（使用东方财富API）
-  /// indexCode: 指数代码，如 '000905' (中证500), '000852' (中证1000)
   Future<List<NetWorthPoint>> fetchIndexData(String indexCode) async {
-    // 使用东方财富指数K线API
     final url = Uri.parse(
       'https://push2.eastmoney.com/api/qt/kline/get?'
       'secid=1.$indexCode&'
@@ -732,14 +704,12 @@ class FundService {
     final points = <NetWorthPoint>[];
     
     for (var kline in klines) {
-      // 格式: "日期,开盘,收盘,最高,最低,成交量,成交额,..."
       final parts = kline.split(',');
       if (parts.length >= 3) {
         try {
           final dateStr = parts[0];
           final closePrice = double.parse(parts[2]);
           
-          // 解析日期: "2024-01-01"
           final dateParts = dateStr.split('-');
           if (dateParts.length == 3) {
             final date = DateTime(
@@ -755,7 +725,6 @@ class FundService {
             ));
           }
         } catch (e) {
-          // 跳过解析失败的行
           continue;
         }
       }
@@ -764,14 +733,11 @@ class FundService {
     return points;
   }
   
-  // ==================== 基金历史净值缓存功能 ====================
   
-  /// 生成缓存key
   String _getNavCacheKey(String code) {
     return 'fund_nav_cache_$code';
   }
   
-  /// 从缓存加载历史净值
   Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -795,7 +761,6 @@ class FundService {
     return null;
   }
   
-  /// 保存历史净值到缓存
   Future<void> saveNavToCache(String code, List<NetWorthPoint> points) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -814,7 +779,6 @@ class FundService {
     }
   }
   
-  /// 清除指定基金的净值缓存
   Future<void> clearNavCache(String code) async {
     try {
       final prefs = await SharedPreferences.getInstance();

@@ -44,22 +44,19 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   DateTime _tradeDate = DateTime.now();
   bool _isLoading = false;
   String? _timeHint;
-  double? _estimatedShares; // 预估份额
-  bool _hasManuallyEditedShares = false; // 用户是否手动编辑过份额
-  bool _hasManuallyEditedAmount = false; // 用户是否手动编辑过金额
-  bool _isFetchingNav = false; // 是否正在获取净值
-  bool _isAfter1500 = false; // 是否15:00后交易
-  bool _isPendingTransaction = false; // 是否为待确认交易
+  double? _estimatedShares; 
+  bool _hasManuallyEditedShares = false; 
+  bool _hasManuallyEditedAmount = false; 
+  bool _isFetchingNav = false; 
+  bool _isAfter1500 = false; 
+  bool _isPendingTransaction = false; 
   
-  // 缓存待确认提示的 Future，避免重复计算
   Future<String>? _pendingHintFuture;
   
-  // 判断是否为待确认交易(基于净值日期)
   bool get _isTodayTransaction {
     return _isPendingTransaction;
   }
   
-  // 更新待确认交易状态（异步）
   Future<void> _updatePendingStatus() async {
     final isPending = await DataManager.isTransactionPendingAsync(_tradeDate, _isAfter1500);
     if (mounted) {
@@ -69,17 +66,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     }
   }
   
-  // 构建待确认交易的提示文本（异步版本，考虑节假日）
   Future<String> _getPendingTransactionHint() async {
     if (!_isTodayTransaction) return '';
     
     final confirmDate = await DataManager.calculateConfirmDateAsync(_tradeDate, _isAfter1500);
     
-    // 显示具体日期：待确认-MM-DD日自动更新
     return '待确认-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')}日自动更新';
   }
   
-  // 获取或创建待确认提示的 Future
   Future<String> _getOrCreatePendingHintFuture() {
     if (_pendingHintFuture == null) {
       _pendingHintFuture = _getPendingTransactionHint();
@@ -94,19 +88,17 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     _updatePendingStatus().then((_) {
       if (mounted) {
         _checkTimeAndSetNav();
-        _fetchCurrentNavIfNeeded(); // 首次打开时自动获取净值
+        _fetchCurrentNavIfNeeded(); 
       }
     });
   }
 
   Future<void> _fetchCurrentNavIfNeeded() async {
-    // 如果是待确认交易，不自动填充净值
     if (_isTodayTransaction) {
       setState(() => _isFetchingNav = false);
       return;
     }
     
-    // 总是尝试获取最新净值，无论是否有缓存
     setState(() => _isFetchingNav = true);
     try {
       final fundService = FundService(_dataManager);
@@ -118,7 +110,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           });
         }
       } else if (widget.currentNav != null && widget.currentNav! > 0) {
-        // 如果API获取失败，但有传入的净值，使用传入的值
         if (mounted) {
           setState(() {
             _navController.text = widget.currentNav!.toStringAsFixed(4);
@@ -126,7 +117,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         }
       }
     } catch (e) {
-      // 如果API失败，但有传入的净值，使用传入的值
       if (widget.currentNav != null && widget.currentNav! > 0) {
         if (mounted) {
           setState(() {
@@ -142,13 +132,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 
   void _checkTimeAndSetNav() {
-    if (!mounted) return; // 检查是否已销毁
+    if (!mounted) return; 
     
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
     
-    // 判断是否接近15:00
     if (hour == 14 && minute >= 50) {
       setState(() {
         _timeHint = '即将收盘，注意区分15:00前后净值';
@@ -159,7 +148,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       });
     }
 
-    // 只有在非待确认交易时才自动填充净值
     if (!_isTodayTransaction) {
       if (widget.currentNav != null && widget.currentNav! > 0) {
         _navController.text = widget.currentNav!.toStringAsFixed(4);
@@ -177,9 +165,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     super.dispose();
   }
 
-  // 计算预估份额（买入）或预估金额（卖出）
   void _calculateEstimated() {
-    // 如果是待确认交易，不自动计算份额
     if (_isTodayTransaction) {
       return;
     }
@@ -190,7 +176,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     final sharesText = _sharesController.text.trim();
     
     if (widget.type == TransactionType.buy) {
-      // 买入：根据金额、净值、手续费率计算份额
       if (amountText.isEmpty || navText.isEmpty) {
         setState(() => _estimatedShares = null);
         return;
@@ -205,16 +190,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         return;
       }
       
-      // 预估份额 = 金额 / (1 + 费率%) / 净值
       final estimatedShares = amount / (1 + feeRate / 100) / nav;
       setState(() => _estimatedShares = estimatedShares > 0 ? estimatedShares : null);
       
-      // 只在用户未手动编辑时才自动填充
       if (!_hasManuallyEditedShares && estimatedShares > 0) {
         _sharesController.text = estimatedShares.toStringAsFixed(2);
       }
     } else {
-      // 卖出：根据份额、净值、费率计算金额
       if (sharesText.isEmpty || navText.isEmpty) {
         setState(() => _estimatedShares = null);
         return;
@@ -229,11 +211,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         return;
       }
       
-      // 预估金额 = 份额 * 净值 * (1 - 费率%)
       final estimatedAmount = shares * nav * (1 - feeRate / 100);
       setState(() => _estimatedShares = estimatedAmount > 0 ? estimatedAmount : null);
       
-      // 只在用户未手动编辑时才自动填充
       if (!_hasManuallyEditedAmount && estimatedAmount > 0) {
         _amountController.text = estimatedAmount.toStringAsFixed(2);
       }
@@ -248,14 +228,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         onConfirm: (date) {
           setState(() {
             _tradeDate = date;
-            // 清空提示缓存，让它重新计算
             _pendingHintFuture = null;
           });
-          // 更新待确认状态
           _updatePendingStatus().then((_) {
-            // 日期改变后，重新获取净值
             _fetchNavByDate().then((_) {
-              // 净值更新后，重新计算预估份额/金额
               if (!_isTodayTransaction && mounted) {
                 _calculateEstimated();
               }
@@ -266,18 +242,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     );
   }
   
-  // 根据日期获取基金净值
   Future<void> _fetchNavByDate() async {
     try {
       final fundService = FundService(_dataManager);
       
-      // 计算应该使用的净值日期（使用异步方法，考虑节假日）
       final targetNavDate = await DataManager.calculateNavDateForTradeAsync(_tradeDate, _isAfter1500);
       final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
       
-      // 如果是待确认交易(今天或未来),不自动填充净值
       if (isPending) {
-        // 不清空用户手动输入的净值，只是不自动填充
         if (_navController.text.isEmpty) {
           setState(() {
             _navController.clear();
@@ -289,7 +261,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
       if (trendData.isEmpty) return;
       
-      // 查找策略：精确匹配 > 下一交易日 > 最接近（3天内）
       NetWorthPoint? exactPoint;
       NetWorthPoint? nextPoint;
       NetWorthPoint? closestPoint;
@@ -328,7 +299,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           _navController.text = selectedPoint!.nav.toStringAsFixed(4);
         });
         
-        // 净值变化后，自动重新计算预估份额/金额
         if (!_isTodayTransaction) {
           _calculateEstimated();
         }
@@ -353,9 +323,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     double? shares;
     double? amount;
     double? nav;
-    double feeRate = 0.0; // 费率百分比
+    double feeRate = 0.0; 
 
-    // 解析输入
     if (sharesText.isNotEmpty) {
       shares = double.tryParse(sharesText);
       if (shares == null || shares <= 0) {
@@ -388,65 +357,52 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       }
     }
 
-    // 如果只输入了金额且有净值，计算份额（买入时考虑手续费率）
     if (shares == null && amount != null && nav != null && nav > 0) {
       if (widget.type == TransactionType.buy) {
-        // 份额 = 金额 / (1 + 费率%) / 净值
         shares = amount / (1 + feeRate / 100) / nav;
       } else {
         shares = amount / nav;
       }
     }
 
-    // 如果只输入了份额且有净值，计算金额（买入时加上手续费率）
     if (amount == null && shares != null && nav != null && nav > 0) {
       if (widget.type == TransactionType.buy) {
-        // 金额 = 份额 * 净值 * (1 + 费率%)
         amount = shares * nav * (1 + feeRate / 100);
       } else {
-        // 金额 = 份额 * 净值 * (1 - 费率%)
         amount = shares * nav * (1 - feeRate / 100);
       }
     }
 
-    // 最终验证
-    // 对于待确认交易，根据买入/卖出有不同的处理
     if (widget.type == TransactionType.buy) {
-      // 买入：待确认时可以只输入金额，份额等待确认时计算
       if (shares == null || shares <= 0) {
         if (_isTodayTransaction && amount != null && amount > 0) {
-          shares = 0; // 待确认买入时份额可以为0
+          shares = 0; 
         } else {
           context.showToast('无法计算份额，请输入净值或份额');
           return;
         }
       }
     } else {
-      // 卖出：待确认时必须输入份额，金额可以等待确认时计算
       if (shares == null || shares <= 0) {
         context.showToast('卖出时必须输入份额');
         return;
       }
     }
 
-    // 金额验证
     if (amount == null || amount <= 0) {
-      // 对于待确认的卖出交易，金额可以为0，等待确认时计算
       if (widget.type == TransactionType.sell && _isTodayTransaction) {
-        amount = 0; // 待确认卖出时金额可以为0
+        amount = 0; 
       } else {
         context.showToast('无法计算金额，请输入净值或金额');
         return;
       }
     }
 
-    // 卖出时检查份额
     if (widget.type == TransactionType.sell && shares > widget.currentShares) {
       context.showToast('卖出份额不能超过持有份额(${widget.currentShares.toStringAsFixed(2)})');
       return;
     }
 
-    // 判断是否为待确认交易(今天或未来的交易)
     final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
     double? confirmedNav;
     
@@ -515,7 +471,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 标题栏
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -554,7 +509,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 ),
               ),
 
-              // 内容区 - 支持滚动
               Container(
                 padding: const EdgeInsets.all(16),
                 color: bgColor,
@@ -566,7 +520,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                    // 基金信息
                     Text(
                       widget.fundName,
                       style: TextStyle(
@@ -614,7 +567,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                     ],
 
-                    // 持仓信息
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -671,7 +623,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                     return Text('-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor));
                                   }
                                   
-                                  // 计算累计投入成本
                                   double totalCost = 0;
                                   for (final tx in transactions) {
                                     if (tx.isBuy) {
@@ -683,7 +634,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                   
                                   final marketValue = widget.currentShares * widget.currentNav!;
                                   final profit = marketValue - totalCost;
-                                  // 中国股市习惯：红涨绿跌
                                   final profitColor = profit >= 0 ? const Color(0xFFFF3B30) : const Color(0xFF34C759);
                                   
                                   return Text(
@@ -699,7 +649,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 日期选择
                     GestureDetector(
                       onTap: _selectDate,
                       child: Container(
@@ -727,7 +676,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     ),
                     const SizedBox(height: 16),
                     
-                    // 交易时间选择（15:00前/后）
                     Container(
                       height: 40,
                       decoration: BoxDecoration(
@@ -741,13 +689,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                               onTap: () {
                                 setState(() {
                                   _isAfter1500 = false;
-                                  // 清空提示缓存，让它重新计算
                                   _pendingHintFuture = null;
                                 });
-                                // 更新待确认状态
                                 _updatePendingStatus().then((_) {
-                                  _fetchNavByDate(); // 重新获取净值
-                                  _calculateEstimated(); // 重新计算份额/金额
+                                  _fetchNavByDate(); 
+                                  _calculateEstimated(); 
                                 });
                               },
                               child: Container(
@@ -772,13 +718,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                               onTap: () {
                                 setState(() {
                                   _isAfter1500 = true;
-                                  // 清空提示缓存，让它重新计算
                                   _pendingHintFuture = null;
                                 });
-                                // 更新待确认状态
                                 _updatePendingStatus().then((_) {
-                                  _fetchNavByDate(); // 重新获取净值
-                                  _calculateEstimated(); // 重新计算份额/金额
+                                  _fetchNavByDate(); 
+                                  _calculateEstimated(); 
                                 });
                               },
                               child: Container(
@@ -803,7 +747,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 输入框 - 买入模式
                     if (widget.type == TransactionType.buy) ...[
                       _buildInputField(
                         label: '交易金额',
@@ -814,7 +757,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                       const SizedBox(height: 12),
                       
-                      // 成交净值输入框
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -847,7 +789,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                 ),
                             ],
                           ),
-                          // 显示预计使用的净值日期
                           if (_isTodayTransaction) ...[
                             const SizedBox(height: 4),
                             FutureBuilder<String>(
@@ -927,7 +868,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                         },
                       ),
                     ] else ...[
-                      // 输入框 - 卖出模式
                       _buildInputField(
                         label: '交易份额',
                         controller: _sharesController,
@@ -937,7 +877,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       ),
                       const SizedBox(height: 12),
                       
-                      // 成交净值输入框（卖出模式）
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -970,7 +909,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                 ),
                             ],
                           ),
-                          // 显示预计使用的净值日期
                           if (_isTodayTransaction) ...[
                             const SizedBox(height: 4),
                             FutureBuilder<String>(
@@ -1053,7 +991,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
                     const SizedBox(height: 20),
 
-                    // 提交按钮 - 使用GlassButton统一风格
                     GlassButton(
                       label: _isLoading 
                           ? (widget.type == TransactionType.buy ? '加仓中...' : '减仓中...')
@@ -1063,23 +1000,22 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       height: 44,
                       borderRadius: 12,
                       expand: true,
-                      // 根据交易类型自定义颜色
                       backgroundColorOverride: widget.type == TransactionType.buy 
-                          ? const Color(0xFFFF3B30).withOpacity(0.15) // 红色 - 加仓
-                          : const Color(0xFF34C759).withOpacity(0.15), // 绿色 - 减仓
+                          ? const Color(0xFFFF3B30).withOpacity(0.15) 
+                          : const Color(0xFF34C759).withOpacity(0.15), 
                       textColorOverride: widget.type == TransactionType.buy 
-                          ? const Color(0xFFFF3B30) // 红色文字
-                          : const Color(0xFF34C759), // 绿色文字
+                          ? const Color(0xFFFF3B30) 
+                          : const Color(0xFF34C759), 
                     ),
                   ],
-                ), // SingleChildScrollView Column
-              ), // SingleChildScrollView
-            ), // Container (内容区)
-          ], // Column children
-        ), // Column
-      ), // CupertinoPopupSurface
-    ), // Container (外层)
-    ); // Center
+                ), 
+              ), 
+            ), 
+          ], 
+        ), 
+      ), 
+    ), 
+    ); 
   }
 
   Widget _buildInputField({
@@ -1133,7 +1069,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 }
 
-// 自定义日期选择器（使用数字月份）
 class _TransactionDatePickerModal extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onConfirm;

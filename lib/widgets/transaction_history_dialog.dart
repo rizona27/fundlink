@@ -66,7 +66,6 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 标题栏
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -108,7 +107,6 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
                 ),
               ),
 
-              // 内容区
               Flexible(
                 child: _transactions.isEmpty
                     ? Container(

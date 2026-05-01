@@ -162,9 +162,9 @@ class _LogViewState extends State<LogView> {
       case LogType.info:
         return isDarkMode ? CupertinoColors.white : CupertinoColors.label;
       case LogType.network:
-        return isDarkMode ? const Color(0xFFBF5AF2) : const Color(0xFF5856D6); // 深色模式用更亮的紫色
+        return isDarkMode ? const Color(0xFFBF5AF2) : const Color(0xFF5856D6); 
       case LogType.cache:
-        return isDarkMode ? const Color(0xFFFF375F) : const Color(0xFFFF2D55); // 深色模式用更亮的红色
+        return isDarkMode ? const Color(0xFFFF375F) : const Color(0xFFFF2D55); 
     }
   }
 

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class StockChartWidget extends StatefulWidget {
-  final List<String> klineData; // K线数据列表
+  final List<String> klineData; 
   final bool isDark;
 
   const StockChartWidget({
@@ -17,7 +17,7 @@ class StockChartWidget extends StatefulWidget {
 }
 
 class _StockChartWidgetState extends State<StockChartWidget> {
-  String _selectedPeriod = 'day'; // day: 日K, week: 周K, month: 月K
+  String _selectedPeriod = 'day'; 
   final Map<String, String> _periodLabels = {
     'day': '日K',
     'week': '周K',
@@ -43,7 +43,6 @@ class _StockChartWidgetState extends State<StockChartWidget> {
     }
   }
 
-  /// 解析K线数据
   void _parseKlineData() {
     if (widget.klineData.isEmpty) {
       _spots = [];
@@ -70,7 +69,6 @@ class _StockChartWidgetState extends State<StockChartWidget> {
       _minY = values.reduce((a, b) => a < b ? a : b);
       _maxY = values.reduce((a, b) => a > b ? a : b);
       
-      // 添加上下边距
       final padding = (_maxY - _minY) * 0.1;
       _minY = _minY - padding;
       _maxY = _maxY + padding;
@@ -111,7 +109,6 @@ class _StockChartWidgetState extends State<StockChartWidget> {
 
     return Column(
       children: [
-        // 周期选择器
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
@@ -160,7 +157,6 @@ class _StockChartWidgetState extends State<StockChartWidget> {
           ),
         ),
 
-        // 图表区域
         SizedBox(
           height: 200,
           child: LineChart(

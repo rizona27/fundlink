@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// K线数据模型
 class CandleData {
   final String date;
   final double open;
@@ -45,7 +44,7 @@ class StockCandleChart extends StatefulWidget {
 }
 
 class StockCandleChartState extends State<StockCandleChart> {
-  String _selectedPeriod = 'day'; // day, week, month
+  String _selectedPeriod = 'day'; 
   final Map<String, String> _periodLabels = {
     'day': '日K',
     'week': '周K',
@@ -55,34 +54,28 @@ class StockCandleChartState extends State<StockCandleChart> {
   List<CandleData> _candleDataList = [];
   bool _isLoading = false;
   
-  // 十字交叉线相关
   int _selectedIndex = -1;
-  bool _isPanning = false; // 是否正在平移
+  bool _isPanning = false; 
   
-  // 懒加载相关
-  DateTime? _earliestDate; // 最早日期，用于加载更多
-  int _displayOffset = 0; // 显示偏移量，0表示显示最新数据，正数表示向左偏移
+  DateTime? _earliestDate; 
+  int _displayOffset = 0; 
   
-  // 动态价格范围
   double _visibleMinPrice = 0;
   double _visibleMaxPrice = 0;
   
-  // 常量
-  static const int visibleCandleCount = 45; // 默认显示45根蜡烛
+  static const int visibleCandleCount = 45; 
   
-  // 加载阶段标记
-  bool _hasLoadedInitial = false;  // 是否已加载初始数据
-  bool _hasPreloaded = false;      // 是否已预加载历史数据
+  bool _hasLoadedInitial = false;  
+  bool _hasPreloaded = false;      
   
-  /// 根据周期获取可见蜡烛数量（周K和月K更粗）
   int get _actualVisibleCount {
     switch (_selectedPeriod) {
       case 'day':
-        return 45;  // 日K标准宽度
+        return 45;  
       case 'week':
-        return 35;  // 周K稍粗（35条铺满屏幕）
+        return 35;  
       case 'month':
-        return 25;  // 月K更粗（25条铺满屏幕）
+        return 25;  
       default:
         return 45;
     }
@@ -91,9 +84,7 @@ class StockCandleChartState extends State<StockCandleChart> {
   @override
   void initState() {
     super.initState();
-    // 阶段1: 先尝试从缓存加载
     _loadFromCache().then((_) {
-      // 阶段2: 然后加载最新的视口数据
       _loadInitialData();
     });
   }
@@ -103,7 +94,6 @@ class StockCandleChartState extends State<StockCandleChart> {
     super.dispose();
   }
   
-  /// 清除十字交叉线（供外部调用）
   void clearCrosshair() {
     if (_selectedIndex != -1) {
       setState(() {
@@ -112,12 +102,10 @@ class StockCandleChartState extends State<StockCandleChart> {
     }
   }
   
-  /// 生成缓存key
   String _getCacheKey() {
     return 'candle_cache_${widget.stockCode}_$_selectedPeriod';
   }
   
-  /// 阶段1: 从缓存加载历史数据
   Future<void> _loadFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -151,16 +139,14 @@ class StockCandleChartState extends State<StockCandleChart> {
     }
   }
   
-  /// 阶段2: 加载最新的视口数据（增量更新）
   Future<void> _loadInitialData() async {
     if (_isLoading) return;
     
     setState(() => _isLoading = true);
     
     try {
-      // 只请求最近的数据用于增量更新
       final now = DateTime.now();
-      final startDate = now.subtract(const Duration(days: 60)); // 最近60天
+      final startDate = now.subtract(const Duration(days: 60)); 
       
       final begDate = '${startDate.year}${startDate.month.toString().padLeft(2, '0')}${startDate.day.toString().padLeft(2, '0')}';
       final endDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
@@ -228,7 +214,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           
           if (newCandles.isNotEmpty) {
             
-            // 合并缓存数据和新数据（去重）
             final mergedList = _mergeCandleData(_candleDataList, newCandles);
             
             setState(() {
@@ -240,10 +225,8 @@ class StockCandleChartState extends State<StockCandleChart> {
               _hasLoadedInitial = true;
             });
             
-            // 保存到缓存
             _saveToCache(mergedList);
             
-            // 阶段3: 后台预加载更多历史数据
             _preloadMoreHistory();
           }
         }
@@ -254,7 +237,6 @@ class StockCandleChartState extends State<StockCandleChart> {
     }
   }
   
-  /// 阶段3: 后台预加载更多历史数据（用户无感）
   Future<void> _preloadMoreHistory() async {
     if (_hasPreloaded || _earliestDate == null) return;
     
@@ -274,15 +256,15 @@ class StockCandleChartState extends State<StockCandleChart> {
       switch (_selectedPeriod) {
         case 'day':
           klt = 101;
-          loadCount = 200;  // 预加载200天
+          loadCount = 200;  
           break;
         case 'week':
           klt = 102;
-          loadCount = 150;  // 预加载150周
+          loadCount = 150;  
           break;
         case 'month':
           klt = 103;
-          loadCount = 120;  // 预加载120个月
+          loadCount = 120;  
           break;
         default:
           klt = 101;
@@ -349,7 +331,6 @@ class StockCandleChartState extends State<StockCandleChart> {
               _hasPreloaded = true;
             });
             
-            // 更新缓存
             _saveToCache(mergedList);
           }
         }
@@ -358,32 +339,26 @@ class StockCandleChartState extends State<StockCandleChart> {
     }
   }
   
-  /// 合并K线数据（去重）
   List<CandleData> _mergeCandleData(List<CandleData> existing, List<CandleData> newData) {
     if (existing.isEmpty) return newData;
     if (newData.isEmpty) return existing;
     
-    // 使用Map去重（以日期为key）
     final Map<String, CandleData> mergedMap = {};
     
-    // 先加入现有数据
     for (final candle in existing) {
       mergedMap[candle.date] = candle;
     }
     
-    // 再加入新数据（覆盖重复的）
     for (final candle in newData) {
       mergedMap[candle.date] = candle;
     }
     
-    // 转换为列表并按日期排序
     final mergedList = mergedMap.values.toList();
     mergedList.sort((a, b) => a.date.compareTo(b.date));
     
     return mergedList;
   }
   
-  /// 保存数据到缓存
   Future<void> _saveToCache(List<CandleData> candles) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -418,26 +393,25 @@ class StockCandleChartState extends State<StockCandleChart> {
         formattedSecid = '116.${widget.stockCode.substring(2)}';
       }
 
-      // 根据周期设置K线类型和加载条数
       int klt;
-      int lmt; // 加载条数限制（初始加载）
-      int preloadLmt; // 预加载条数（后台加载更早数据）
+      int lmt; 
+      int preloadLmt; 
       
       switch (_selectedPeriod) {
         case 'day':
-          klt = 101; // 日K
-          lmt = 45;  // 初始显示45个交易日
-          preloadLmt = 120;  // 预加载120天（约半年交易日）
+          klt = 101; 
+          lmt = 45;  
+          preloadLmt = 120;  
           break;
         case 'week':
-          klt = 102; // 周K
-          lmt = 35;  // 初始显示35周
-          preloadLmt = 100;  // 预加载100周（约2年）
+          klt = 102; 
+          lmt = 35;  
+          preloadLmt = 100;  
           break;
         case 'month':
-          klt = 103; // 月K
-          lmt = 25;  // 初始显示25个月
-          preloadLmt = 72;  // 预加载72个月（6年）
+          klt = 103; 
+          lmt = 25;  
+          preloadLmt = 72;  
           break;
         default:
           klt = 101;
@@ -445,25 +419,23 @@ class StockCandleChartState extends State<StockCandleChart> {
           preloadLmt = 120;
       }
 
-      // 初始加载时获取全部可用数据（不限制日期范围）
-      final begDate = '0';  // 从最早开始
-      final endDate = '20500101';  // 到未来
+      final begDate = '0';  
+      final endDate = '20500101';  
 
       final url = Uri.parse(
         'https://push2his.eastmoney.com/api/qt/stock/kline/get'
         '?secid=$formattedSecid'
         '&klt=$klt'
-        '&fqt=0'  // 不复权，显示真实股价
+        '&fqt=0'  
         '&beg=$begDate'
         '&end=$endDate'
-        '&lmt=$preloadLmt'  // 使用预加载数量，获取更多历史数据
+        '&lmt=$preloadLmt'  
         '&fields1=f1,f2,f3,f4,f5,f6'
         '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
 
       
-      // 增加超时时间到15秒，适应慢速网络
       final res = await http.get(url).timeout(const Duration(seconds: 15));
       
       if (res.statusCode == 200) {
@@ -489,21 +461,17 @@ class StockCandleChartState extends State<StockCandleChart> {
           }
 
           if (candles.isNotEmpty) {
-            // API返回的是从旧到新，不需要反转
             setState(() {
               _candleDataList = candles;
-              // 记录最早日期，用于懒加载
               if (candles.isNotEmpty) {
                 final firstDate = candles.first.date;
                 _earliestDate = DateTime.parse(firstDate);
-                // 初始显示最新的数据（offset指向末尾）
                 _displayOffset = candles.length > _actualVisibleCount 
                     ? candles.length - _actualVisibleCount 
                     : 0;
               }
             });
           } else {
-            // 重试机制
             if (retryCount < 2) {
               await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
               await _loadData(retryCount: retryCount + 1);
@@ -511,7 +479,6 @@ class StockCandleChartState extends State<StockCandleChart> {
             }
           }
         } else {
-          // 重试机制
           if (retryCount < 2) {
             await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
             await _loadData(retryCount: retryCount + 1);
@@ -519,7 +486,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           }
         }
       } else {
-        // 重试机制
         if (retryCount < 2) {
           await Future.delayed(Duration(seconds: 1 * (retryCount + 1)));
           await _loadData(retryCount: retryCount + 1);
@@ -527,7 +493,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
-      // 网络错误或超时，重试机制
       if (retryCount < 2) {
         await Future.delayed(Duration(seconds: 2 * (retryCount + 1)));
         await _loadData(retryCount: retryCount + 1);
@@ -542,9 +507,7 @@ class StockCandleChartState extends State<StockCandleChart> {
     if (_selectedPeriod == period) return;
     setState(() {
       _selectedPeriod = period;
-      // 不清空数据，保持显示直到新数据加载完成
       _selectedIndex = -1;
-      // 注意：不重置 _displayOffset，等待 _loadData() 重新计算
     });
     _loadData();
   }
@@ -558,7 +521,6 @@ class StockCandleChartState extends State<StockCandleChart> {
     return chartHeight * (1 - normalizedY);
   }
   
-  /// 计算当前视口内的价格范围
   void _calculateVisiblePriceRange(
     int offset, 
     int visibleCount,
@@ -570,11 +532,9 @@ class StockCandleChartState extends State<StockCandleChart> {
       return;
     }
     
-    // 计算可见的起始和结束索引
     final startIndex = offset;
     final endIndex = (offset + visibleCount).clamp(0, candles.length - 1);
     
-    // 提取可见范围内的蜡烛
     final visibleCandles = candles.sublist(startIndex, endIndex + 1);
     
     if (visibleCandles.isEmpty) {
@@ -583,21 +543,17 @@ class StockCandleChartState extends State<StockCandleChart> {
       return;
     }
     
-    // 计算可见范围内的最高价和最低价
     _visibleMinPrice = visibleCandles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
     _visibleMaxPrice = visibleCandles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
     
-    // 添加5%的边距
     final priceRange = _visibleMaxPrice - _visibleMinPrice;
     _visibleMinPrice -= priceRange * 0.05;
     _visibleMaxPrice += priceRange * 0.05;
   }
   
-  /// 加载更多历史数据（向左拖动时）
   Future<void> _loadMoreHistory() async {
     if (_isLoading || _earliestDate == null) return;
     
-    // 注意：这里不设置 _isLoading = true，避免显示转圈动画
 
     try {
       String formattedSecid = widget.stockCode;
@@ -610,27 +566,26 @@ class StockCandleChartState extends State<StockCandleChart> {
       }
 
       int klt;
-      int loadCount; // 每次增量加载的数量
+      int loadCount; 
       
       switch (_selectedPeriod) {
         case 'day':
           klt = 101;
-          loadCount = 45;  // 每次加载45天（与视口一致）
+          loadCount = 45;  
           break;
         case 'week':
           klt = 102;
-          loadCount = 35;  // 每次加载35周（与视口一致）
+          loadCount = 35;  
           break;
         case 'month':
           klt = 103;
-          loadCount = 25;  // 每次加载25个月（与视口一致）
+          loadCount = 25;  
           break;
         default:
           klt = 101;
           loadCount = 45;
       }
 
-      // 计算新的开始日期（往前推一个视口的时间）
       final newStartDate = _earliestDate!.subtract(
         _selectedPeriod == 'day' 
             ? Duration(days: loadCount)
@@ -639,7 +594,6 @@ class StockCandleChartState extends State<StockCandleChart> {
                 : Duration(days: loadCount * 30),
       );
       
-      // endDate 设置为最早日期的前一天，避免数据重叠
       final endDate = _earliestDate!.subtract(const Duration(days: 1));
       
       final begDate = '${newStartDate.year}${newStartDate.month.toString().padLeft(2, '0')}${newStartDate.day.toString().padLeft(2, '0')}';
@@ -649,10 +603,10 @@ class StockCandleChartState extends State<StockCandleChart> {
         'https://push2his.eastmoney.com/api/qt/stock/kline/get'
         '?secid=$formattedSecid'
         '&klt=$klt'
-        '&fqt=0'  // 不复权，显示真实股价
+        '&fqt=0'  
         '&beg=$begDate'
         '&end=$endDateStr'
-        '&lmt=$loadCount'  // 增量加载一个视口的数据
+        '&lmt=$loadCount'  
         '&fields1=f1,f2,f3,f4,f5,f6'
         '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
         '&ut=b2884a393a59ad64002292a3e90d46a5',
@@ -682,20 +636,16 @@ class StockCandleChartState extends State<StockCandleChart> {
             }
           }
 
-          // 将新数据添加到现有数据前面（需要去重）
           if (newCandles.isNotEmpty) {
             setState(() {
-              // 过滤掉与已有数据重复的日期
               final existingDates = _candleDataList.map((c) => c.date).toSet();
               final uniqueNewCandles = newCandles.where((c) => !existingDates.contains(c.date)).toList();
               
               if (uniqueNewCandles.isNotEmpty) {
                 _candleDataList = [...uniqueNewCandles, ..._candleDataList];
                 _earliestDate = DateTime.parse(uniqueNewCandles.first.date);
-                // 更新偏移量，保持当前视图位置
                 _displayOffset += uniqueNewCandles.length;
                 
-                // 保存更新后的数据到缓存
                 _saveToCache(_candleDataList);
               }
             });
@@ -704,12 +654,10 @@ class StockCandleChartState extends State<StockCandleChart> {
       }
     } catch (e) {
     }
-    // 注意：这里不设置 _isLoading = false，因为根本没设置为true
   }
 
   @override
   Widget build(BuildContext context) {
-    // 只在首次加载且无数据时显示加载指示器
     if (_isLoading && _candleDataList.isEmpty && _earliestDate == null) {
       return const SizedBox(
         height: 200,
@@ -734,12 +682,10 @@ class StockCandleChartState extends State<StockCandleChart> {
       );
     }
 
-    // 计算全局最大成交量（用于所有数据）
     double maxVolume = _candleDataList.map((c) => c.volume).reduce((a, b) => a > b ? a : b);
 
     return Column(
       children: [
-        // 周期选择器
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
@@ -779,7 +725,6 @@ class StockCandleChartState extends State<StockCandleChart> {
           ),
         ),
 
-        // K线图表
         SizedBox(
           height: 200,
           child: LayoutBuilder(
@@ -787,22 +732,18 @@ class StockCandleChartState extends State<StockCandleChart> {
               final chartWidth = constraints.maxWidth;
               final chartHeight = constraints.maxHeight;
               
-              // 计算可见的数据范围
               final totalCandles = _candleDataList.length;
               final int maxOffset = totalCandles > _actualVisibleCount ? totalCandles - _actualVisibleCount : 0;
               final int actualOffset = _displayOffset.clamp(0, maxOffset);
               
-              // 计算当前视口内的动态价格范围
               _calculateVisiblePriceRange(actualOffset, _actualVisibleCount, _candleDataList);
               final minPrice = _visibleMinPrice;
               final maxPrice = _visibleMaxPrice;
               
-              // 根据周期使用不同的可见数量（周K和月K更粗）
               final barWidth = chartWidth / _actualVisibleCount;
               
               return Stack(
                 children: [
-                  // 背景网格和坐标轴
                   CustomPaint(
                     painter: _GridPainter(
                       minPrice: minPrice,
@@ -812,13 +753,12 @@ class StockCandleChartState extends State<StockCandleChart> {
                       selectedPeriod: _selectedPeriod,
                       selectedIndex: _selectedIndex,
                       displayOffset: actualOffset,
-                      visibleCount: _actualVisibleCount,  // 使用周期对应的可见数量
+                      visibleCount: _actualVisibleCount,  
                     ),
                     size: Size(chartWidth, chartHeight),
                   ),
                   
-                  // 蜡烛图（无需平移，Painter已只绘制可见部分）
-                  ClipRect(  // 裁剪超出边界的部凈
+                  ClipRect(  
                     child: CustomPaint(
                       painter: _CandleChartPainter(
                         candles: _candleDataList,
@@ -828,17 +768,16 @@ class StockCandleChartState extends State<StockCandleChart> {
                         isDark: widget.isDark,
                         barWidth: barWidth,
                         displayOffset: actualOffset,
-                        visibleCount: _actualVisibleCount,  // 使用周期对应的可见数量
+                        visibleCount: _actualVisibleCount,  
                       ),
                       size: Size(chartWidth, chartHeight),
                     ),
                   ),
                   
-                  // 十字交叉线和数据标签
                   if (_selectedIndex != -1)
                     CustomPaint(
                       painter: _CrosshairWithLabelsPainter(
-                        crossX: (_selectedIndex - actualOffset + 0.5) * barWidth,  // 相对于视口的位置
+                        crossX: (_selectedIndex - actualOffset + 0.5) * barWidth,  
                         crossY: _calculateCrosshairY(_selectedIndex, minPrice, maxPrice, chartHeight),
                         candle: _candleDataList[_selectedIndex],
                         selectedPeriod: _selectedPeriod,
@@ -853,12 +792,10 @@ class StockCandleChartState extends State<StockCandleChart> {
                       size: Size(chartWidth, chartHeight),
                     ),
                   
-                  // 触摸检测层
                   GestureDetector(
                     onTapUp: (details) {
                       if (_isPanning == false) {
                         final dx = details.localPosition.dx;
-                        // 直接使用外层计算的barWidth
                         final visualIndex = (dx / barWidth).floor();
                         final actualIndex = actualOffset + visualIndex;
                         if (actualIndex >= 0 && actualIndex < _candleDataList.length) {
@@ -869,7 +806,6 @@ class StockCandleChartState extends State<StockCandleChart> {
                       }
                     },
                     onTapDown: (details) {
-                      // 点击图表区域时，如果已经显示十字线且再次点击相同位置，则清除十字线
                       if (_isPanning == false && _selectedIndex != -1) {
                         final dx = details.localPosition.dx;
                         final visualIndex = (dx / barWidth).floor();
@@ -882,26 +818,20 @@ class StockCandleChartState extends State<StockCandleChart> {
                       }
                     },
                     onHorizontalDragStart: (details) {
-                      // 开始平移（PC端和移动端）
                       setState(() {
                         _isPanning = true;
-                        _selectedIndex = -1; // 清除十字线
+                        _selectedIndex = -1; 
                       });
                     },
                     onHorizontalDragUpdate: (details) {
                       if (_isPanning == false) return;
                       
-                      // 计算平移距离（像素）
                       final dragDelta = details.delta.dx;
-                      // 直接使用外层计算的barWidth
                       
-                      // 将像素转换为蜡烛数量
                       final candleDelta = dragDelta / barWidth;
                       
-                      // 累积更新偏移量（基于当前offset，而不是起始offset）
                       final newOffset = _displayOffset - candleDelta;
                       
-                      // 计算最大偏移量（避免clamp参数错误）
                       final maxOffset = _candleDataList.length > _actualVisibleCount 
                           ? _candleDataList.length - _actualVisibleCount 
                           : 0;
@@ -910,20 +840,16 @@ class StockCandleChartState extends State<StockCandleChart> {
                         _displayOffset = newOffset.round().clamp(0, maxOffset);
                       });
                       
-                      // 如果接近边界且向右拖动，加载更多历史数据
-                      // 提前10条触发加载，实现无缝滚动
                       if (dragDelta > 0 && _displayOffset >= maxOffset - 10) {
                         _loadMoreHistory();
                       }
                     },
                     onHorizontalDragEnd: (details) {
-                      // 结束平移
                       setState(() {
                         _isPanning = false;
                       });
                     },
                     onHorizontalDragCancel: () {
-                      // 取消平移
                       setState(() {
                         _isPanning = false;
                       });
@@ -931,10 +857,8 @@ class StockCandleChartState extends State<StockCandleChart> {
                     behavior: HitTestBehavior.translucent,
                     child: MouseRegion(
                       onHover: (event) {
-                        // PC端鼠标悬停移动十字线（只在非平移状态下）
                         if (_isPanning == false) {
                           final dx = event.localPosition.dx;
-                          // 直接使用外层计算的barWidth
                           final visualIndex = (dx / barWidth).floor();
                           final actualIndex = actualOffset + visualIndex;
                           if (actualIndex >= 0 && actualIndex < _candleDataList.length && actualIndex != _selectedIndex) {
@@ -945,7 +869,6 @@ class StockCandleChartState extends State<StockCandleChart> {
                         }
                       },
                       onExit: (event) {
-                        // 鼠标离开时清除选中状态（PC端）
                         if (_selectedIndex != -1 && _isPanning == false) {
                           setState(() {
                             _selectedIndex = -1;
@@ -961,17 +884,15 @@ class StockCandleChartState extends State<StockCandleChart> {
           ),
         ),
 
-        // 成交量图表
         if (maxVolume > 0) ...[
           const SizedBox(height: 6),
           SizedBox(
             height: 45,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // 根据周期使用不同的可见数量，与蜡烛图保持一致
                 final volumeBarWidth = constraints.maxWidth / _actualVisibleCount;
                 
-                return ClipRect(  // 裁剪超出边界的部分
+                return ClipRect(  
                   child: CustomPaint(
                     painter: _VolumeChartPainter(
                       candles: _candleDataList,
@@ -980,7 +901,7 @@ class StockCandleChartState extends State<StockCandleChart> {
                       isDark: widget.isDark,
                       barWidth: volumeBarWidth,
                       displayOffset: _displayOffset,
-                      visibleCount: _actualVisibleCount,  // 使用周期对应的可见数量
+                      visibleCount: _actualVisibleCount,  
                     ),
                     size: Size(constraints.maxWidth, 45),
                   ),
@@ -996,7 +917,6 @@ class StockCandleChartState extends State<StockCandleChart> {
   }
 }
 
-/// 网格绘制器
 class _GridPainter extends CustomPainter {
   final double minPrice;
   final double maxPrice;
@@ -1033,19 +953,16 @@ class _GridPainter extends CustomPainter {
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    // 绘制水平网格线
     for (int i = 0; i <= 4; i++) {
       final y = size.height * (i / 4);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // 绘制边框
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
       borderPaint,
     );
 
-    // 绘制Y轴价格标签
     final pricePaint = TextPainter(
       textAlign: TextAlign.right,
       textDirection: TextDirection.ltr,
@@ -1069,27 +986,25 @@ class _GridPainter extends CustomPainter {
       pricePaint.paint(canvas, Offset(2, y - pricePaint.height / 2));
     }
 
-    // 绘制X轴日期标签（最多3个）
     if (candleDataList.isNotEmpty) {
       final datePaint = TextPainter(
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
       );
       
-      // 只考虑可见范围内的蜡烛
       final startIndex = displayOffset;
       final endIndex = (displayOffset + visibleCount).clamp(0, candleDataList.length - 1);
       final visibleCandlesCount = endIndex - startIndex + 1;
       
       if (visibleCandlesCount <= 0) return;
       
-      final barWidth = size.width / visibleCount;  // 使用可见数量计算宽度
+      final barWidth = size.width / visibleCount;  
       final labelCount = visibleCandlesCount > 6 ? 3 : (visibleCandlesCount > 3 ? 2 : 1);
       final interval = (visibleCandlesCount / labelCount).floor();
       
       for (int i = 0; i < labelCount; i++) {
         final visibleIndex = i * interval;
-        final actualIndex = startIndex + visibleIndex;  // 转换为实际索引
+        final actualIndex = startIndex + visibleIndex;  
         if (actualIndex >= candleDataList.length) break;
         
         final candle = candleDataList[actualIndex];
@@ -1105,7 +1020,6 @@ class _GridPainter extends CustomPainter {
               : candle.date;
         }
         
-        // 使用可见索引计算x位置
         final x = visibleIndex * barWidth + barWidth / 2;
         
         datePaint.text = TextSpan(
@@ -1134,7 +1048,6 @@ class _GridPainter extends CustomPainter {
   }
 }
 
-/// 蜡烛图绘制器
 class _CandleChartPainter extends CustomPainter {
   final List<CandleData> candles;
   final double minPrice;
@@ -1160,10 +1073,9 @@ class _CandleChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
-    final candleWidth = barWidth * 0.6; // 蜡烛宽度占柱体宽度的60%
-    final shadowWidth = 1.0; // 影线宽度
+    final candleWidth = barWidth * 0.6; 
+    final shadowWidth = 1.0; 
 
-    // 只绘制可见范围内的蜡烛
     final startIndex = displayOffset;
     final endIndex = (displayOffset + visibleCount).clamp(0, candles.length - 1);
 
@@ -1173,11 +1085,9 @@ class _CandleChartPainter extends CustomPainter {
       final candle = candles[i];
       final isSelected = i == selectedIndex;
       
-      // 计算在视口中的位置（相对于视口左边界）
       final visualIndex = i - displayOffset;
-      final x = visualIndex * barWidth + barWidth / 2; // 柱体中心x坐标
+      final x = visualIndex * barWidth + barWidth / 2; 
       
-      // 计算Y坐标
       final priceRange = maxPrice - minPrice;
       if (priceRange <= 0) continue;
       
@@ -1188,14 +1098,12 @@ class _CandleChartPainter extends CustomPainter {
 
       final color = candle.bodyColor.withOpacity(isSelected ? 1.0 : 0.9);
 
-      // 绘制影线（细线，居中）
       final shadowPaint = Paint()
         ..color = color.withOpacity(0.8)
         ..strokeWidth = shadowWidth
         ..style = PaintingStyle.stroke;
       canvas.drawLine(Offset(x, highY), Offset(x, lowY), shadowPaint);
 
-      // 绘制实体（矩形，居中）
       final bodyTop = candle.isBullish ? closeY : openY;
       final bodyBottom = candle.isBullish ? openY : closeY;
       final bodyHeight = (bodyBottom - bodyTop).abs();
@@ -1228,7 +1136,6 @@ class _CandleChartPainter extends CustomPainter {
   }
 }
 
-/// 十字交叉线绘制器（带数据标签）
 class _CrosshairWithLabelsPainter extends CustomPainter {
   final double crossX;
   final double crossY;
@@ -1255,12 +1162,10 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    // 绘制虚线十字交叉
     _drawDashedLine(canvas, Offset(crossX, 0), Offset(crossX, size.height), linePaint);
     _drawDashedLine(canvas, Offset(0, crossY), Offset(size.width, crossY), linePaint);
 
-    // 绘制X轴日期标签
-    final dateText = candle.date; // yyyy-mm-dd格式
+    final dateText = candle.date; 
     final datePainter = TextPainter(
       text: TextSpan(
         text: dateText,
@@ -1274,7 +1179,6 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
     );
     datePainter.layout();
     
-    // 标签背景
     final dateBgRect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(crossX, size.height - 10),
@@ -1292,7 +1196,6 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
     
     datePainter.paint(canvas, Offset(crossX - datePainter.width / 2, size.height - 12));
 
-    // 绘制Y轴价格标签
     final priceText = candle.close.toStringAsFixed(2);
     final pricePainter = TextPainter(
       text: TextSpan(
@@ -1307,7 +1210,6 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
     );
     pricePainter.layout();
     
-    // 标签背景
     final priceBgRect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(35, crossY),
@@ -1347,7 +1249,6 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
   }
 }
 
-/// 成交量图表绘制器
 class _VolumeChartPainter extends CustomPainter {
   final List<CandleData> candles;
   final double maxVolume;
@@ -1373,7 +1274,6 @@ class _VolumeChartPainter extends CustomPainter {
 
     final volumeBarWidth = barWidth * 0.6;
 
-    // 只绘制可见范围内的成交量
     final startIndex = displayOffset;
     final endIndex = (displayOffset + visibleCount).clamp(0, candles.length - 1);
 
@@ -1383,7 +1283,6 @@ class _VolumeChartPainter extends CustomPainter {
       final candle = candles[i];
       final isSelected = i == selectedIndex;
       
-      // 计算在视口中的位置
       final visualIndex = i - displayOffset;
       final x = visualIndex * barWidth + barWidth / 2;
       final volumeHeight = (candle.volume / maxVolume) * size.height;

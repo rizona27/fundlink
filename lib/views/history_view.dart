@@ -171,12 +171,10 @@ class _HistoryDialogState extends State<HistoryDialog> {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
 
     return GestureDetector(
-      // 点击弹窗外部关闭
       onTap: () => Navigator.of(context).pop(),
       behavior: HitTestBehavior.translucent,
       child: Center(
         child: GestureDetector(
-          // 阻止事件冒泡，防止点击弹窗内容时关闭
           onTap: () {},
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),

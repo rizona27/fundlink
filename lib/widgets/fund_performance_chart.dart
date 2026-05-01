@@ -8,12 +8,12 @@ class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
   final List<NetWorthPoint> avgPoints;
   final List<NetWorthPoint> hsPoints;
-  final List<NetWorthPoint>? zz500Points; // 中证500
-  final List<NetWorthPoint>? zz1000Points; // 中证1000
-  final List<NetWorthPoint>? customFundPoints; // 用户自定义基金
-  final VoidCallback? onCustomFundConfig; // 自定义基金配置回调
-  final String? fundCode; // 本基金代码
-  final String? customFundCode; // 自定义基金代码
+  final List<NetWorthPoint>? zz500Points; 
+  final List<NetWorthPoint>? zz1000Points; 
+  final List<NetWorthPoint>? customFundPoints; 
+  final VoidCallback? onCustomFundConfig; 
+  final String? fundCode; 
+  final String? customFundCode; 
 
   const FundPerformanceChart({
     super.key,
@@ -42,11 +42,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     '3y': '近3年',
     'all': '成立来',
   };
-  bool _showAverage = false; // 默认不显示同类平均
-  bool _showHs300 = false; // 默认不显示沪深300
-  bool _showZZ500 = false; // 默认不显示中证500
-  bool _showZZ1000 = false; // 默认不显示中证1000
-  bool _showCustomFund = false; // 默认不显示自定义基金
+  bool _showAverage = false; 
+  bool _showHs300 = false; 
+  bool _showZZ500 = false; 
+  bool _showZZ1000 = false; 
+  bool _showCustomFund = false; 
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
@@ -103,7 +103,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }).toList();
   }
 
-  // 基金净值归一化（用于中证500、中证1000、自定义基金）
   List<NetWorthPoint> _convertFundToPseudoNav(List<NetWorthPoint> rawPoints, double baseRaw) {
     return rawPoints.map((p) {
       final pseudoNav = baseRaw > 0 ? p.nav / baseRaw : 1.0;
@@ -178,7 +177,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         ? _convertFundToPseudoNav(widget.hsPoints, hsBaseRaw)
         : [];
 
-    // 计算中证500、中证1000、自定义基金的基准值并转换
     final double zz500BaseRaw = widget.zz500Points != null && widget.zz500Points!.isNotEmpty
         ? getNavOnOrBefore(widget.zz500Points!, baseDate)
         : 1.0;
@@ -275,7 +273,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       _updateSliceAndNormalize();
       _hoverIndexNotifier.value = -1;
       _dotPositionNotifier.value = null;
-      // 不再根据时间周期自动切换显示状态，保持用户的选择
     });
   }
 
@@ -304,9 +301,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   }
 
   void _toggleCustomFund() {
-    // 如果没有配置自定义基金代码，点击眼睛时提示用户
     if (!_showCustomFund && (widget.customFundCode == null || widget.customFundCode!.isEmpty)) {
-      // 使用CupertinoAlertDialog提示用户
       showCupertinoDialog(
         context: context,
         builder: (BuildContext context) {
@@ -568,7 +563,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         ? CupertinoColors.systemRed.withOpacity(0.15)
         : CupertinoColors.systemGreen.withOpacity(0.15);
 
-    // 渐变填充颜色：从基准线到净值曲线的柔和渐变
     final gradientFillColor = rangeReturn >= 0
         ? LinearGradient(
             colors: [
@@ -798,7 +792,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               LineChartBarData(
                                 spots: zz500Spots,
                                 isCurved: true,
-                                color: const Color(0xFFFF9800), // 橙色
+                                color: const Color(0xFFFF9800), 
                                 barWidth: 1.5,
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(show: false),
@@ -808,7 +802,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               LineChartBarData(
                                 spots: zz1000Spots,
                                 isCurved: true,
-                                color: const Color(0xFF9C27B0), // 紫色
+                                color: const Color(0xFF9C27B0), 
                                 barWidth: 1.5,
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(show: false),
@@ -818,7 +812,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               LineChartBarData(
                                 spots: customFundSpots,
                                 isCurved: true,
-                                color: const Color(0xFF00BCD4), // 青色
+                                color: const Color(0xFF00BCD4), 
                                 barWidth: 1.5,
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(show: false),
@@ -925,7 +919,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           ),
         ),
           const SizedBox(height: 12),
-          // 所有时间维度都显示图例
           ValueListenableBuilder<int>(
             valueListenable: _hoverIndexNotifier,
             builder: (context, hoverIndex, child) {
@@ -933,7 +926,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               
               return Column(
                 children: [
-                  // 第一行：本基金、沪深300、中证500
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -949,7 +941,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // 第二行：中证1000、自定义、同类平均（仅短周期）
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -964,7 +955,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             },
           ),
           const SizedBox(height: 8),
-          // ETF联接基金说明
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
@@ -1052,7 +1042,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  // 获取眼睛图标状态
   IconData _getEyeIconState(VoidCallback toggle) {
     if (toggle == _toggleAverage) return _showAverage ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
     if (toggle == _toggleHs300) return _showHs300 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
@@ -1062,7 +1051,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     return CupertinoIcons.eye;
   }
 
-  // 自定义基金图例（支持点击配置）
   Widget _buildCustomFundLegendItem(bool isDark) {
     final value = _getHoverCustomFundReturn();
     final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
@@ -1074,7 +1062,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       children: [
         Row(
           children: [
-            // 点击颜色块和文字弹出配置对话框
             GestureDetector(
               onTap: widget.onCustomFundConfig,
               child: Row(
@@ -1086,7 +1073,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               ),
             ),
             const SizedBox(width: 4),
-            // 点击眼睛图标切换显示/隐藏
             GestureDetector(
               onTap: _toggleCustomFund,
               child: Icon(

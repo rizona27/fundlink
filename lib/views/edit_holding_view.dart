@@ -26,7 +26,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   late FundService _fundService;
   List<TransactionRecord> _transactions = [];
   bool _isLoading = false;
-  FundHolding? _currentHolding; // 当前持仓（动态更新）
+  FundHolding? _currentHolding; 
 
   @override
   void didChangeDependencies() {
@@ -34,20 +34,19 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     _loadTransactions();
-    _updateCurrentHolding(); // 初始化当前持仓
+    _updateCurrentHolding(); 
   }
 
   void _updateCurrentHolding() {
-    // 从DataManager中获取最新的持仓信息
     final holding = _dataManager.holdings.firstWhere(
       (h) => h.clientId == widget.holding.clientId && h.fundCode == widget.holding.fundCode,
-      orElse: () => widget.holding, // 如果找不到，使用传入的holding
+      orElse: () => widget.holding, 
     );
     setState(() => _currentHolding = holding);
   }
 
   void _loadTransactions() {
-    _updateCurrentHolding(); // 加载交易时也更新持仓
+    _updateCurrentHolding(); 
     setState(() {
       _transactions = _dataManager.getTransactionHistory(
         widget.holding.clientId,
@@ -71,15 +70,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             : null,
         currentShares: _currentHolding?.totalShares ?? widget.holding.totalShares,
         onTransactionAdded: () {
-          _loadTransactions(); // 重新加载交易记录
-          _dataManager.notifyListeners(); // 触发全局刷新
+          _loadTransactions(); 
+          _dataManager.notifyListeners(); 
         },
       ),
     );
   }
 
   Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
-    // 待确认交易不允许删除
     if (tx.isPending) {
       await showCupertinoDialog(
         context: context,
@@ -97,7 +95,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       return;
     }
     
-    // 检查是否是第一笔买入交易（基石交易）
     final isFoundationBuy = tx.type == TransactionType.buy && 
                             _transactions.isNotEmpty && 
                             tx.id == _transactions.first.id;
@@ -121,7 +118,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
-      barrierDismissible: true, // 允许点击外部关闭
+      barrierDismissible: true, 
       builder: (context) => CupertinoAlertDialog(
         title: const Text('确认删除'),
         content: Text(
@@ -158,12 +155,10 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
   
-  /// 脱敏客户姓名
   String _maskClientName(String name) {
     if (name.isEmpty) return '';
     if (name.length == 1) return '*';
     if (name.length == 2) return '${name[0]}*';
-    // 3个字符及以上，只显示首尾，中间用*代替
     return '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}';
   }
 
@@ -177,7 +172,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         ? CupertinoColors.white.withOpacity(0.6)
         : const Color(0xFF8E8E93);
 
-    // 使用最新的持仓信息
     final holding = _currentHolding ?? widget.holding;
 
     return CupertinoPageScaffold(
@@ -206,7 +200,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
               Expanded(
                 child: Column(
                   children: [
-                    // 持仓信息卡片
                     Container(
                       margin: const EdgeInsets.all(16),
                       padding: const EdgeInsets.all(16),
@@ -340,7 +333,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ),
 
-                    // 操作按钮
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
@@ -352,7 +344,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       isPrimary: true,
                       height: 48,
                       borderRadius: 12,
-                      // 自定义红色主题
                       backgroundColorOverride: const Color(0xFFFF3B30).withOpacity(0.15),
                       textColorOverride: const Color(0xFFFF3B30),
                     ),
@@ -365,7 +356,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       isPrimary: true,
                       height: 48,
                       borderRadius: 12,
-                      // 自定义绿色主题
                       backgroundColorOverride: const Color(0xFF34C759).withOpacity(0.15),
                       textColorOverride: const Color(0xFF34C759),
                     ),
@@ -374,7 +364,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
               ),
             ),
 
-            // 交易历史标题
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
               child: Row(
@@ -395,7 +384,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ),
 
-                    // 交易历史列表
                     Expanded(
                       child: _transactions.isEmpty
                           ? Center(
@@ -439,11 +427,9 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   Widget _buildTransactionCard(TransactionRecord tx, int index, bool isDarkMode, Color textColor, Color secondaryTextColor) {
     final typeColor = tx.type == TransactionType.buy 
-        ? const Color(0xFFFF3B30) // 红色 - 加仓
-        : const Color(0xFF34C759); // 绿色 - 减仓
+        ? const Color(0xFFFF3B30) 
+        : const Color(0xFF34C759); 
     
-    // 判断是否是第一笔买入交易（基石交易）
-    // 找到所有买入交易中最早的那一笔
     final buyTransactions = _transactions
         .where((t) => t.type == TransactionType.buy)
         .toList()
@@ -566,9 +552,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ],
                 ),
               ),
-              // 编辑和删除按钮（基石交易不显示）
               if (!isFoundationBuy) ...[
-                // 编辑按钮
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   minSize: 0,
@@ -580,7 +564,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 删除按钮
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   minSize: 0,
@@ -600,7 +583,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _editTransaction(TransactionRecord tx) async {
-    // 待确认交易不允许编辑
     if (tx.isPending) {
       await showCupertinoDialog(
         context: context,
@@ -628,7 +610,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       context: context,
       builder: (context) => GestureDetector(
         onTap: () {
-          // 点击对话框外部时收起键盘
           FocusScope.of(context).unfocus();
         },
         child: Center(
@@ -648,7 +629,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 标题栏 - 使用不同背景色
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
@@ -687,7 +667,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ),
                     const Divider(height: 1),
-                    // 内容区域 - 使用不同背景色
                     Container(
                       color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
                       constraints: BoxConstraints(
@@ -698,7 +677,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 份额输入
                             Text(
                               '交易份额',
                               style: TextStyle(
@@ -740,7 +718,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               ),
                             const SizedBox(height: 16),
                             
-                            // 金额输入
                             Text(
                               '交易金额',
                               style: TextStyle(
@@ -780,7 +757,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               ),
                             const SizedBox(height: 16),
                             
-                            // 日期选择
                             Text(
                               '交易日期',
                               style: TextStyle(
@@ -829,7 +805,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ),
                     const Divider(height: 1),
-                    // 底部按钮 - 使用不同背景色
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -875,7 +850,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                 Navigator.pop(context);
                                 
                                 try {
-                                  // 创建更新后的交易记录
                                   final updatedTx = TransactionRecord(
                                     id: tx.id,
                                     clientId: tx.clientId,
@@ -894,7 +868,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                     confirmedNav: tx.confirmedNav,
                                   );
                                   
-                                  // 删除旧交易，添加新交易
                                   await _dataManager.deleteTransaction(tx.id);
                                   await _dataManager.addTransaction(updatedTx);
                                   
@@ -924,7 +897,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 }
 
-// 日期选择器弹窗（参照加减仓页面样式）
 class _DatePickerModal extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onConfirm;

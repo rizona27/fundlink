@@ -57,7 +57,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   final ScrollController _scrollController = ScrollController();
 
-  // 筛选框焦点节点
   final FocusNode _minAmountFocusNode = FocusNode();
   final FocusNode _maxAmountFocusNode = FocusNode();
   final FocusNode _minProfitFocusNode = FocusNode();
@@ -67,7 +66,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   final FocusNode _minDaysFocusNode = FocusNode();
   final FocusNode _maxDaysFocusNode = FocusNode();
   
-  Timer? _filterAutoCollapseTimer; // 筛选框自动关闭定时器
+  Timer? _filterAutoCollapseTimer; 
 
   static const Duration _debounceDelay = Duration(milliseconds: 500);
   static const Duration _animationDuration = Duration(milliseconds: 400);
@@ -77,7 +76,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   @override
   bool get wantKeepAlive => true;
 
-  // SharedPreferences keys for state persistence
   static const String _keySortKey = 'topperformers_sort_key';
   static const String _keySortOrder = 'topperformers_sort_order';
   static const String _keyShowFilter = 'topperformers_show_filter';
@@ -85,7 +83,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   @override
   void initState() {
     super.initState();
-    _loadState(); // Load persisted state
+    _loadState(); 
     _dataListener = () {
       if (mounted) {
         _updateCachedItems();
@@ -93,12 +91,10 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     };
   }
 
-  /// Load persisted state from SharedPreferences
   Future<void> _loadState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Load sort key and order (persisted across restarts)
       final sortKeyStr = prefs.getString(_keySortKey);
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
@@ -115,22 +111,16 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         );
       }
       
-      // Note: Filter visibility (_showFilter) is NOT persisted
-      // It resets on app restart as per requirements
     } catch (e) {
-      // Ignore errors during state loading
     }
   }
 
-  /// Save state to SharedPreferences
   Future<void> _saveSortState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keySortKey, _sortKey.toString());
       await prefs.setString(_keySortOrder, _sortOrder.toString());
-      // Filter visibility is NOT saved (reset on restart)
     } catch (e) {
-      // Ignore errors during state saving
     }
   }
 
@@ -145,12 +135,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       _isInitialized = true;
       _updateCachedItems();
     } else {
-      // 已初始化的页面，每次切换回来时也要更新数据
       _updateCachedItems();
     }
     
-    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
-    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -162,7 +149,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    // 优化：增加节流时间到16ms（约60fps），减少setState频率
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
         setState(() {
@@ -186,7 +172,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   void dispose() {
     _scrollThrottleTimer?.cancel();
     _filterDebounceTimer?.cancel();
-    _filterAutoCollapseTimer?.cancel(); // 清理自动关闭定时器
+    _filterAutoCollapseTimer?.cancel(); 
     _scrollController.dispose();
     _minAmountController.dispose();
     _maxAmountController.dispose();
@@ -197,7 +183,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     _minDaysController.dispose();
     _maxDaysController.dispose();
     
-    // 释放焦点节点
     _minAmountFocusNode.dispose();
     _maxAmountFocusNode.dispose();
     _minProfitFocusNode.dispose();
@@ -250,10 +235,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final holdings = _dataManager.holdings;
     final validHoldings = <FundHolding>[];
 
-    // 性能优化：批量计算，减少重复调用
-    // 修改：显示所有有效持仓，包括待确认交易（currentNav可能为0）
     for (final h in holdings) {
-      // 只要持仓有效（有份额和成本），就显示，不管净值是否为0
       if (h.isValidHolding) {
         validHoldings.add(h);
       }
@@ -261,7 +243,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
     var filtered = List<FundHolding>.from(validHoldings);
 
-    // 性能优化：先过滤再计算，减少不必要的计算
     if (_minAmount != null) {
       filtered = filtered.where((h) => h.totalCost >= _minAmount!).toList();
     }
@@ -269,7 +250,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       filtered = filtered.where((h) => h.totalCost <= _maxAmount!).toList();
     }
     
-    // 性能优化：缓存交易历史和利润计算结果
     final profitCache = <String, ProfitResult>{};
     final daysCache = <String, int>{};
     
@@ -377,7 +357,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   bool get _hasData {
-    // 修改：检查是否有任何有效持仓（包括待确认交易）
     for (final h in _dataManager.holdings) {
       if (h.isValidHolding) return true;
     }
@@ -417,7 +396,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _sortOrder = SortOrder.descending;
       }
     });
-    await _saveSortState(); // Save sort state
+    await _saveSortState(); 
     _updateCachedItems();
     String sortType = key.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
@@ -428,7 +407,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     setState(() {
       _sortOrder = order;
     });
-    await _saveSortState(); // Save sort state
+    await _saveSortState(); 
     _updateCachedItems();
     String sortType = _sortKey.displayName;
     String orderText = order == SortOrder.ascending ? '升序' : '降序';
@@ -441,18 +420,16 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     });
     if (_showFilter) {
       _autoCollapseEnabled = true;
-      _startFilterAutoCollapseTimer(); // 启动自动关闭定时器
+      _startFilterAutoCollapseTimer(); 
     } else {
-      _cancelFilterAutoCollapseTimer(); // 取消自动关闭定时器
+      _cancelFilterAutoCollapseTimer(); 
     }
   }
   
-  // 启动筛选框自动关闭定时器（5秒后自动关闭）
   void _startFilterAutoCollapseTimer() {
     _cancelFilterAutoCollapseTimer();
     _filterAutoCollapseTimer = Timer(const Duration(seconds: 5), () {
       if (mounted && _showFilter) {
-        // 检查是否有任何输入框有焦点或有内容
         final hasFocus = _minAmountFocusNode.hasFocus ||
             _maxAmountFocusNode.hasFocus ||
             _minProfitFocusNode.hasFocus ||
@@ -471,7 +448,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
             _minDaysController.text.isNotEmpty ||
             _maxDaysController.text.isNotEmpty;
         
-        // 如果没有焦点且没有内容，则自动关闭
         if (!hasFocus && !hasContent) {
           setState(() {
             _showFilter = false;
@@ -481,13 +457,11 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     });
   }
   
-  // 取消筛选框自动关闭定时器
   void _cancelFilterAutoCollapseTimer() {
     _filterAutoCollapseTimer?.cancel();
     _filterAutoCollapseTimer = null;
   }
   
-  // 重置筛选框自动关闭定时器
   void _resetFilterAutoCollapseTimer() {
     if (_showFilter) {
       _startFilterAutoCollapseTimer();
@@ -769,7 +743,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _scheduleFilterApply(),
-                onTap: () => _resetFilterAutoCollapseTimer(), // 点击时重置定时器
+                onTap: () => _resetFilterAutoCollapseTimer(), 
               ),
             ),
             Container(
@@ -805,7 +779,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _scheduleFilterApply(),
-                onTap: () => _resetFilterAutoCollapseTimer(), // 点击时重置定时器
+                onTap: () => _resetFilterAutoCollapseTimer(), 
               ),
             ),
             const SizedBox(width: 4),

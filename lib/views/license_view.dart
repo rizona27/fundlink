@@ -48,7 +48,6 @@ class LicenseView extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 标题居中显示
                           Text(
                             'GNU AFFERO GENERAL PUBLIC LICENSE',
                             textAlign: TextAlign.center,
@@ -73,7 +72,6 @@ class LicenseView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          // 内容段落：首行缩进，居左显示
                           ..._buildLicenseParagraphs(isDarkMode),
                         ],
                       ),
@@ -88,9 +86,7 @@ class LicenseView extends StatelessWidget {
     );
   }
 
-  /// 构建许可协议段落列表
   List<Widget> _buildLicenseParagraphs(bool isDarkMode) {
-    // 将许可文本按空行分割成段落
     final paragraphs = _licenseText.split('\n\n');
     
     return paragraphs.map((paragraph) {
@@ -98,13 +94,11 @@ class LicenseView extends StatelessWidget {
         return const SizedBox(height: 12);
       }
       
-      // 检查是否是标题或特殊行（全大写或以数字开头）
       final trimmed = paragraph.trim();
       final isTitle = trimmed == trimmed.toUpperCase() && trimmed.length > 10;
       final isSectionNumber = RegExp(r'^\s*\d+\.').hasMatch(trimmed);
       
       if (isTitle || isSectionNumber) {
-        // 标题或章节号：居中显示，不加缩进
         return Padding(
           padding: const EdgeInsets.only(top: 16, bottom: 8),
           child: Text(
@@ -120,13 +114,11 @@ class LicenseView extends StatelessWidget {
           ),
         );
       } else {
-        // 普通段落：首行缩进，居左显示
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 首行缩进（2个字符宽度）
               const SizedBox(width: 24),
               Expanded(
                 child: Text(

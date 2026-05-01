@@ -34,7 +34,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    // 优化：增加节流时间到16ms（约60fps），减少setState频率
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted && _scrollOffset != offset) {
         setState(() {
@@ -109,7 +108,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   bool get _areAnyCardsExpanded => _expandedClients.isNotEmpty;
 
-  // 滚动到底部
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
@@ -146,14 +144,12 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     return displayName;
   }
 
-  // 获取脱敏后的客户名
   String _getClientName(String key) {
     final parts = key.split('|');
     final clientName = parts[0];
     return _dataManager.obscuredName(clientName);
   }
 
-  // 获取客户号
   String? _getClientId(String key) {
     final parts = key.split('|');
     final clientId = parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
@@ -407,7 +403,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                         } else {
                                           _expandedClients.add(key);
                                           
-                                          // 只有当展开的是最后一个客户卡片时，才滚动到底部
                                           final sortedKeys = _sortedKeys;
                                           if (sortedKeys.isNotEmpty && key == sortedKeys.last) {
                                             Future.delayed(const Duration(milliseconds: 100), () {

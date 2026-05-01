@@ -65,57 +65,52 @@ class TopHoldingsWidget extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 根据窗口宽度和设备类型动态计算每行显示数量
         final double width = constraints.maxWidth;
 
         int crossAxisCount;
         double childAspectRatio;
 
-        // 判断是否为移动设备
         final bool isMobile = !kIsWeb &&
             (defaultTargetPlatform == TargetPlatform.iOS ||
                 defaultTargetPlatform == TargetPlatform.android);
 
         if (isMobile) {
-          // 移动端：根据屏幕宽度调整
           if (width < 350) {
-            crossAxisCount = 2; // 超小屏幕
-            childAspectRatio = 3.2; // 更保守的比例，避免溢出
+            crossAxisCount = 2; 
+            childAspectRatio = 3.2; 
           } else if (width < 450) {
-            crossAxisCount = 2; // 普通手机
+            crossAxisCount = 2; 
             childAspectRatio = 3.5;
           } else {
-            crossAxisCount = 3; // 大屏手机/小平板
+            crossAxisCount = 3; 
             childAspectRatio = 3.8;
           }
         } else {
-          // PC端（Windows/macOS/Web）：根据窗口宽度调整
           if (width < 400) {
-            crossAxisCount = 2; // 窄窗口
-            childAspectRatio = 3.2; // 更保守的比例，避免溢出
+            crossAxisCount = 2; 
+            childAspectRatio = 3.2; 
           } else if (width < 600) {
-            crossAxisCount = 3; // 中等窗口
+            crossAxisCount = 3; 
             childAspectRatio = 3.5;
           } else if (width < 900) {
-            crossAxisCount = 4; // 较宽窗口
+            crossAxisCount = 4; 
             childAspectRatio = 3.8;
           } else if (width < 1200) {
-            crossAxisCount = 5; // 宽窗口
+            crossAxisCount = 5; 
             childAspectRatio = 4.0;
           } else {
-            crossAxisCount = 6; // 超宽窗口
+            crossAxisCount = 6; 
             childAspectRatio = 4.2;
           }
         }
 
-        // 使用 ClipRect 防止布局切换时的溢出警告
         return ClipRect(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             switchInCurve: Curves.easeInOut,
             switchOutCurve: Curves.easeInOut,
             child: GridView.builder(
-              key: ValueKey('grid_$crossAxisCount'), // 使用 key 触发动画
+              key: ValueKey('grid_$crossAxisCount'), 
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -162,13 +157,11 @@ class TopHoldingsWidget extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 左侧：品字结构（上：股票名称，下：涨跌幅+占比整体居中）
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 上行：股票名称
                               Text(
                                 h.stockName,
                                 style: TextStyle(
@@ -180,7 +173,6 @@ class TopHoldingsWidget extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 4),
-                              // 下行：涨跌幅 + 占比（整体居中对齐）
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -222,13 +214,11 @@ class TopHoldingsWidget extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(width: 12),
-                          // 右侧：上下结构（上：市场标识，下：股票代码，整体居中对齐）
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 上行：市场标识
                               Text(
                                 _getMarketLabel(fullCode),
                                 style: TextStyle(
@@ -239,7 +229,6 @@ class TopHoldingsWidget extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              // 下行：股票代码
                               Text(
                                 h.stockCode,
                                 style: TextStyle(

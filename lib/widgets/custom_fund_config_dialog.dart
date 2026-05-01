@@ -95,7 +95,6 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 标题栏
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -127,7 +126,6 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                 ),
               ),
               
-              // 内容区域
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -152,7 +150,6 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                             maxLength: 6,
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             onChanged: (_) {
-                              // 清除验证状态
                               if (_validationError != null || _fundExists) {
                                 setState(() {
                                   _validationError = null;
@@ -173,7 +170,6 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                       ],
                     ),
                     
-                    // 验证结果提示
                     if (_validationError != null) ...[
                       const SizedBox(height: 8),
                       Row(
@@ -217,7 +213,6 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                 ),
               ),
               
-              // 底部按钮
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(

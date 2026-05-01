@@ -53,7 +53,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   bool get wantKeepAlive => true;
 
-  // SharedPreferences keys for state persistence
   static const String _keyExpandedClients = 'clientview_expanded_clients';
   static const String _keyPinnedSectionExpanded = 'clientview_pinned_section_expanded';
 
@@ -64,46 +63,36 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-    _loadState(); // Load persisted state
+    _loadState(); 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
     });
   }
 
-  /// Load persisted state from SharedPreferences
   Future<void> _loadState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Load pinned section expanded state (persisted across restarts)
       final pinnedExpanded = prefs.getBool(_keyPinnedSectionExpanded);
       if (pinnedExpanded != null) {
         _isPinnedSectionExpanded = pinnedExpanded;
       }
       
-      // Note: Individual client expanded states are NOT persisted
-      // They reset on app restart as per requirements
     } catch (e) {
-      // Ignore errors during state loading
     }
   }
 
-  /// Save state to SharedPreferences
   Future<void> _saveState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Only save pinned section expanded state
       await prefs.setBool(_keyPinnedSectionExpanded, _isPinnedSectionExpanded);
-      // Individual client expanded states are NOT saved (reset on restart)
     } catch (e) {
-      // Ignore errors during state saving
     }
   }
 
   Future<void> _checkAndFixGarbledFundNames() async {
     if (_autoFixTriggered) return;
       
-    // 如果距离上次自动修复不足5分钟，不再重复尝试
     if (_lastAutoFixTime != null && 
         DateTime.now().difference(_lastAutoFixTime!).inMinutes < 5) {
       return;
@@ -112,11 +101,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
   
-    // 只检测真正的乱码，不包括"加载失败"(网络问题)
     bool hasGarbled = false;
     for (final holding in _dataManager.holdings) {
       final name = holding.fundName;
-      // 只检测真正的乱码字符，不检测"加载失败"
       if (name.contains('') || name.contains('\ufffd')) {
         hasGarbled = true;
         break;
@@ -140,7 +127,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    // 优化：增加节流时间到16ms（约60fps），减少setState频率
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted && _scrollOffset != offset) {
         setState(() {
@@ -168,8 +154,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
     
-    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
-    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -215,9 +199,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     }
 
     var groups = map.values.toList();
-    // 按原始客户姓名的拼音首字母A-Z排序
     groups.sort((a, b) {
-      // 找到每个组对应的原始姓名
       final originalNameA = _filteredHoldings.firstWhere(
         (h) => (h.clientId.isNotEmpty ? h.clientId : h.clientName) == a.key,
         orElse: () => a.holdings.first,
@@ -228,7 +210,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         orElse: () => b.holdings.first,
       ).clientName;
       
-      // 获取姓氏的拼音首字母
       String pinyinA = '';
       if (originalNameA.isNotEmpty) {
         try {
@@ -249,7 +230,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         }
       }
       
-      // 比较拼音首字母
       return pinyinA.compareTo(pinyinB);
     });
     return groups;
@@ -261,14 +241,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     setState(() {
       _expandedClients.addAll(_clientGroups.map((g) => g.key));
     });
-    // Note: Individual expanded states are NOT persisted (reset on restart)
   }
 
   void _collapseAll() {
     setState(() {
       _expandedClients.clear();
     });
-    // Note: Individual expanded states are NOT persisted (reset on restart)
   }
 
   void _toggleClientExpand(String clientKey) {
@@ -279,17 +257,15 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         _expandedClients.add(clientKey);
       }
     });
-    // Note: Individual expanded states are NOT persisted (reset on restart)
   }
 
   void _togglePinnedSection() {
     setState(() {
       _isPinnedSectionExpanded = !_isPinnedSectionExpanded;
     });
-    _saveState(); // Save pinned section state
+    _saveState(); 
   }
 
-  // 滚动到底部
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
@@ -458,7 +434,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                 )
                     : CustomScrollView(
                   controller: _scrollController,
-                  // 性能优化：使用SliverList实现懒加载
                   slivers: [
                     SliverPadding(
                       padding: EdgeInsets.only(
@@ -470,7 +445,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            // 置顶区域
                             if (hasPinned && index == 0) {
                               return Column(
                                 children: [
@@ -524,13 +498,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                               const SizedBox(height: 16),
                                             ],
                                           )
-                                        : const SizedBox(height: 8), // 未展开时也添加间距
+                                        : const SizedBox(height: 8), 
                                   ),
                                 ],
                               );
                             }
                             
-                            // 客户分组
                             final groupIndex = hasPinned ? index - 1 : index;
                             if (groupIndex >= 0 && groupIndex < groups.length) {
                               return _buildClientGroupWidget(groups[groupIndex], isDarkMode);
@@ -610,7 +583,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     final wasExpanded = _expandedClients.contains(group.key);
                     _toggleClientExpand(group.key);
                     
-                    // 只有当展开的是最后一个客户卡片时，才滚动到底部
                     if (!wasExpanded) {
                       final groups = _clientGroups;
                       if (groups.isNotEmpty && group.key == groups.last.key) {
@@ -629,7 +601,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   curve: Curves.easeOutCubic,
                   child: isExpanded
                       ? Container(
-                    margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
+                    margin: const EdgeInsets.only(left: 16, top: 8), 
                     child: Column(children: _buildFundCards(group.holdings)),
                   )
                       : const SizedBox.shrink(),
@@ -643,7 +615,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     return result;
   }
 
-  // 性能优化：单独构建客户分组Widget，用于CustomScrollView
   Widget _buildClientGroupWidget(_ClientGroup group, bool isDarkMode) {
     final isExpanded = _expandedClients.contains(group.key);
     final gradient = _getGradientForOriginalName(group.holdings.first.clientName);
@@ -697,7 +668,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                 final wasExpanded = _expandedClients.contains(group.key);
                 _toggleClientExpand(group.key);
                 
-                // 只有当展开的是最后一个客户卡片时，才滚动到底部
                 if (!wasExpanded) {
                   final groups = _clientGroups;
                   if (groups.isNotEmpty && group.key == groups.last.key) {
@@ -716,7 +686,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               curve: Curves.easeOutCubic,
               child: isExpanded
                   ? Container(
-                margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ManageHoldingView保持一致
+                margin: const EdgeInsets.only(left: 16, top: 8), 
                 child: Column(children: _buildFundCards(group.holdings)),
               )
                   : const SizedBox.shrink(),

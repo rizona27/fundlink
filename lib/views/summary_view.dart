@@ -35,49 +35,38 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   int _valuationRefreshIntervalSeconds = 180;
   Timer? _valuationTimer;
-  Timer? _marketStatusTimer; // 检测开市状态变化的定时器
+  Timer? _marketStatusTimer; 
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
   
-  // 开市时间检测
   bool get _isMarketOpen {
     final now = DateTime.now();
     final weekday = now.weekday;
     
-    // 周末闭市
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
     
-    // 检查是否为节假日（使用 DataManager 的交易日判断）
     final today = DateTime(now.year, now.month, now.day);
-    // 这里简化处理，实际应该调用 DataManager.isTradingDay
-    // 但由于是同步 getter，我们先用基础判断
     
     final hour = now.hour;
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     
-    // A股交易时间：9:30-11:30, 13:00-15:00
-    final morningStart = 9 * 60 + 15;  // 9:15（估值可能提前开始）
-    final morningEnd = 11 * 60 + 30;   // 11:30
-    final afternoonStart = 13 * 60;     // 13:00
-    final afternoonEnd = 15 * 60 + 30;  // 15:30（估值可能延迟更新）
+    final morningStart = 9 * 60 + 15;  
+    final morningEnd = 11 * 60 + 30;   
+    final afternoonStart = 13 * 60;     
+    final afternoonEnd = 15 * 60 + 30;  
     
-    // 在交易时间段内（包含午休，因为午休期间估值仍可能更新）
     return currentTime >= morningStart && currentTime < afternoonEnd;
   }
   
-  /// 判断是否应该暂停自动刷新
-  /// 返回 true 表示应该暂停，false 表示可以继续
   bool _shouldPauseAutoRefresh() {
     final now = DateTime.now();
     final weekday = now.weekday;
     
-    // 周末肯定暂停
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return true;
     }
     
-    // 获取所有持仓的最新估值时间
     final holdings = _dataManager.holdings;
     if (holdings.isEmpty) return false;
     
@@ -97,41 +86,34 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               latestValuationTime = dateTime;
             }
           } catch (e) {
-            // 解析失败，跳过
           }
         }
       }
     }
     
-    // 如果没有估值时间，不暂停
     if (latestValuationTime == null) return false;
     
-    // 判断估值时间是否是今天
     final today = DateTime(now.year, now.month, now.day);
     final valuationDay = DateTime(latestValuationTime!.year, latestValuationTime!.month, latestValuationTime!.day);
     
-    // 如果估值不是今天的，说明是非交易日，暂停
     if (!valuationDay.isAtSameMomentAs(today)) {
       return true;
     }
     
-    // 估值是今天的，检查是否已经过了交易时间
     final valuationHour = latestValuationTime!.hour;
     final valuationMinute = latestValuationTime!.minute;
     final valuationTime = valuationHour * 60 + valuationMinute;
     
-    // 如果估值时间已经达到或超过15:00，说明今日交易已结束
     if (valuationTime >= 15 * 60) {
       return true;
     }
     
-    // 其他情况不暂停
     return false;
   }
 
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
-  final ScrollController _scrollController = ScrollController(); // 添加滚动控制器
+  final ScrollController _scrollController = ScrollController(); 
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
@@ -142,7 +124,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   static const String _keySortKey = 'summary_sort_key';
   static const String _keySortOrder = 'summary_sort_order';
-  static const String _keyExpandedFunds = 'summary_expanded_funds'; // 展开的基金代码
+  static const String _keyExpandedFunds = 'summary_expanded_funds'; 
 
   @override
   void initState() {
@@ -151,18 +133,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _dataListener = () {
       if (mounted) {
         setState(() {
-          // 清除缓存以强制重新计算
-          // 注：排序操作非常快（O(n log n)），对性能影响可忽略
           _cachedSortedFundCodes = null;
         });
       }
     };
     _loadSortState();
     _loadValuationRefreshInterval();
-    // 启动市场状态检测定时器
     _startMarketStatusTimer();
     
-    // 立即触发一次 UI 更新，确保 isMarketOpen 的值被正确传递
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -174,7 +152,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    // 优化：增加节流时间到16ms（约60fps），减少setState频率
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted && _scrollOffset != offset) {
         setState(() {
@@ -191,14 +168,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final sortKeyStr = prefs.getString(_keySortKey);
       final sortOrderStr = prefs.getString(_keySortOrder);
       
-      // 如果没有保存的排序状态，使用默认的无排序
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
               (e) => e.toString() == sortKeyStr,
           orElse: () => SortKey.none,
         );
       } else {
-        _sortKey = SortKey.none; // 默认无排序
+        _sortKey = SortKey.none; 
       }
       
       if (sortOrderStr != null) {
@@ -210,8 +186,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _sortOrder = SortOrder.descending;
       }
       
-      // 加载展开状态（重启app后重置，所以不加载）
-      // 展开状态只在会话期间保持，应用重启后清空
     } catch (e) {
     }
   }
@@ -221,15 +195,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keySortKey, _sortKey.toString());
       await prefs.setString(_keySortOrder, _sortOrder.toString());
-      // 不保存展开状态，重启app后重置
     } catch (e) {
     }
   }
   
-  /// 保存展开状态（仅在当前会话中保持）
   void _saveExpandedState() {
-    // 展开状态不持久化到SharedPreferences，只在内存中保持
-    // 应用重启后会自动清空
   }
 
   @override
@@ -240,11 +210,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _dataManager.addListener(_dataListener);
     _fundService = FundService(_dataManager);
     
-    // 启动时自动确认已过期的待确认交易
     _autoConfirmPendingTransactions();
     
-    // 强制刷新UI，确保显示最新数据（特别是添加第一个持仓时）
-    // 使用 Future.microtask 确保在下一帧执行，避免与当前构建冲突
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -256,10 +223,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopValuationTimer();
-    _stopMarketStatusTimer(); // 停止市场状态检测
+    _stopMarketStatusTimer(); 
     _dataManager.removeListener(_dataListener);
     _scrollThrottleTimer?.cancel();
-    _scrollController.dispose(); // 释放滚动控制器
+    _scrollController.dispose(); 
     super.dispose();
   }
 
@@ -267,7 +234,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
-      _startMarketStatusTimer(); // 重启市场状态检测
+      _startMarketStatusTimer(); 
       _restartValuationTimer();
       if (_dataManager.isValuationRefreshInProgress) {
         setState(() {});
@@ -277,19 +244,17 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     } else if (state == AppLifecycleState.paused) {
       _isPageVisible = false;
       _stopValuationTimer();
-      _stopMarketStatusTimer(); // 停止市场状态检测
+      _stopMarketStatusTimer(); 
     }
   }
 
   void _startValuationTimer() {
     _stopValuationTimer();
     
-    // 检查是否应该暂停自动刷新
     if (_shouldPauseAutoRefresh()) {
       return;
     }
     
-    // 只有在开市期间才启动自动刷新
     if (!_showValuationRefresh || !_isPageVisible || _dataManager.isValuationRefreshing) {
       return;
     }
@@ -297,7 +262,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        // 每次触发前再次检查是否应该暂停
         if (_shouldPauseAutoRefresh()) {
           _stopValuationTimer();
           return;
@@ -323,41 +287,33 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _restartValuationTimer() {
-    // 检查是否应该暂停
     if (_shouldPauseAutoRefresh()) {
       return;
     }
     
-    // 只有在开市期间才重启定时器
     if (_showValuationRefresh && _isPageVisible && !_dataManager.isValuationRefreshing) {
       _startValuationTimer();
     }
   }
   
-  // 启动市场状态检测定时器（每分钟检查一次）
   void _startMarketStatusTimer() {
     _stopMarketStatusTimer();
     _marketStatusTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (!_isPageVisible || !mounted) return;
       
-      // 检查是否应该暂停自动刷新
       final shouldPause = _shouldPauseAutoRefresh();
       
-      // 如果当前应该显示估值刷新但定时器未运行，且不应该暂停
       if (_showValuationRefresh && _valuationTimer == null && !shouldPause) {
         _restartValuationTimer();
       }
-      // 如果现在应该暂停，停止定时器
       else if (shouldPause && _valuationTimer != null) {
         _stopValuationTimer();
       }
       
-      // 触发 UI 更新，让 AdaptiveTopBar 重新获取 isMarketOpen 的值
       setState(() {});
     });
   }
   
-  // 停止市场状态检测定时器
   void _stopMarketStatusTimer() {
     _marketStatusTimer?.cancel();
     _marketStatusTimer = null;
@@ -380,7 +336,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (mounted) setState(() {});
   }
   
-  /// 自动确认已过期的待确认交易
   Future<void> _autoConfirmPendingTransactions() async {
     try {
       final pendingCount = _dataManager.getPendingTransactions().length;
@@ -468,7 +423,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       return;
     }
 
-    // 非交易时间手动刷新时提示用户
     if (!silent && mounted && !_isMarketOpen) {
       context.showToast('当前为非交易时间，仅能获取收市后估值');
     }
@@ -478,10 +432,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
     try {
       await _dataManager.refreshAllValuations(_fundService, silent: silent);
-      // 估值刷新完成后，如果当前是按最新估值排序，需要清除缓存并重新排序
       if (mounted && _sortKey == SortKey.latestNav) {
         setState(() {
-          // 清除排序缓存，强制重新排序
           _cachedSortedFundCodes = null;
         });
       }
@@ -571,14 +523,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     return map;
   }
 
-  // 性能优化：缓存排序后的基金代码列表
   List<String>? _cachedSortedFundCodes;
   String? _lastSearchText;
   SortKey? _lastSortKey;
   SortOrder? _lastSortOrder;
 
   List<String> get _sortedFundCodes {
-    // 检查缓存是否有效
     if (_cachedSortedFundCodes != null &&
         _lastSearchText == _searchText &&
         _lastSortKey == _sortKey &&
@@ -623,7 +573,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
     });
     
-    // 更新缓存
     _cachedSortedFundCodes = codes;
     _lastSearchText = _searchText;
     _lastSortKey = _sortKey;
@@ -641,7 +590,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _expandedFundCodes.addAll(_sortedFundCodes);
       }
     });
-    _saveExpandedState(); // 保存展开状态
+    _saveExpandedState(); 
   }
 
   void _toggleExpand(String fundCode) {
@@ -651,7 +600,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       } else {
         _expandedFundCodes.add(fundCode);
         
-        // 只有当展开的是最后一个卡片时，才滚动到底部
         final sortedCodes = _sortedFundCodes;
         if (sortedCodes.isNotEmpty && fundCode == sortedCodes.last) {
           Future.delayed(const Duration(milliseconds: 100), () {
@@ -660,10 +608,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         }
       }
     });
-    _saveExpandedState(); // 保存展开状态
+    _saveExpandedState(); 
   }
 
-  // 滚动到底部
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
@@ -788,7 +735,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 业绩周期展示
             Row(
               children: [
                 _buildReturnItem('近1月', firstHolding.navReturn1m),
@@ -909,7 +855,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               fundService: _fundService,
               onRefresh: _onFundRefresh,
               onLongPressRefresh: _onFundLongPressRefresh,
-              showValuationRefresh: _showValuationRefresh, // 始终显示估值刷新按钮
+              showValuationRefresh: _showValuationRefresh, 
               valuationRefreshIntervalSeconds: _valuationRefreshIntervalSeconds,
               onValuationRefresh: _onValuationRefresh,
               onValuationRefreshIntervalChanged: _onValuationRefreshIntervalChanged,
@@ -962,7 +908,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                     return false;
                   },
                   child: ListView.builder(
-                    controller: _scrollController, // 添加滚动控制器
+                    controller: _scrollController, 
                     key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
                     padding: EdgeInsets.only(
                       left: 12,
@@ -971,7 +917,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       bottom: totalBottomPadding,
                     ),
                     itemCount: sortedCodes.length,
-                    // 添加缓存机制，减少重建
                     cacheExtent: 500,
                     itemBuilder: (context, index) {
                       final fundCode = sortedCodes[index];
@@ -1074,7 +1019,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         );
                       }
 
-                      // 如果展开，在 trailing 中添加三个点菜单按钮
                       Widget? finalTrailing = trailing;
                       if (isExpanded) {
                         finalTrailing = Row(
@@ -1086,7 +1030,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             ],
                             GestureDetector(
                               onTap: () {
-                                // 跳转到第一个持仓的基金详情页
                                 Navigator.of(context).push(
                                   CupertinoPageRoute(
                                     builder: (context) => FundDetailPage(holding: first),
@@ -1113,7 +1056,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       }
 
                       return Column(
-                        key: ValueKey('fund_$fundCode'), // 添加key用于滚动定位
+                        key: ValueKey('fund_$fundCode'), 
                         children: [
                           GradientCard(
                             title: first.fundName,
@@ -1123,7 +1066,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             onTap: () => _toggleExpand(fundCode),
                             isDarkMode: isDark,
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: finalTrailing, // 使用包含三个点按钮的 trailing
+                            trailing: finalTrailing, 
                             maxTitleLength: 6,
                           ),
                           AnimatedSize(
@@ -1131,7 +1074,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                             curve: Curves.easeOutCubic,
                             child: isExpanded
                                 ? Container(
-                                    margin: const EdgeInsets.only(left: 16, top: 8), // 左侧添加16px margin，与ClientView保持一致
+                                    margin: const EdgeInsets.only(left: 16, top: 8), 
                                     child: _buildExpandedContent(first, holdings, isDark),
                                   )
                                 : const SizedBox.shrink(),

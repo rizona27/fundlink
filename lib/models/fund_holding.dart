@@ -1,7 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'transaction_record.dart';
 
-/// 基金持仓模型 - 通过交易流水计算得出
 class FundHolding {
   final String id;
   final String clientName;
@@ -49,13 +48,11 @@ class FundHolding {
     this.transactionIds = const [],
   }) : id = id ?? const Uuid().v4();
 
-  // 计算属性
   double get totalValue => totalShares * currentNav;
   double get profit => totalValue - totalCost;
   double get profitRate => totalCost > 0 ? profit / totalCost * 100 : 0;
 
   bool get isValidHolding {
-    // 修改：允许待确认交易的份额为0，只要有成本就认为有效
     return clientName.isNotEmpty &&
         fundCode.isNotEmpty &&
         totalCost > 0;
@@ -191,7 +188,6 @@ class FundHolding {
     );
   }
   
-  /// 从交易记录列表计算持仓信息
   static FundHolding fromTransactions({
     required String clientId,
     required String clientName,

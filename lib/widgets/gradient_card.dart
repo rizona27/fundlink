@@ -53,7 +53,6 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
       curve: Curves.easeOutCubic,
     );
     
-    // 根据初始状态设置控制器
     if (widget.isExpanded) {
       _controller.value = 1.0;
     }
@@ -147,7 +146,6 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
     final shadowColor = _getShadowColor();
     final boxShadowColor = _getBoxShadowColor();
 
-    // 计算卡片宽度：展开时右侧缩短16px
     final cardWidth = maxWidth - (animationValue * 16);
 
     return Container(
@@ -182,7 +180,6 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
               child: Stack(
               alignment: Alignment.centerRight,
               children: [
-                // 主内容区域
                 Padding(
                   padding: widget.padding ?? const EdgeInsets.symmetric(
                     vertical: 8,
@@ -220,7 +217,6 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                           strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
                         ),
                       ),
-                      // 占位空间，保持与 trailing 相同的宽度
                       if (widget.trailing != null)
                         const SizedBox(width: 80)
                       else if (widget.subtitle != null || widget.countValue != null)
@@ -228,7 +224,6 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                     ],
                   ),
                 ),
-                // trailing 或 subtitle/count 悬浮在右侧
                 Positioned(
                   right: 16,
                   child: widget.trailing != null
@@ -272,11 +267,11 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                           : const SizedBox.shrink(),
                 ),
               ],
-            ), // Stack
-            ), // Container (内层)
-          ), // SizedBox
-        ), // ClipRRect
-      ), // GestureDetector
-    ); // Container (外层)
+            ), 
+            ), 
+          ), 
+        ), 
+      ), 
+    ); 
   }
 }

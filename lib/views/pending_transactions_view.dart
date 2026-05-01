@@ -81,7 +81,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
       child: SafeArea(
         child: Column(
           children: [
-            // 顶部栏
             AdaptiveTopBar(
               scrollOffset: 0,
               showBack: true,
@@ -100,7 +99,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             
-            // 统计信息 - 紧凑版
             Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -150,7 +148,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               ),
             ),
             
-            // 交易列表
             Expanded(
               child: _pendingTransactions.isEmpty
                   ? Center(
@@ -213,7 +210,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 头部: 类型 + 日期
           Row(
             children: [
               Container(
@@ -268,7 +264,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           
           const SizedBox(height: 8),
           
-          // 基金信息
           Text(
             tx.fundName,
             style: TextStyle(
@@ -284,7 +279,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           
           const SizedBox(height: 8),
           
-          // 交易详情 - 更紧凑
           Row(
             children: [
               Expanded(
@@ -343,7 +337,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           
           const SizedBox(height: 6),
           
-          // 时间提示 - 更紧凑
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(

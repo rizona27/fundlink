@@ -53,13 +53,11 @@ class DataManager extends ChangeNotifier {
   bool _isValuationRefreshInProgress = false;
   Completer<void>? _currentValuationRefreshCompleter;
 
-  // 性能优化：选择性通知标志，避免不必要的全局重建
   bool _shouldNotifyListeners = true;
   
-  // 性能优化：计算结果缓存
   final Map<String, ProfitResult> _profitCache = {};
   final Map<String, List<TransactionRecord>> _transactionHistoryCache = {};
-  static const int _maxCacheSize = 500; // LRU缓存最大大小
+  static const int _maxCacheSize = 500; 
 
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
   List<TransactionRecord> get transactions => List.unmodifiable(_transactions);
@@ -72,7 +70,6 @@ class DataManager extends ChangeNotifier {
   bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
   bool get showHoldersOnSummaryCard => _showHoldersOnSummaryCard;
 
-  /// 获取基金信息缓存
   FundInfoCache? getFundInfoCache(String fundCode) {
     final cached = _fundInfoCache[fundCode];
     if (cached == null) return null;
@@ -86,7 +83,6 @@ class DataManager extends ChangeNotifier {
     return cached;
   }
 
-  /// 保存基金信息缓存
   void saveFundInfoCache(FundInfoCache fundInfo) {
     _fundInfoCache[fundInfo.fundCode] = fundInfo;
     saveFundInfoCacheToPrefs();
@@ -208,7 +204,6 @@ class DataManager extends ChangeNotifier {
     await prefs.setString(_valuationCacheKey, jsonEncode(_valuationCache));
   }
 
-  // 加载基金信息缓存
   Future<void> loadFundInfoCache() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_fundInfoCacheKey);
@@ -327,13 +322,11 @@ class DataManager extends ChangeNotifier {
       final total = holdings.length;
       String latestUpdateTime = _lastValuationUpdateTime;
 
-      // iOS优化：分批并发处理估值刷新
-      const batchSize = 5; // 每批5个基金
+      const batchSize = 5; 
       for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
         final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
         final batch = holdings.sublist(batchStart, batchEnd);
         
-        // 并发处理当前批次
         final results = await Future.wait(
           batch.map((holding) async {
             try {
@@ -359,7 +352,6 @@ class DataManager extends ChangeNotifier {
           }),
         );
         
-        // 统计结果
         for (final result in results) {
           if (result['success'] == true) {
             successCount++;
@@ -372,10 +364,8 @@ class DataManager extends ChangeNotifier {
           }
         }
         
-        // 更新进度
         updateValuationRefreshProgress(batchEnd / total);
         
-        // iOS优化：批次间添加延迟
         if (batchEnd < total) {
           await Future.delayed(const Duration(milliseconds: 200));
         }
@@ -414,29 +404,22 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 添加交易记录并自动更新持仓
   Future<void> addTransaction(TransactionRecord transaction) async {
-    // 验证交易数据
-    // 对于待确认交易，份额可以为0，等待后续确认时计算
     if (transaction.amount <= 0) {
       await addLog('添加交易失败: 金额必须大于0', type: LogType.error);
       throw Exception('无效的交易数据');
     }
     
-    // 非待确认交易必须有份额
     if (!transaction.isPending && transaction.shares <= 0) {
       await addLog('添加交易失败: 已确认交易必须有份额', type: LogType.error);
       throw Exception('无效的交易数据');
     }
 
-    // 添加交易记录
     _transactions = [..._transactions, transaction];
     
-    // 清除该客户基金的交易历史缓存
     final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
     _transactionHistoryCache.remove(cacheKey);
 
-    // 重新计算该客户该基金的持仓
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
     await saveData();
@@ -449,31 +432,25 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 根据交易记录重建持仓
   Future<void> _rebuildHolding(String clientId, String fundCode) async {
-    // 获取该客户该基金的所有交易记录
     final relatedTransactions = _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
         .toList()
       ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
 
     if (relatedTransactions.isEmpty) {
-      // 如果没有交易记录，删除对应的持仓
       _holdings.removeWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
       return;
     }
 
-    // 获取最新的基金信息
     final firstTx = relatedTransactions.first;
     final lastTx = relatedTransactions.last;
 
-    // 从现有持仓中获取净值信息，如果没有则使用默认值
     final existingHolding = _holdings.firstWhere(
       (h) => h.clientId == clientId && h.fundCode == fundCode,
       orElse: () => FundHolding.invalid(fundCode: fundCode),
     );
 
-    // 基于交易记录重新计算持仓
     final newHolding = FundHolding.fromTransactions(
       clientId: clientId,
       clientName: firstTx.clientName,
@@ -491,7 +468,6 @@ class DataManager extends ChangeNotifier {
       navReturn1y: existingHolding.navReturn1y,
     );
 
-    // 如果持仓已存在，更新它；否则添加新持仓
     final existingIndex = _holdings.indexWhere(
       (h) => h.clientId == clientId && h.fundCode == fundCode,
     );
@@ -503,24 +479,19 @@ class DataManager extends ChangeNotifier {
     }
   }
 
-  /// 获取指定客户和基金的交易历史（带缓存优化）
   List<TransactionRecord> getTransactionHistory(String clientId, String fundCode) {
     final cacheKey = '${clientId}_$fundCode';
     
-    // 检查缓存
     if (_transactionHistoryCache.containsKey(cacheKey)) {
       return _transactionHistoryCache[cacheKey]!;
     }
     
-    // 计算并缓存
     final result = _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
         .toList()
       ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate));
     
-    // LRU缓存管理
     if (_transactionHistoryCache.length >= _maxCacheSize) {
-      // 移除最旧的缓存项
       final oldestKey = _transactionHistoryCache.keys.first;
       _transactionHistoryCache.remove(oldestKey);
     }
@@ -529,7 +500,6 @@ class DataManager extends ChangeNotifier {
     return result;
   }
 
-  /// 删除交易记录并重新计算持仓
   Future<void> deleteTransaction(String transactionId) async {
     final index = _transactions.indexWhere((tx) => tx.id == transactionId);
     if (index == -1) {
@@ -540,11 +510,9 @@ class DataManager extends ChangeNotifier {
     final transaction = _transactions[index];
     _transactions = List.from(_transactions)..removeAt(index);
     
-    // 清除该客户基金的交易历史缓存
     final cacheKey = '${transaction.clientId}_${transaction.fundCode}';
     _transactionHistoryCache.remove(cacheKey);
 
-    // 重新计算持仓
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
     await saveData();
@@ -568,7 +536,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 更新持仓的净值信息（不改变交易记录）- 优化版，支持批量更新
   Future<void> updateHoldingNav(String clientId, String fundCode, double currentNav, DateTime navDate) async {
     final index = _holdings.indexWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
     if (index == -1) return;
@@ -581,19 +548,15 @@ class DataManager extends ChangeNotifier {
     );
 
     _holdings[index] = updatedHolding;
-    // 不在这里保存和通知，由调用者决定何时批量保存
   }
 
-  /// 批量保存并通知（用于refreshAllHoldingsForce等批量操作）
   Future<void> commitBatchUpdates() async {
     await saveData();
     notifyListeners();
   }
 
-  /// 更新持仓净值后，自动确认相关的待确认交易
   Future<void> autoConfirmRelatedPendingTransactions(String fundCode, FundService fundService) async {
     try {
-      // 获取该基金的所有待确认交易
       final pendingTransactions = getPendingTransactions()
           .where((tx) => tx.fundCode == fundCode)
           .toList();
@@ -605,12 +568,9 @@ class DataManager extends ChangeNotifier {
       
       for (final tx in pendingTransactions) {
         try {
-          // 使用异步方法计算该交易何时可以确认（考虑节假日和调休）
           final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
           
-          // 如果当前日期 >= 可确认日期,则尝试获取净值并确认
           if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
-            // 获取该基金的最新净值
             final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
             if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
               await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
@@ -618,7 +578,6 @@ class DataManager extends ChangeNotifier {
             }
           }
         } catch (e) {
-          // 自动确认失败，静默处理
         }
       }
       
@@ -644,7 +603,6 @@ class DataManager extends ChangeNotifier {
   Future<void> clearAllHoldings() async {
     final count = _holdings.length;
     _holdings = [];
-    // 清空缓存
     _profitCache.clear();
     _transactionHistoryCache.clear();
     await saveData();
@@ -652,28 +610,23 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 批量更新持仓（减少notifyListeners调用次数）
   Future<void> batchUpdateHoldings(List<FundHolding> newHoldings) async {
     _holdings = newHoldings;
     await saveData();
     notifyListeners();
   }
 
-  /// 刷新所有持仓并自动确认相关待确认交易
   Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
     final total = _holdings.length;
     
-    // iOS优化：分批处理，避免并发请求过多
-    const batchSize = 5; // 每批5个基金
+    const batchSize = 5; 
     for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
       final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
       
-      // 处理当前批次
       for (int i = batchStart; i < batchEnd; i++) {
         final holding = _holdings[i];
         final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
         if (fetched['isValid'] == true) {
-          // 同时更新净值、基金名称和收益率信息
           final index = _holdings.indexWhere((h) => h.id == holding.id);
           if (index != -1) {
             final updated = _holdings[index].copyWith(
@@ -689,7 +642,6 @@ class DataManager extends ChangeNotifier {
             _holdings[index] = updated;
           }
           
-          // 自动确认该基金的待确认交易
           await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
         } else {
           await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
@@ -697,13 +649,11 @@ class DataManager extends ChangeNotifier {
         onProgress?.call(i + 1, total);
       }
       
-      // iOS优化：批次间添加小延迟，避免触发服务器限流
       if (batchEnd < total) {
         await Future.delayed(const Duration(milliseconds: 300));
       }
     }
     
-    // 优化：批量保存和通知，减少I/O和重建次数
     await commitBatchUpdates();
   }
 
@@ -740,17 +690,14 @@ class DataManager extends ChangeNotifier {
   Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
     final total = _holdings.length;
     
-    // iOS优化：分批处理，避免并发请求过多
-    const batchSize = 5; // 每批5个基金
+    const batchSize = 5; 
     for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
       final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
       
-      // 处理当前批次
       for (int i = batchStart; i < batchEnd; i++) {
         final holding = _holdings[i];
         final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
         if (fetched['isValid'] == true) {
-          // 同时更新净值、基金名称和收益率信息
           final index = _holdings.indexWhere((h) => h.id == holding.id);
           if (index != -1) {
             final updated = _holdings[index].copyWith(
@@ -766,7 +713,6 @@ class DataManager extends ChangeNotifier {
             _holdings[index] = updated;
           }
           
-          // 自动确认该基金的待确认交易
           await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
         } else {
           await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
@@ -774,13 +720,11 @@ class DataManager extends ChangeNotifier {
         onProgress?.call(i + 1, total);
       }
       
-      // iOS优化：批次间添加小延迟，避免触发服务器限流
       if (batchEnd < total) {
         await Future.delayed(const Duration(milliseconds: 300));
       }
     }
     
-    // 优化：批量保存和通知，减少I/O和重建次数
     await commitBatchUpdates();
   }
 
@@ -838,10 +782,8 @@ class DataManager extends ChangeNotifier {
   }
 
   ProfitResult calculateProfit(FundHolding holding) {
-    // 使用缓存键
     final cacheKey = '${holding.clientId}_${holding.fundCode}_${holding.totalShares}_${holding.totalCost}_${holding.currentNav}';
     
-    // 检查缓存
     if (_profitCache.containsKey(cacheKey)) {
       return _profitCache[cacheKey]!;
     }
@@ -855,7 +797,6 @@ class DataManager extends ChangeNotifier {
     final currentMarketValue = holding.currentNav * holding.totalShares;
     final absoluteProfit = currentMarketValue - holding.totalCost;
 
-    // 计算持有天数：从首次买入到现在
     final relatedTransactions = getTransactionHistory(holding.clientId, holding.fundCode);
     if (relatedTransactions.isEmpty) {
       final result = ProfitResult(absolute: absoluteProfit, annualized: 0.0);
@@ -875,7 +816,6 @@ class DataManager extends ChangeNotifier {
     final annualizedReturn = (absoluteProfit / holding.totalCost) / days * 365 * 100;
     final result = ProfitResult(absolute: absoluteProfit, annualized: annualizedReturn);
     
-    // LRU缓存管理
     if (_profitCache.length >= _maxCacheSize) {
       final oldestKey = _profitCache.keys.first;
       _profitCache.remove(oldestKey);
@@ -900,12 +840,10 @@ class DataManager extends ChangeNotifier {
     return sorted;
   }
   
-  /// 获取所有待确认的交易
   List<TransactionRecord> getPendingTransactions() {
     return _transactions.where((tx) => tx.isPending).toList();
   }
   
-  /// 确认待确认交易(当净值可用时)
   Future<void> confirmPendingTransaction(String transactionId, double confirmedNav) async {
     final index = _transactions.indexWhere((tx) => tx.id == transactionId);
     if (index == -1) {
@@ -917,27 +855,21 @@ class DataManager extends ChangeNotifier {
       throw Exception('该交易已经确认');
     }
     
-    // 根据交易类型计算缺失的值
     double calculatedShares = transaction.shares;
     double calculatedAmount = transaction.amount;
     
     if (transaction.type == TransactionType.buy) {
-      // 买入：如果份额为0，根据金额和净值计算份额
       if (transaction.shares <= 0 && transaction.amount > 0 && confirmedNav > 0) {
-        // 使用内扣法计算份额：份额 = 金额 / (1 + 费率%) / 净值
-        final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
+        final feeRate = transaction.fee ?? 0.0; 
         calculatedShares = transaction.amount / (1 + feeRate / 100) / confirmedNav;
       }
     } else {
-      // 卖出：如果金额为0，根据份额和净值计算金额
       if (transaction.amount <= 0 && transaction.shares > 0 && confirmedNav > 0) {
-        // 金额 = 份额 * 净值 * (1 - 费率%)
-        final feeRate = transaction.fee ?? 0.0; // 获取保存的费率，默认为0
+        final feeRate = transaction.fee ?? 0.0; 
         calculatedAmount = transaction.shares * confirmedNav * (1 - feeRate / 100);
       }
     }
     
-    // 更新交易记录
     final updatedTransaction = transaction.copyWith(
       isPending: false,
       confirmedNav: confirmedNav,
@@ -947,12 +879,10 @@ class DataManager extends ChangeNotifier {
     
     _transactions[index] = updatedTransaction;
     
-    // 重新计算持仓
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
     
     await saveData();
     
-    // 记录详细的确认日志
     final confirmDate = DateTime.now();
     await addLog(
       '✅ 确认交易: ${transaction.fundName}(${transaction.fundCode})\n'
@@ -968,7 +898,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// 批量确认已过期的待确认交易
   Future<int> autoConfirmPendingTransactions(FundService fundService) async {
     final pendingTransactions = getPendingTransactions();
     if (pendingTransactions.isEmpty) return 0;
@@ -978,12 +907,9 @@ class DataManager extends ChangeNotifier {
     
     for (final tx in pendingTransactions) {
       try {
-        // 使用新的异步方法计算该交易何时可以确认（考虑节假日和调休）
         final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
         
-        // 如果当前日期 >= 可确认日期,则尝试获取净值并确认
         if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
-          // 获取该基金的最新净值
           final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
           if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
             await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
@@ -1002,37 +928,26 @@ class DataManager extends ChangeNotifier {
     return confirmedCount;
   }
   
-  /// 判断是否为工作日(周一到周五,不考虑节假日)
-  /// @deprecated 请使用 ChinaTradingDayService.isTradingDay() 获取更准确的交易日判断
   static bool isWeekday(DateTime date) {
-    final weekday = date.weekday; // 1=Monday, 7=Sunday
+    final weekday = date.weekday; 
     return weekday >= DateTime.monday && weekday <= DateTime.friday;
   }
   
-  /// 判断是否为中国 A 股交易日（考虑法定节假日和调休补班）
-  /// 使用三层降级策略：
-  /// 1. 专业节假日 API（包含调休补班信息）
-  /// 2. world_holidays 包（法定节假日）
-  /// 3. 本地周一到周五判断（兜底方案）
   static Future<bool> isTradingDay(DateTime date) async {
     final service = ChinaTradingDayService();
     return await service.isTradingDay(date);
   }
   
-  /// 获取下一个交易日
   static Future<DateTime> getNextTradingDay({DateTime? from}) async {
     final service = ChinaTradingDayService();
     return await service.getNextTradingDay(from: from);
   }
   
-  /// 获取上一个交易日
   static Future<DateTime> getPreviousTradingDay({DateTime? from}) async {
     final service = ChinaTradingDayService();
     return await service.getPreviousTradingDay(from: from);
   }
   
-  /// 获取下一个工作日
-  /// @deprecated 请使用 getNextTradingDay() 获取更准确的下一个交易日
   static DateTime getNextWeekday(DateTime from) {
     DateTime next = from.add(const Duration(days: 1));
     while (!isWeekday(next)) {
@@ -1041,186 +956,127 @@ class DataManager extends ChangeNotifier {
     return next;
   }
   
-  /// 计算交易应该使用的净值日期
-  /// - 过去日期:
-  ///   * 工作日: 
-  ///     - 15:00前: 使用T日(当天)的净值
-  ///     - 15:00后: 使用T+1日(下一个工作日)的净值
-  ///   * 非工作日: 统一按下一个工作日的15:00前处理
-  /// - 今天或未来: 
-  ///   * 工作日15:00前: 使用T日(当天)的净值,在T+1日公布
-  ///   * 工作日15:00后: 使用T+1日(下一个工作日)的净值,在T+2日公布
-  ///   * 非工作日: 统一按下一个工作日的15:00前处理，使用下一个工作日的净值
   static DateTime calculateNavDateForTrade(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     
-    // 判断是否为工作日
     final isTradeWeekday = isWeekday(tradeDay);
     
-    // 过去的交易
     if (tradeDay.isBefore(today)) {
       if (!isTradeWeekday) {
-        // 非工作日：统一视为下一个工作日的15:00前
         return getNextWeekday(tradeDay);
       } else {
-        // 工作日：根据15:00前后决定
         if (isAfter1500) {
-          // 15:00后，使用下一个工作日的净值(T+1日)
           return getNextWeekday(tradeDay);
         } else {
-          // 15:00前，使用当天的净值(T日)
           return tradeDay;
         }
       }
     }
     
-    // 今天或未来的交易
-    // 如果是非工作日，统一视为下一个工作日的15:00前
     final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
-      // 15:00后,使用下一个工作日的净值(T+1日)
       return getNextWeekday(tradeDay);
     } else {
-      // 15:00前,使用当天的净值(T日),如果是周末则用下一个工作日
       return isTradeWeekday ? tradeDay : getNextWeekday(tradeDay);
     }
   }
   
-  /// 计算交易应该使用的净值日期（异步版本，考虑法定节假日和调休补班）
-  /// @deprecated 请使用 calculateNavDateForTradeAsync
   static Future<DateTime> calculateNavDateForTradeAsync(DateTime tradeDate, bool isAfter1500) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     
-    // 判断是否为交易日
     final isTradeTradingDay = await isTradingDay(tradeDay);
     
-    // 过去的交易
     if (tradeDay.isBefore(today)) {
       if (!isTradeTradingDay) {
-        // 非交易日：统一视为下一个交易日的15:00前
         return await getNextTradingDay(from: tradeDay);
       } else {
-        // 交易日：根据15:00前后决定
         if (isAfter1500) {
-          // 15:00后，使用下一个交易日的净值(T+1日)
           return await getNextTradingDay(from: tradeDay);
         } else {
-          // 15:00前，使用当天的净值(T日)
           return tradeDay;
         }
       }
     }
     
-    // 今天或未来的交易
-    // 如果是非交易日，统一视为下一个交易日的15:00前
     final effectiveIsAfter1500 = isTradeTradingDay ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
-      // 15:00后,使用下一个交易日的净值(T+1日)
       return await getNextTradingDay(from: tradeDay);
     } else {
-      // 15:00前,使用当天的净值(T日),如果是非交易日则用下一个交易日
       return isTradeTradingDay ? tradeDay : await getNextTradingDay(from: tradeDay);
     }
   }
   
-  /// 计算交易净值何时可以确认(净值公布时间)
-  /// 关键：基于净值日期而非交易日期来判断
-  /// - 如果净值日期是过去：已确认，返回交易日期
-  /// - 如果净值日期是今天或未来：
-  ///   * 工作日15:00前: T+1日可确认（使用T日净值）
-  ///   * 工作日15:00后: T+2日可确认（使用T+1日净值）
-  ///   * 非工作日: 统一按下一个工作日的15:00前处理，T+1日可确认（使用下一个工作日净值）
   static DateTime calculateConfirmDate(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
-    // 先计算该交易应该使用的净值日期
     final navDate = calculateNavDateForTrade(tradeDate, isAfter1500);
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
-    // 如果净值日期是过去，说明已经确认
     if (navDay.isBefore(today)) {
       return tradeDate;
     }
     
-    // 净值日期是今天或未来，需要计算确认日期
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     final isTradeWeekday = isWeekday(tradeDay);
     final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
-      // 15:00后，使用T+1日净值，T+2日可确认
-      final actualNavDate = getNextWeekday(tradeDay); // T+1日（净值日期）
-      return getNextWeekday(actualNavDate); // T+2日（确认日期）
+      final actualNavDate = getNextWeekday(tradeDay); 
+      return getNextWeekday(actualNavDate); 
     } else {
-      // 15:00前，使用T日净值，T+1日可确认
-      final actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); // T日（净值日期）
-      return getNextWeekday(actualNavDate); // T+1日（确认日期）
+      final actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); 
+      return getNextWeekday(actualNavDate); 
     }
   }
   
-  /// 计算交易净值何时可以确认（异步版本，考虑法定节假日和调休补班）
   static Future<DateTime> calculateConfirmDateAsync(DateTime tradeDate, bool isAfter1500) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
-    // 先计算该交易应该使用的净值日期（使用新的异步方法）
     final navDate = await calculateNavDateForTradeAsync(tradeDate, isAfter1500);
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
-    // 如果净值日期是过去，说明已经确认
     if (navDay.isBefore(today)) {
       return tradeDate;
     }
     
-    // 净值日期是今天或未来，需要计算确认日期
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
     final isTradeTradingDay = await isTradingDay(tradeDay);
     final effectiveIsAfter1500 = isTradeTradingDay ? isAfter1500 : false;
     
     if (effectiveIsAfter1500) {
-      // 15:00后，使用T+1日净值，T+2日可确认
-      final actualNavDate = await getNextTradingDay(from: tradeDay); // T+1日（净值日期）
-      return await getNextTradingDay(from: actualNavDate); // T+2日（确认日期）
+      final actualNavDate = await getNextTradingDay(from: tradeDay); 
+      return await getNextTradingDay(from: actualNavDate); 
     } else {
-      // 15:00前，使用T日净值，T+1日可确认
-      final actualNavDate = isTradeTradingDay ? tradeDay : await getNextTradingDay(from: tradeDay); // T日（净值日期）
-      return await getNextTradingDay(from: actualNavDate); // T+1日（确认日期）
+      final actualNavDate = isTradeTradingDay ? tradeDay : await getNextTradingDay(from: tradeDay); 
+      return await getNextTradingDay(from: actualNavDate); 
     }
   }
   
-  /// 判断交易是否为待确认状态
-  /// 关键：基于净值日期而非交易日期来判断
-  /// - 如果净值日期是今天或未来：待确认（净值还未公布）
-  /// - 如果净值日期是过去：已确认（净值已公布）
   static bool isTransactionPending(DateTime tradeDate, bool isAfter1500) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
-    // 先计算该交易应该使用的净值日期
     final navDate = calculateNavDateForTrade(tradeDate, isAfter1500);
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
-    // 如果净值日期是今天或未来，说明净值还未公布，需要待确认
     return !navDay.isBefore(today);
   }
   
-  /// 判断交易是否为待确认状态（异步版本，考虑节假日）
   static Future<bool> isTransactionPendingAsync(DateTime tradeDate, bool isAfter1500) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
-    // 先计算该交易应该使用的净值日期（使用异步方法，考虑节假日）
     final navDate = await calculateNavDateForTradeAsync(tradeDate, isAfter1500);
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
-    // 如果净值日期是今天或未来，说明净值还未公布，需要待确认
     return !navDay.isBefore(today);
   }
 }

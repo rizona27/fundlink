@@ -1078,7 +1078,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                     if (_isImporting) ...[
                       Stack(
                         children: [
-                          // 背景轨道
                           Container(
                             height: 4,
                             decoration: BoxDecoration(
@@ -1088,7 +1087,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          // 进度条（从左到右）
                           Align(
                             alignment: Alignment.centerLeft,
                             child: FractionallySizedBox(
@@ -1159,28 +1157,21 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
 
   Future<void> _downloadTemplate() async {
     try {
-      // 创建示例数据 - 包含基础持仓和加减仓流水
       final headers = [
         '客户姓名', '客户号', '基金代码', '购买金额', '购买份额', '购买日期',
         '交易类型(选填)', '交易金额(选填)', '交易份额(选填)', '交易日期(选填)'
       ];
       final sampleData = [
-        // 基础持仓（无加减仓）
         ['张三', 'C001', '000001', '10000.00', '8000.00', '2024-01-15', '', '', '', ''],
-        // 有加仓记录
         ['李四', 'C002', '110022', '20000.00', '15000.00', '2024-02-20', '加仓', '5000.00', '3500.00', '2024-03-15'],
-        // 有减仓记录
         ['王五', 'C003', '519674', '5000.00', '4500.00', '2024-03-10', '减仓', '2000.00', '1800.00', '2024-04-10'],
       ];
 
-      // 生成CSV内容
       final csvData = [headers, ...sampleData];
       final csvString = const ListToCsvConverter().convert(csvData);
       final bytes = Uint8List.fromList(utf8.encode(csvString));
 
-      // 保存文件
       if (kIsWeb) {
-        // Web端直接下载
         final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
         final url = html.Url.createObjectUrlFromBlob(blob);
         final anchor = html.AnchorElement(href: url)
@@ -1189,7 +1180,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         html.Url.revokeObjectUrl(url);
         if (mounted) context.showToast('模板已下载');
       } else {
-        // 移动端/桌面端使用file_saver
         final savedPath = await FileSaver.instance.saveAs(
           name: 'FundLink-Template',
           bytes: bytes,
@@ -1430,8 +1420,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           continue;
         }
 
-        // iOS优化：获取基金信息时添加重试机制
-        Map<String, dynamic> fundInfo = {  // 初始化默认值
+        Map<String, dynamic> fundInfo = {  
           'fundName': '',
           'currentNav': 0.0,
           'navDate': DateTime.now(),
@@ -1460,7 +1449,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         
         if (retryCount > maxRetries) {
           dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.error);
-          // fundInfo已经初始化为默认值，无需再次赋值
         }
 
         final fundName = fundInfo['fundName'] as String? ?? '';
@@ -1468,7 +1456,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
         final isValid = fundInfo['isValid'] as bool? ?? (currentNav > 0);
 
-        // 创建交易记录而不是直接创建持仓
         final transaction = TransactionRecord(
           clientId: clientId,
           clientName: clientName,

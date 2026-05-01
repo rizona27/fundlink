@@ -57,7 +57,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   final ScrollController _mainScrollController = ScrollController();
   
-  // 自定义基金配置
   String _customFundCode = '';
 
   @override
@@ -117,9 +116,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
       _hsPoints = (benchmark['hs300'] as List<NetWorthPoint>)
         ..sort((a, b) => a.date.compareTo(b.date));
 
-      // 获取对比基金数据（并行加载）- 使用ETF联接基金
       
-      // iOS优化：使用Future.wait并发加载对比基金数据
       final hs300Future = _fundService!.fetchNetWorthTrend('460300');
       final zz500Future = _fundService!.fetchNetWorthTrend('004348');
       final zz1000Future = _fundService!.fetchNetWorthTrend('011860');
@@ -276,7 +273,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
                   _loading = false;
                 });
                 
-                // 强制刷新图表
                 if (mounted) {
                   setState(() {});
                 }
@@ -370,7 +366,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 业绩走势图
         RepaintBoundary(
           key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
           child: FundPerformanceChart(
@@ -475,7 +470,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 左侧：基金名称和代码
               Expanded(
                 flex: 3,
                 child: Column(
@@ -504,7 +498,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 ),
               ),
               
-              // 中间：估算净值
               Expanded(
                 flex: 2,
                 child: Column(
@@ -533,7 +526,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 ),
               ),
               
-              // 右侧：估算涨幅
               Expanded(
                 flex: 2,
                 child: Column(

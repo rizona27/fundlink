@@ -88,7 +88,7 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     return Container(
       height: 36,
-      width: 240, // 缩小总宽度
+      width: 240, 
       decoration: BoxDecoration(
         color: CupertinoColors.systemGrey5,
         borderRadius: BorderRadius.circular(18),
@@ -99,11 +99,11 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
             animation: _animationController,
             builder: (context, child) {
               final slideValue = _animationController.value;
-              final leftOffset = slideValue * 152; // 调整滑动距离
+              final leftOffset = slideValue * 152; 
               return Transform.translate(
                 offset: Offset(leftOffset, 0),
                 child: Container(
-                  width: 72, // 缩小滑块宽度
+                  width: 72, 
                   height: 32,
                   margin: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -145,7 +145,7 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 12, // 稍微缩小字体
+                fontSize: 12, 
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
               ),

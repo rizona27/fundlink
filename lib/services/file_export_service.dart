@@ -9,7 +9,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:universal_html/html.dart' as html;
 
-// 仅在非Web平台导入dart:io
 import 'dart:io' as io;
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
@@ -24,7 +23,6 @@ class FileExportService {
     _dataManager = manager;
   }
   
-  /// 完整备份导出（持仓 + 交易记录）
   static Future<void> exportFullBackup({
     required String format,
     required BuildContext context,
@@ -103,7 +101,6 @@ class FileExportService {
     return (bytes: bytes, fileName: fileName, mimeType: mimeType);
   }
 
-  /// 生成完整备份（持仓 + 交易）
   static Future<({Uint8List bytes, String fileName, String mimeType})> _generateFullBackup({
     required List<FundHolding> holdings,
     required List<TransactionRecord> transactions,
@@ -255,7 +252,6 @@ class FileExportService {
       case 'profit': return holding.profit.toStringAsFixed(2);
       case 'profitRate': return holding.profitRate.toStringAsFixed(2);
       case 'annualizedProfitRate': 
-        // 使用DataManager计算准确的年化收益率
         if (dataManager != null) {
           return dataManager.calculateProfit(holding).annualized.toStringAsFixed(2);
         }
@@ -303,20 +299,16 @@ class FileExportService {
     ];
   }
 
-  // ==================== 完整备份生成方法 ====================
   
-  /// 生成完整备份CSV
   static Future<Uint8List> _generateFullBackupCsvBytes(
     List<FundHolding> holdings, 
     List<TransactionRecord> transactions
   ) async {
     final rows = <List<String>>[];
     
-    // 添加文件标识行
     rows.add(['# FundLink Full Backup', 'Version: 1.1.7', 'Export Time: ${DateTime.now().toIso8601String()}']);
     rows.add([]);
     
-    // === 持仓数据部分 ===
     rows.add(['=== HOLDINGS DATA ===']);
     rows.add(_getFullBackupHoldingHeaders());
     for (final h in holdings) {
@@ -324,7 +316,6 @@ class FileExportService {
     }
     rows.add([]);
     
-    // === 交易记录部分 ===
     rows.add(['=== TRANSACTIONS DATA ===']);
     rows.add(_getFullBackupTransactionHeaders());
     for (final tx in transactions) {
@@ -335,21 +326,18 @@ class FileExportService {
     return Uint8List.fromList(utf8.encode(csvString));
   }
 
-  /// 生成完整备份Excel
   static Future<Uint8List> _generateFullBackupExcelBytes(
     List<FundHolding> holdings, 
     List<TransactionRecord> transactions
   ) async {
     final excelFile = excel.Excel.createExcel();
     
-    // === Sheet 1: 持仓数据 ===
     final holdingsSheet = excelFile['Holdings'];
     _writeFullBackupHoldingHeadersToSheet(holdingsSheet);
     for (int i = 0; i < holdings.length; i++) {
       _writeFullBackupHoldingRowToSheet(holdingsSheet, holdings[i], i + 1);
     }
     
-    // === Sheet 2: 交易记录 ===
     final transactionsSheet = excelFile['Transactions'];
     _writeFullBackupTransactionHeadersToSheet(transactionsSheet);
     for (int i = 0; i < transactions.length; i++) {
@@ -363,7 +351,6 @@ class FileExportService {
     return Uint8List.fromList(fileBytes);
   }
 
-  // ==================== CSV 辅助方法 ====================
   
   static List<String> _getFullBackupHoldingHeaders() {
     return [
@@ -418,7 +405,6 @@ class FileExportService {
     ];
   }
 
-  // ==================== Excel 辅助方法 ====================
   
   static void _writeFullBackupHoldingHeadersToSheet(excel.Sheet sheet) {
     final headers = _getFullBackupHoldingHeaders();

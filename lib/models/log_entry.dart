@@ -39,7 +39,7 @@ extension LogTypeExtension on LogType {
       case LogType.warning:
         return const Color(0xFFFF9500);
       case LogType.network:
-        return const Color(0xFFAF52DE); // 更亮的紫色
+        return const Color(0xFFAF52DE); 
       case LogType.cache:
         return const Color(0xFFFF2D55);
     }

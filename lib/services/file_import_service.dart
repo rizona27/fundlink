@@ -7,7 +7,6 @@ import '../models/transaction_record.dart';
 import 'package:uuid/uuid.dart';
 
 class FileImportService {
-  /// 解析完整备份文件（持仓 + 交易）
   static Future<({
     List<FundHolding> holdings,
     List<TransactionRecord> transactions,
@@ -19,7 +18,6 @@ class FileImportService {
   }) async {
     extension = extension.toLowerCase();
     
-    // 智能检测文件实际格式
     final actualFormat = detectFileFormat(bytes, extension);
     
     if (actualFormat == 'csv') {
@@ -37,7 +35,6 @@ class FileImportService {
   }) async {
     extension = extension.toLowerCase();
     
-    // 智能检测文件实际格式，不依赖扩展名
     final actualFormat = _detectFileFormat(bytes, extension);
     
     if (actualFormat == 'csv') {
@@ -49,65 +46,49 @@ class FileImportService {
     }
   }
   
-  /// 检测文件实际格式（基于文件头和内容）- 公开方法
   static String detectFileFormat(Uint8List bytes, String extension) {
     return _detectFileFormat(bytes, extension);
   }
   
-  /// 检测文件实际格式（基于文件头和内容）
   static String _detectFileFormat(Uint8List bytes, String extension) {
-    // 如果扩展名明确是 Excel 格式，优先尝试 Excel
     if (extension == 'xlsx' || extension == 'xls') {
       return 'excel';
     }
     
-    // 对于 .csv 扩展名或其他情况，检测实际内容
-    // Excel (.xlsx) 文件实际上是 ZIP 格式，以 PK 开头
     if (bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B) {
-      // ZIP 格式，很可能是 .xlsx
       return 'excel';
     }
     
-    // Excel (.xls) 旧格式有特定的文件头
     if (bytes.length >= 8) {
-      // D0 CF 11 E0 是 OLE2 复合文档格式（旧版 Excel）
       if (bytes[0] == 0xD0 && bytes[1] == 0xCF && bytes[2] == 0x11 && bytes[3] == 0xE0) {
         return 'excel';
       }
     }
     
-    // 尝试检测是否为有效的 UTF-8/ASCII 文本（CSV 应该是文本格式）
     try {
       final content = utf8.decode(bytes, allowMalformed: false);
-      // CSV 文件通常包含逗号、引号等字符，且不包含大量二进制数据
-      // 检查是否包含常见的 CSV 特征
       if (content.contains(',') || content.contains('\t') || content.contains('\n')) {
         return 'csv';
       }
     } catch (e) {
-      // 如果无法解码为 UTF-8，可能是二进制格式（Excel）
       return 'excel';
     }
     
-    // 默认根据扩展名判断
     if (extension == 'csv') {
       return 'csv';
     }
     
-    // 其他情况，尝试作为 CSV 处理
     return 'csv';
   }
 
   static Future<({List<String> headers, List<List<dynamic>> rows})> _parseCsv(Uint8List bytes) async {
     try {
-      // 尝试多种编码方式解码
       String csvString;
       try {
         csvString = utf8.decode(bytes);
       } catch (e) {
-        // 如果 UTF-8 失败，尝试 GBK/GB2312（中文 Excel 导出的 CSV 常用编码）
         try {
-          csvString = latin1.decode(bytes); // 作为备选
+          csvString = latin1.decode(bytes); 
         } catch (e2) {
           throw Exception('文件编码无法识别，请确保文件是有效的 CSV 格式');
         }
@@ -121,7 +102,6 @@ class FileImportService {
       final dataRows = rows.skip(1).toList();
       return (headers: headers, rows: dataRows);
     } catch (e) {
-      // 如果是 CSV 解析错误，提供更友好的提示
       if (e.toString().contains('custom numfmtld') || 
           e.toString().contains('FormatException')) {
         throw Exception('文件格式错误：这不是一个有效的 CSV 文件。\n\n可能的原因：\n1. 文件实际是 Excel 格式，但扩展名为 .csv\n2. 文件已损坏或编码不正确\n\n建议：\n- 在 Excel 中打开文件，选择“另存为” -> 选择“CSV (逗号分隔)”格式\n- 或直接使用 .xlsx 扩展名保存');
@@ -159,7 +139,6 @@ class FileImportService {
     return (headers: headers, rows: dataRows);
   }
 
-  /// 将行数据转换为交易记录（新模型）
   static TransactionRecord rowToTransaction(
       List<dynamic> row,
       Map<String, int> fieldMapping, {
@@ -202,7 +181,6 @@ class FileImportService {
     final shares = getDouble('purchaseShares') ?? getDouble('shares');
     if (shares == null || shares <= 0) throw Exception('交易份额无效');
 
-    // 判断交易类型：默认为买入，如果有type字段则根据字段值判断
     TransactionType type = TransactionType.buy;
     final typeStr = getString('type').toUpperCase();
     if (typeStr == 'SELL' || typeStr == '卖出') {
@@ -232,7 +210,6 @@ class FileImportService {
     );
   }
 
-  /// 兼容旧方法：将行数据转换为持仓（用于向后兼容）
   static FundHolding rowToHolding(
       List<dynamic> row,
       Map<String, int> fieldMapping, {
@@ -306,7 +283,6 @@ class FileImportService {
     );
   }
 
-  /// 灵活解析日期 - 公开方法
   static DateTime parseFlexibleDate(String dateStr) {
     return _parseFlexibleDate(dateStr);
   }
@@ -335,9 +311,7 @@ class FileImportService {
     return DateTime(year, month, day);
   }
 
-  // ==================== 完整备份解析方法 ====================
   
-  /// 解析完整备份CSV
   static Future<({
     List<FundHolding> holdings,
     List<TransactionRecord> transactions,
@@ -377,7 +351,6 @@ class FileImportService {
       
       final firstCell = row[0].toString().trim();
       
-      // 解析文件头信息
       if (firstCell.startsWith('# FundLink Full Backup')) {
         if (row.length > 1) {
           version = row[1].toString().replaceAll('Version:', '').trim();
@@ -387,13 +360,11 @@ class FileImportService {
           try {
             exportTime = DateTime.parse(timeStr);
           } catch (e) {
-            // 忽略时间解析错误
           }
         }
         continue;
       }
       
-      // 检测持仓数据部分
       if (firstCell == '=== HOLDINGS DATA ===') {
         inHoldingsSection = true;
         inTransactionsSection = false;
@@ -401,7 +372,6 @@ class FileImportService {
         continue;
       }
       
-      // 检测交易数据部分
       if (firstCell == '=== TRANSACTIONS DATA ===') {
         inHoldingsSection = false;
         inTransactionsSection = true;
@@ -409,7 +379,6 @@ class FileImportService {
         continue;
       }
       
-      // 解析持仓数据
       if (inHoldingsSection) {
         if (!headersParsed) {
           holdingFieldMapping = _buildFullBackupHoldingFieldMapping(row.map((e) => e.toString().trim()).toList());
@@ -421,11 +390,9 @@ class FileImportService {
           final holding = _csvRowToFullBackupHolding(row, holdingFieldMapping!);
           holdings.add(holding);
         } catch (e) {
-          // 跳过无效的持仓行
         }
       }
       
-      // 解析交易数据
       if (inTransactionsSection) {
         if (!headersParsed) {
           transactionFieldMapping = _buildFullBackupTransactionFieldMapping(row.map((e) => e.toString().trim()).toList());
@@ -437,7 +404,6 @@ class FileImportService {
           final transaction = _csvRowToFullBackupTransaction(row, transactionFieldMapping!);
           transactions.add(transaction);
         } catch (e) {
-          // 跳过无效的交易行
         }
       }
     }
@@ -450,7 +416,6 @@ class FileImportService {
     );
   }
 
-  /// 解析完整备份Excel
   static Future<({
     List<FundHolding> holdings,
     List<TransactionRecord> transactions,
@@ -462,7 +427,6 @@ class FileImportService {
     final holdings = <FundHolding>[];
     final transactions = <TransactionRecord>[];
 
-    // 解析持仓Sheet
     if (excelFile.tables.containsKey('Holdings')) {
       final sheet = excelFile.tables['Holdings'];
       if (sheet != null && sheet.rows.length > 1) {
@@ -475,13 +439,11 @@ class FileImportService {
             final holding = _excelRowToFullBackupHolding(row, fieldMapping);
             holdings.add(holding);
           } catch (e) {
-            // 跳过无效的持仓行
           }
         }
       }
     }
 
-    // 解析交易Sheet
     if (excelFile.tables.containsKey('Transactions')) {
       final sheet = excelFile.tables['Transactions'];
       if (sheet != null && sheet.rows.length > 1) {
@@ -494,7 +456,6 @@ class FileImportService {
             final transaction = _excelRowToFullBackupTransaction(row, fieldMapping);
             transactions.add(transaction);
           } catch (e) {
-            // 跳过无效的交易行
           }
         }
       }
@@ -508,7 +469,6 @@ class FileImportService {
     );
   }
 
-  // ==================== 字段映射 ====================
   
   static Map<String, int> _buildFullBackupHoldingFieldMapping(List<String> headers) {
     final mapping = <String, int>{};
@@ -556,7 +516,6 @@ class FileImportService {
     return mapping;
   }
 
-  // ==================== CSV 转换方法 ====================
   
   static FundHolding _csvRowToFullBackupHolding(List<dynamic> row, Map<String, int> mapping) {
     String getString(String fieldId) {
@@ -595,15 +554,15 @@ class FileImportService {
       totalShares: getDouble('totalShares') ?? 0.0,
       totalCost: getDouble('totalCost') ?? 0.0,
       averageCost: getDouble('averageCost') ?? 0.0,
-      currentNav: 0.0, // 导入后通过API获取
-      navDate: DateTime.now(), // 导入后通过API获取
+      currentNav: 0.0, 
+      navDate: DateTime.now(), 
       isValid: true,
       remarks: getString('remarks'),
       isPinned: getString('isPinned') == '是',
       pinnedTimestamp: getString('pinnedTimestamp').isNotEmpty 
           ? DateTime.tryParse(getString('pinnedTimestamp')) 
           : null,
-      navReturn1m: null, // 导入后重新计算
+      navReturn1m: null, 
       navReturn3m: null,
       navReturn6m: null,
       navReturn1y: null,
@@ -660,7 +619,6 @@ class FileImportService {
       type = TransactionType.sell;
     }
 
-    // 优先使用原始ID，如果不存在则生成新ID
     final id = getString('id');
     final createdAt = getString('createdAt').isNotEmpty
         ? DateTime.tryParse(getString('createdAt'))
@@ -686,7 +644,6 @@ class FileImportService {
     );
   }
 
-  // ==================== Excel 转换方法 ====================
   
   static FundHolding _excelRowToFullBackupHolding(List<String> row, Map<String, int> mapping) {
     return _csvRowToFullBackupHolding(row, mapping);

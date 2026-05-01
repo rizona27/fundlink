@@ -3,11 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../widgets/adaptive_top_bar.dart';
 
-// ==================== 版本信息配置区 ====================
-/// 应用版本号
 const String APP_VERSION = 'v1.1.8';
 
-/// 更新记录列表（从新到旧）
 const List<String> UPDATE_LOGS = [
   'v1.1.8 - 新增本地缓存功能，已缓存数据支持离线，体验大幅提升',
   'v1.1.7 - 优化十大重仓股布局，新增股票K线蜡烛图功能，支持查看历史数据',
@@ -30,12 +27,9 @@ const List<String> UPDATE_LOGS = [
   'v1.0.0 - FundLink 正式版',
 ];
 
-/// 致谢信息
 const String ACKNOWLEDGMENT_LINE_1 = '感谢参与测试的小伙伴：miner2011m、qiu_kw、naniezy、leo_pengtao、JMW0802、yizhixiaozhuti';
 const String ACKNOWLEDGMENT_LINE_2 = '愿大家一基暴富～！';
-// ======================================================
 
-/// 跑马灯文本组件 - 支持无缝循环滚动、鼠标悬停/触摸暂停
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle textStyle;
@@ -51,7 +45,6 @@ class _MarqueeText extends StatefulWidget {
   State<_MarqueeText> createState() => _MarqueeTextState();
 }
 
-/// 垂直跑马灯组件 - 从下往上滚动
 class _VerticalMarqueeText extends StatefulWidget {
   final List<String> items;
   final TextStyle itemTextStyle;
@@ -80,7 +73,6 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     _controller = AnimationController(vsync: this);
   }
 
-  /// 启动跑马灯动画
   void _startAnimation(double containerWidth) {
     if (_animationStarted) return;
     
@@ -115,7 +107,6 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     _controller.forward();
   }
   
-  /// 暂停动画
   void _pauseAnimation() {
     if (!_isPaused && _controller.isAnimating) {
       _controller.stop();
@@ -125,7 +116,6 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     }
   }
   
-  /// 恢复动画
   void _resumeAnimation() {
     if (_isPaused && !_controller.isAnimating) {
       _controller.forward();
@@ -209,7 +199,6 @@ class VersionView extends StatelessWidget {
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     double scrollOffset = 0;
 
-    // 生成随机颜色用于“一基暴富”
     final randomColor = HSLColor.fromAHSL(
       1,
       Random().nextDouble() * 360,
@@ -332,9 +321,8 @@ class VersionView extends StatelessWidget {
                         const SizedBox(height: 12),
                         LayoutBuilder(
                           builder: (context, constraints) {
-                            // 根据屏幕宽度动态调整列数和字体大小，但限制最大宽度
                             final screenWidth = constraints.maxWidth;
-                            final effectiveWidth = screenWidth > 500 ? 500 : screenWidth; // 限制最大宽度为500
+                            final effectiveWidth = screenWidth > 500 ? 500 : screenWidth; 
                             final crossAxisCount = effectiveWidth > 400 ? 3 : 2;
                             final fontSize = effectiveWidth > 400 ? 13.0 : 11.0;
                             final iconSize = effectiveWidth > 400 ? 16.0 : 12.0;
@@ -343,11 +331,11 @@ class VersionView extends StatelessWidget {
                               constraints: BoxConstraints(maxWidth: 500),
                               child: GridView.count(
                                 crossAxisCount: crossAxisCount,
-                                mainAxisSpacing: 2, // 进一步减小行间距
+                                mainAxisSpacing: 2, 
                                 crossAxisSpacing: 8,
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
-                                childAspectRatio: 5.0, // 增大宽高比，使行高更小
+                                childAspectRatio: 5.0, 
                                 children: [
                                   _buildFeatureItem(CupertinoIcons.doc_plaintext, '基金持仓管理', isDarkMode, fontSize, iconSize),
                                   _buildFeatureItem(CupertinoIcons.square_grid_2x2, '多维度视图', isDarkMode, fontSize, iconSize),
@@ -365,7 +353,6 @@ class VersionView extends StatelessWidget {
                           },
                         ),
                         const SizedBox(height: 24),
-                        // 更新记录（从下往上滚动）
                         _buildUpdateLogMarquee(isDarkMode),
                         const SizedBox(height: 24),
                         Align(
@@ -379,7 +366,7 @@ class VersionView extends StatelessWidget {
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   fontStyle: FontStyle.italic,
-                                  color: randomColor, // 使用与“一基暴富”相同的随机颜色
+                                  color: randomColor, 
                                 ),
                               ),
                               Text(
@@ -388,7 +375,7 @@ class VersionView extends StatelessWidget {
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   fontStyle: FontStyle.italic,
-                                  color: randomColor, // 与Mail保持一致的颜色
+                                  color: randomColor, 
                                 ),
                               ),
                             ],
@@ -546,7 +533,7 @@ class VersionView extends StatelessWidget {
                     ? CupertinoColors.white.withOpacity(0.8)
                     : CupertinoColors.systemGrey.withOpacity(0.9),
               ),
-              velocity: 30.0, // 滚动速度（像素/秒）
+              velocity: 30.0, 
             ),
           ),
         ),
@@ -554,16 +541,14 @@ class VersionView extends StatelessWidget {
     );
   }
 
-  /// 从下往上滚动的更新记录组件
   Widget _buildUpdateLogMarquee(bool isDarkMode) {
-    // 构建完整的更新记录列表（包含空行和致谢）
     final updateLogs = [
-      ...UPDATE_LOGS,  // 展开更新记录
-      '',  // v1.0.0后的空行
-      '──────────────────────',  // 分隔符
-      '',  // 分隔符后的空行
-      ACKNOWLEDGMENT_LINE_1,  // 致谢第一行
-      ACKNOWLEDGMENT_LINE_2,  // 致谢第二行
+      ...UPDATE_LOGS,  
+      '',  
+      '──────────────────────',  
+      '',  
+      ACKNOWLEDGMENT_LINE_1,  
+      ACKNOWLEDGMENT_LINE_2,  
     ];
 
     return Column(
@@ -578,12 +563,10 @@ class VersionView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        // 根据内容数量动态计算高度，调整为原来的3/5
         LayoutBuilder(
           builder: (context, constraints) {
-            // 每行大约20像素高度（文本12px + 间距8px）
             final estimatedHeight = updateLogs.length * 20.0;
-            final containerHeight = (estimatedHeight.clamp(120.0, 300.0)) * 0.6; // 减少为3/5高度
+            final containerHeight = (estimatedHeight.clamp(120.0, 300.0)) * 0.6; 
             
             return Container(
               height: containerHeight,
@@ -609,7 +592,7 @@ class VersionView extends StatelessWidget {
                         ? CupertinoColors.white.withOpacity(0.8)
                         : CupertinoColors.systemGrey.withOpacity(0.9),
                   ),
-                  velocity: 15.0, // 进一步降低滚动速度
+                  velocity: 15.0, 
                 ),
               ),
             );
@@ -620,7 +603,6 @@ class VersionView extends StatelessWidget {
   }
 }
 
-/// 垂直跑马灯状态类 - 从下往上滚动
 class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   double _offset = 0;
@@ -634,21 +616,18 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     _controller = AnimationController(vsync: this);
   }
 
-  /// 启动垂直跑马灯动画
   void _startAnimation(double containerHeight) {
     if (_animationStarted) return;
     
-    // 计算总高度（所有文本项的高度 + 间距）
     final textPainter = TextPainter(
       text: TextSpan(text: widget.items.join('\n'), style: widget.itemTextStyle),
       textDirection: TextDirection.ltr,
     );
-    textPainter.layout(maxWidth: 300); // 假设宽度为300
-    final totalTextHeight = textPainter.height + (widget.items.length - 1) * 8; // 8是行间距
+    textPainter.layout(maxWidth: 300); 
+    final totalTextHeight = textPainter.height + (widget.items.length - 1) * 8; 
     
     _containerHeight = containerHeight;
     final totalDistance = totalTextHeight + containerHeight;
-    // 降低速度，确保用户可以阅读完所有内容
     final duration = Duration(milliseconds: (totalDistance / widget.velocity * 1000).round());
     
     _controller.duration = duration;
@@ -659,7 +638,6 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        // 完成后等待2秒再重新开始，给用户更多时间
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted && !_controller.isAnimating) {
             _controller.forward(from: 0);
@@ -675,7 +653,6 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     _controller.forward();
   }
   
-  /// 暂停动画
   void _pauseAnimation() {
     if (!_isPaused && _controller.isAnimating) {
       _controller.stop();
@@ -685,7 +662,6 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     }
   }
   
-  /// 恢复动画
   void _resumeAnimation() {
     if (_isPaused && !_controller.isAnimating) {
       _controller.forward();

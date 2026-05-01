@@ -86,9 +86,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: isDarkMode
-                    // 深色模式：深蓝紫色渐变，神秘优雅
                     ? [const Color(0xFF1a1b3a), const Color(0xFF2d1b4e), const Color(0xFF1f2937)]
-                    // 浅色模式：温暖的金粉色渐变，柔和舒适
                     : [const Color(0xFFFFF5E6), const Color(0xFFFFE8D6), const Color(0xFFFFF0F0)],
               ),
             ),
@@ -98,11 +96,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
             builder: (context, child) {
               return Stack(
                 children: [
-                  // 主光晕 - 更大更柔和的扩散效果
                   _buildSoftGlow(index: 0, opacity: 0.08),
-                  // 次要光晕 - 偏移位置，增加层次感
                   _buildSoftGlow(index: 1, opacity: 0.06, offsetX: 100, offsetY: 50),
-                  // 第三个光晕 - 另一个方向
                   _buildSoftGlow(index: 2, opacity: 0.05, offsetX: -50, offsetY: 100),
                 ],
               );
@@ -124,7 +119,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                           fontSize: 32, 
                           fontWeight: FontWeight.w200, 
                           fontFamily: 'Serif',
-                          // 深色模式：淡紫白色；浅色模式：深紫褐色
                           color: isDarkMode ? const Color(0xFFE8E6F0) : const Color(0xFF5A4A42),
                         ),
                       ),
@@ -134,7 +128,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                           fontSize: 60, 
                           fontWeight: FontWeight.w600, 
                           fontFamily: 'Serif',
-                          // 深色模式：纯白略带紫调；浅色模式：深棕色
                           color: isDarkMode ? const Color(0xFFF5F3FF) : const Color(0xFF3D2E28),
                         ),
                       ),
@@ -146,7 +139,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                           style: TextStyle(
                             fontSize: 16, 
                             fontWeight: FontWeight.w300,
-                            // 深色模式：淡紫色；浅色模式：暖灰色
                             color: isDarkMode ? const Color(0xFFC8C4D9).withOpacity(0.7) : const Color(0xFF8B7D72),
                           ),
                         ),
@@ -156,7 +148,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                         "专业 · 专注 · 价值",
                         style: TextStyle(
                           fontSize: 13, 
-                          // 深色模式：淡紫灰；浅色模式：暖灰褐
                           color: isDarkMode ? const Color(0xFFA8A4B8).withOpacity(0.6) : const Color(0xFF9E8E82),
                         ),
                       ),
@@ -165,7 +156,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                         "Copyright © 2026 Rizona.",
                         style: TextStyle(
                           fontSize: 11, 
-                          // 深色模式：更淡的紫灰；浅色模式：浅暖灰
                           color: isDarkMode ? const Color(0xFF8884A0).withOpacity(0.5) : const Color(0xFFB8A89A),
                         ),
                       ),
@@ -183,12 +173,10 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
   Widget _buildSoftGlow({required int index, required double opacity, double offsetX = 0, double offsetY = 0}) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    // 使用更柔和的渐变色彩
     final glowColor = isDarkMode
-        ? const Color(0xFF9B8AFF)  // 淡紫色
-        : const Color(0xFFFFB347); // 金橙色
+        ? const Color(0xFF9B8AFF)  
+        : const Color(0xFFFFB347); 
 
-    // 根据索引设置不同的大小和位置
     final sizes = [400.0, 300.0, 250.0];
     final size = sizes[index] ?? 300.0;
     
@@ -201,7 +189,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
-            // 更平滑的多层渐变，从中心到边缘逐渐消失
             colors: [
               glowColor.withOpacity(opacity),
               glowColor.withOpacity(opacity * 0.6),

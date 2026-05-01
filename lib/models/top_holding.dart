@@ -1,4 +1,3 @@
-/// 十大重仓股模型
 class TopHolding {
   final String stockCode;
   final String stockName;

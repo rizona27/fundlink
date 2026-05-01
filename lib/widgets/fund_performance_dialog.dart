@@ -6,13 +6,11 @@ import '../models/fund_holding.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
-/// 基金业绩详情弹窗
-/// 展示多个周期的业绩表现
 class FundPerformanceDialog extends StatefulWidget {
   final String fundCode;
   final String fundName;
   final DataManager? dataManager;
-  final FundHolding? holding; // 可选，用于获取API返回的收益率数据
+  final FundHolding? holding; 
 
   const FundPerformanceDialog({
     super.key,
@@ -31,16 +29,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   bool _loading = true;
   String? _error;
   
-  // 存储各周期的业绩数据
   Map<String, double?> _performanceData = {};
-  // 标记哪些是计算数据(非API数据)
   Set<String> _calculatedPeriods = {};
-  // 存储各周期的日期区间说明
   Map<String, String> _periodDateRanges = {};
-  DateTime? _fundEstablishDate; // 基金成立日期
-  DateTime? _dataEndDate; // 数据截止日期
+  DateTime? _fundEstablishDate; 
+  DateTime? _dataEndDate; 
   
-  // 周期定义
   final List<Map<String, dynamic>> _periods = [
     {'label': '近1周', 'days': 7},
     {'label': '近2周', 'days': 14},
@@ -71,22 +65,17 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
     });
 
     try {
-      // 获取历史净值数据
       final historyPoints = await _fundService.fetchNetWorthTrend(widget.fundCode);
       
       if (historyPoints.isEmpty) {
         throw Exception('无法获取历史净值数据');
       }
 
-      // 按日期排序（升序）
       historyPoints.sort((a, b) => a.date.compareTo(b.date));
       
-      // 获取基金成立日期（最早的数据日期）
       _fundEstablishDate = historyPoints.first.date;
-      // 获取数据截止日期（最新的数据日期）
       _dataEndDate = historyPoints.last.date;
       
-      // 优先从 DataManager 缓存读取 API 返回的收益率数据
       final cachedInfo = widget.dataManager?.getFundInfoCache(widget.fundCode);
       if (cachedInfo != null) {
         _performanceData['近1月'] = cachedInfo.navReturn1m;
@@ -94,7 +83,6 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         _performanceData['近6月'] = cachedInfo.navReturn6m;
         _performanceData['近1年'] = cachedInfo.navReturn1y;
       } else if (widget.holding != null) {
-        // 如果没有缓存，尝试从 holding 中获取
         final h = widget.holding!;
         _performanceData['近1月'] = h.navReturn1m;
         _performanceData['近3月'] = h.navReturn3m;
@@ -102,15 +90,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         _performanceData['近1年'] = h.navReturn1y;
       }
       
-      // 计算各周期业绩（只计算没有API数据的周期）
-      // 使用最新净值日期作为基准，而不是当前日期
       final latestPoint = historyPoints.last;
       final latestDate = latestPoint.date;
       
       for (var period in _periods) {
         final label = period['label'] as String;
         
-        // 如果已经有API数据，跳过
         if (_performanceData.containsKey(label) && _performanceData[label] != null) {
           continue;
         }
@@ -119,36 +104,29 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         DateTime? endDate;
         
         if (period['special'] == 'ytd') {
-          // 今年来：从今年1月1日到最新净值日期
           startDate = DateTime(latestDate.year, 1, 1);
           endDate = latestDate;
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate, endDate);
-          _calculatedPeriods.add(label); // 标记为计算数据
+          _calculatedPeriods.add(label); 
         } else if (period['special'] == 'inception') {
-          // 成立来：从成立日到最新净值日期
           startDate = _fundEstablishDate!;
           endDate = latestDate;
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate, endDate);
-          _calculatedPeriods.add(label); // 标记为计算数据
+          _calculatedPeriods.add(label); 
         } else {
-          // 固定天数周期：从最新净值日期往前推N天
           final days = period['days'] as int;
           
-          // 检查基金成立时间是否足够
           final fundAgeDays = latestDate.difference(_fundEstablishDate!).inDays;
           if (fundAgeDays < days) {
-            // 基金成立时间不足该周期，显示--
             _performanceData[label] = null;
             _periodDateRanges[label] = '基金成立不足${_getPeriodText(days)}';
             continue;
           }
           
-          // 计算起始日期（自然日）
           final targetStartDate = latestDate.subtract(Duration(days: days));
           
-          // 找到targetStartDate之前最后一个有净值的交易日作为起点
           NetWorthPoint? actualStartPoint;
           for (int i = historyPoints.length - 1; i >= 0; i--) {
             if (historyPoints[i].date.isBefore(targetStartDate) || 
@@ -158,16 +136,14 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
             }
           }
           
-          // 如果找不到，使用最早的点
           startDate = actualStartPoint?.date ?? historyPoints.first.date;
           endDate = latestDate;
           
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate!, endDate!);
-          _calculatedPeriods.add(label); // 标记为计算数据
+          _calculatedPeriods.add(label); 
         }
         
-        // 保存日期区间说明（显示实际使用的净值日期）
         if (startDate != null && endDate != null) {
           _periodDateRanges[label] = '${_formatDate(startDate)} ~ ${_formatDate(endDate)}';
         }
@@ -184,13 +160,11 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
     }
   }
 
-  /// 计算指定区间的收益率
   double? _calculateReturn(
     List<NetWorthPoint> points,
     DateTime startDate,
     DateTime endDate,
   ) {
-    // 找到最接近起始日期的净值点
     NetWorthPoint? startPoint;
     int minStartDiff = 999999;
     
@@ -202,10 +176,8 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
       }
     }
     
-    // 如果找不到合适的起始点，使用最早的点
     startPoint ??= points.first;
     
-    // 找到最接近结束日期的净值点
     NetWorthPoint? endPoint;
     int minEndDiff = 999999;
     
@@ -217,14 +189,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
       }
     }
     
-    // 如果找不到合适的结束点，使用最新的点
     endPoint ??= points.last;
 
     if (startPoint.nav <= 0) {
       return null;
     }
 
-    // 计算收益率
     return ((endPoint.nav - startPoint.nav) / startPoint.nav) * 100;
   }
 
@@ -232,7 +202,6 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// 将天数转换为易读的周期文本
   String _getPeriodText(int days) {
     if (days < 30) {
       return '${days}天';
@@ -247,9 +216,9 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
 
   Color _getReturnColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
-    if (value > 0) return const Color(0xFFFF3B30); // 红色（正收益）
-    if (value < 0) return const Color(0xFF34C759); // 绿色（负收益）
-    return CupertinoColors.systemGrey; // 灰色（0）
+    if (value > 0) return const Color(0xFFFF3B30); 
+    if (value < 0) return const Color(0xFF34C759); 
+    return CupertinoColors.systemGrey; 
   }
 
   @override
@@ -268,7 +237,6 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 标题栏
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -326,7 +294,6 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
                 ),
               ),
               
-              // 内容区域
               Flexible(
                 child: _loading
                     ? const Center(child: CupertinoActivityIndicator())
@@ -398,17 +365,14 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   Widget _buildPerformanceList(bool isDark) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _periods.length + 3, // +3 for establishment date, data end date, and disclaimer
+      itemCount: _periods.length + 3, 
       itemBuilder: (context, index) {
-        // 倒数第三行显示基金成立日期
         if (index == _periods.length) {
           return _buildEstablishmentDateRow(isDark);
         }
-        // 倒数第二行显示数据截止日期
         if (index == _periods.length + 1) {
           return _buildDataEndDateRow(isDark);
         }
-        // 最后一行显示免责声明
         if (index == _periods.length + 2) {
           return _buildDisclaimerRow(isDark);
         }

@@ -97,12 +97,11 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   }
 
   int get holdingDays {
-    // 获取首次交易日期
     if (_dataManager == null) return 0;
     final transactions = _dataManager!.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
     if (transactions.isEmpty) return 0;
     
-    final firstTradeDate = transactions.last.tradeDate; // 因为是倒序，最后一条是最早的
+    final firstTradeDate = transactions.last.tradeDate; 
     final startDate = DateTime(firstTradeDate.year, firstTradeDate.month, firstTradeDate.day);
     final endDate = DateTime(widget.holding.navDate.year, widget.holding.navDate.month, widget.holding.navDate.day);
     return endDate.difference(startDate).inDays + 1;
@@ -178,7 +177,7 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   void _onViewTransactionHistory() {
     showCupertinoDialog(
       context: context,
-      barrierDismissible: true, // 允许点击外部关闭
+      barrierDismissible: true, 
       builder: (context) => TransactionHistoryDialog(
         clientId: widget.holding.clientId,
         fundCode: widget.holding.fundCode,
@@ -206,7 +205,6 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
     final formattedAbsoluteReturnPercentage = _formatPercentageForReport(absoluteReturnPercentage);
     final navDateString = _formatDate(widget.holding.navDate);
     
-    // 获取首次交易日期
     final transactions = dataManager.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
     final firstTradeDate = transactions.isNotEmpty ? transactions.last.tradeDate : DateTime.now();
     final holdingDays = DateTime.now().difference(firstTradeDate).inDays;
@@ -253,7 +251,7 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     if (_dataManager == null) return widget.holding.navDate;
     final transactions = _dataManager!.getTransactionHistory(widget.holding.clientId, widget.holding.fundCode);
     if (transactions.isEmpty) return widget.holding.navDate;
-    return transactions.last.tradeDate; // 因为是倒序，最后一条是最早的
+    return transactions.last.tradeDate; 
   }
 
   @override
@@ -261,7 +259,6 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final profit = widget.holding.profit;
     final absoluteReturn = widget.holding.profitRate;
-    // 使用DataManager的calculateProfit方法获取准确的年化收益率
     final annualizedReturn = _dataManager != null 
         ? _dataManager!.calculateProfit(widget.holding).annualized 
         : 0.0;

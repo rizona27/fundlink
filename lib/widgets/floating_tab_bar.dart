@@ -27,15 +27,14 @@ class FloatingTabBar extends StatefulWidget {
 class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderStateMixin {
   late AnimationController _opacityController;
   Timer? _restoreTimer;
-  Timer? _autoFadeTimer; // 自动淡出定时器
+  Timer? _autoFadeTimer; 
   bool _isScrolling = false;
-  bool _hasInteracted = false; // 是否有过交互
-  bool _isHovered = false; // 鼠标是否悬停
+  bool _hasInteracted = false; 
+  bool _isHovered = false; 
 
   static const double _normalOpacity = 1.0;
-  static const double _scrollingOpacity = 0.6; // 滚动时降到60%
+  static const double _scrollingOpacity = 0.6; 
   
-  // 判断是否为桌面平台 (Windows/Web)
   bool get _isDesktopPlatform => kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
   final List<AnimationController> _scaleControllers = [];
@@ -50,7 +49,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
       vsync: this,
     )..value = _normalOpacity;
 
-    // 启动后2秒自动降低透明度，让背景透出
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         _startAutoFade();
@@ -81,7 +79,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
   void onScroll() {
     if (!_isScrolling) {
       _isScrolling = true;
-      _cancelAutoFade(); // 取消自动淡出
+      _cancelAutoFade(); 
       if (_opacityController.value != _scrollingOpacity) {
         _opacityController.animateTo(_scrollingOpacity, curve: Curves.easeOut);
       }
@@ -89,7 +87,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     _resetRestoreTimer();
   }
   
-  // 启动自动淡出（2秒后降低透明度）
   void _startAutoFade() {
     _cancelAutoFade();
     _autoFadeTimer = Timer(const Duration(seconds: 2), () {
@@ -99,7 +96,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     });
   }
   
-  // 取消自动淡出
   void _cancelAutoFade() {
     _autoFadeTimer?.cancel();
     _autoFadeTimer = null;
@@ -122,7 +118,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     _isScrolling = false;
     if (_opacityController.value != _normalOpacity) {
       _opacityController.animateTo(_normalOpacity, curve: Curves.easeOut);
-      // 恢复完全不透明后，重新启动自动淡出
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted && !_isScrolling && !_isHovered) {
           _startAutoFade();
@@ -132,7 +127,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
   }
 
   void _onItemTap(int index) {
-    _cancelAutoFade(); // 点击时取消自动淡出
+    _cancelAutoFade(); 
     final bool isSelected = (widget.currentIndex == index);
     if (isSelected) {
       if (index < _scaleControllers.length) {
@@ -153,7 +148,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     for (var c in _scaleControllers) c.dispose();
     for (var c in _rotateControllers) c.dispose();
     _restoreTimer?.cancel();
-    _autoFadeTimer?.cancel(); // 清理自动淡出定时器
+    _autoFadeTimer?.cancel(); 
     super.dispose();
   }
 
@@ -169,10 +164,9 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // Windows 优化：滚动时降低不透明度，让背景透出
     final Color backgroundColor = isDarkMode
-        ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.85)  // 默认85%不透明
-        : CupertinoColors.white.withValues(alpha: 0.85);      // 默认85%不透明
+        ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.85)  
+        : CupertinoColors.white.withValues(alpha: 0.85);      
 
     final inactiveIconColor = isDarkMode
         ? CupertinoColors.white.withValues(alpha: 0.55)
@@ -196,12 +190,12 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
       ),
     ];
 
-    const double itemHeight = 52.0; // 降低高度，更紧凑
-    const double itemWidth = 56.0; // 进一步缩短宽度
-    const double circleSize = 28.0; // 缩小图标容器
-    const double iconSize = 16.0; // 缩小图标
-    const double spacing = 3.0; // 减小间距
-    const double fontSize = 11.0; // 缩小字体
+    const double itemHeight = 52.0; 
+    const double itemWidth = 56.0; 
+    const double circleSize = 28.0; 
+    const double iconSize = 16.0; 
+    const double spacing = 3.0; 
+    const double fontSize = 11.0; 
 
     Gradient _getActiveGradient(int index) {
       Color start = _getActiveColorForIndex(index, isDarkMode);
@@ -220,24 +214,21 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     return AnimatedBuilder(
       animation: _opacityController,
       builder: (context, child) {
-        // 滚动时整体透明度从1.0降到0.6，让背景更明显
         final double scrollOpacity = _opacityController.value;
         
         Widget tabBarWidget = Opacity(
           opacity: scrollOpacity,
           child: Container(
-            margin: EdgeInsets.only(bottom: bottomPadding + 10), // 减小底部边距
+            margin: EdgeInsets.only(bottom: bottomPadding + 10), 
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.70, // 从85%缩短到70%，更紧凑
+              maxWidth: MediaQuery.of(context).size.width * 0.70, 
             ),
             decoration: BoxDecoration(
-              // 根据滚动状态动态调整背景透明度
               color: backgroundColor.withValues(
-                alpha: 0.85 * scrollOpacity, // 滚动时进一步降低透明度
+                alpha: 0.85 * scrollOpacity, 
               ),
               borderRadius: BorderRadius.circular(30),
               boxShadow: boxShadow,
-              // 简洁边框，模拟轻微立体感
               border: Border.all(
                 color: isDarkMode 
                     ? CupertinoColors.white.withValues(alpha: 0.08 * scrollOpacity)
@@ -267,7 +258,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                     child: Container(
                       width: itemWidth,
                       height: itemHeight,
-                      // 移除选中项的矩形背景,保持简洁
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -306,7 +296,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                                       shape: BoxShape.circle,
                                       gradient: isSelected ? _getActiveGradient(index) : null,
                                       color: isSelected ? null : inactiveIconColor.withValues(alpha: 0.15),
-                                      // 选中时添加微妙阴影，增强立体感
                                       boxShadow: isSelected ? [
                                         BoxShadow(
                                           color: _getActiveColorForIndex(index, isDarkMode).withValues(alpha: 0.3),
@@ -347,11 +336,10 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
                   );
                 }),
               ),
-            ),  // ClipRRect
+            ),  
           ),
         );
         
-        // 桌面平台：添加鼠标悬停监听
         if (_isDesktopPlatform) {
           return MouseRegion(
             onEnter: (_) {
@@ -363,11 +351,8 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
             },
             onExit: (_) {
               setState(() => _isHovered = false);
-              // 鼠标离开后，如果没有其他交互，立即开始淡出（与移入时的恢复时间对称）
               if (!_isScrolling) {
-                // 取消之前的自动淡出定时器
                 _cancelAutoFade();
-                // 直接启动淡出动画，300ms内从100%降到60%
                 if (_opacityController.value != _scrollingOpacity) {
                   _opacityController.animateTo(_scrollingOpacity, curve: Curves.easeOut);
                 }
