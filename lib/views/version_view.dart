@@ -285,7 +285,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
         context: context,
         builder: (context) => CupertinoAlertDialog(
           title: const Text('当前已是最新版本'),
-          content: Text('您的版本 ${versionInfo.version} 已经是最新版本，无需更新。\n\n是否仍要打开下载页面？'),
+          content: Text('已经是最新版本 ${versionInfo.version} 。\n\n是否仍要打开下载页面？'),
           actions: [
             CupertinoDialogAction(
               child: const Text('取消'),
