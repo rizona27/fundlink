@@ -515,16 +515,22 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Color _getBackgroundColor(double progress, bool isDarkMode) {
+    // iOS端透明度处理优化：使用更平滑的过渡
     if (progress >= 0.95) {
       return isDarkMode
-          ? Colors.black.withOpacity(0.8)
-          : CupertinoColors.systemBackground.withOpacity(0.9);
+          ? const Color(0xFF1C1C1E).withOpacity(0.95)
+          : const Color(0xFFF2F2F7).withOpacity(0.95);
     } else if (progress >= 0.5) {
+      // 使用线性插值，避免突变
+      final opacity = 0.5 + (progress - 0.5) * 0.9;
       return isDarkMode
-          ? Colors.black.withOpacity(0.5 + (progress - 0.5) * 0.6)
-          : CupertinoColors.systemBackground.withOpacity(0.4 + (progress - 0.5) * 1.0);
+          ? const Color(0xFF1C1C1E).withOpacity(opacity)
+          : const Color(0xFFF2F2F7).withOpacity(opacity);
     } else {
-      return Colors.transparent;
+      // 保持最小透明度，避免完全透明导致的视觉问题
+      return isDarkMode
+          ? const Color(0xFF1C1C1E).withOpacity(0.5)
+          : const Color(0xFFF2F2F7).withOpacity(0.5);
     }
   }
 

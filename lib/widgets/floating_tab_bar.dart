@@ -216,6 +216,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
       builder: (context, child) {
         final double scrollOpacity = _opacityController.value;
         
+        // iOS端透明度优化：只使用Opacity控制整体透明度，避免双重叠加
         Widget tabBarWidget = Opacity(
           opacity: scrollOpacity,
           child: Container(
@@ -224,15 +225,23 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
               maxWidth: MediaQuery.of(context).size.width * 0.70, 
             ),
             decoration: BoxDecoration(
-              color: backgroundColor.withValues(
-                alpha: 0.85 * scrollOpacity, 
-              ),
+              // 背景色保持固定透明度，不随scrollOpacity变化
+              color: backgroundColor,
               borderRadius: BorderRadius.circular(30),
-              boxShadow: boxShadow,
+              boxShadow: boxShadow.map((shadow) {
+                // 阴影透明度随滚动变化
+                return BoxShadow(
+                  color: shadow.color.withValues(alpha: shadow.color.a * scrollOpacity),
+                  blurRadius: shadow.blurRadius,
+                  spreadRadius: shadow.spreadRadius,
+                  offset: shadow.offset,
+                );
+              }).toList(),
               border: Border.all(
+                // 边框颜色保持固定透明度
                 color: isDarkMode 
-                    ? CupertinoColors.white.withValues(alpha: 0.08 * scrollOpacity)
-                    : CupertinoColors.black.withValues(alpha: 0.06 * scrollOpacity),
+                    ? CupertinoColors.white.withValues(alpha: 0.08)
+                    : CupertinoColors.black.withValues(alpha: 0.06),
                 width: 0.5,
               ),
             ),
