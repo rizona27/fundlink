@@ -31,8 +31,8 @@ class AmountInputFormatter extends TextInputFormatter {
     if (integerPart.length > 9) {
       integerPart = integerPart.substring(0, 9);
     }
-    if (decimalPart.length > 2) {
-      decimalPart = decimalPart.substring(0, 2);
+    if (decimalPart.length > 4) { // 允许小数点后4位（确认净值需要更高精度）
+      decimalPart = decimalPart.substring(0, 4);
     }
     String formatted;
     if (decimalPart.isEmpty) {

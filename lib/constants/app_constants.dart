@@ -19,14 +19,19 @@ class AppConstants {
   static const String keyValuationRefreshInterval = 'valuationRefreshInterval';
 
   // --- API URLs & Sources ---
-  // 服务器基础 URL（用于健康检查和未来推送服务）
-  static const String baseUrl = 'https://your-server.com';  // TODO: 替换为实际服务器地址
+  // NAS后端地址（通过Cloudflare Tunnel）
+  static const String nasBackendUrl = 'https://fundlink.cr315.com';
   
-  // 版本更新检查 - GitHub Release API
+  // User-Agent 配置
+  static const String userAgentApp = 'FundLink-App/1.2.0';
+  static const String userAgentVersionChecker = 'FundLink-Version-Checker';
+  
+  // 版本更新检查 - GitHub Release API（备用）
   static const String githubRepoOwner = 'rizona27';
   static const String githubRepoName = 'fundlink';
   static const String githubReleaseApiUrl = 'https://api.github.com/repos/$githubRepoOwner/$githubRepoName/releases/latest';
   static const String githubReleasePageUrl = 'https://github.com/$githubRepoOwner/$githubRepoName/releases';
+  static const String githubProjectUrl = 'https://github.com/$githubRepoOwner/$githubRepoName';  // 项目主页（备用）
   
   static const String apiEastmoneyPingzhongdata = 'https://fund.eastmoney.com/pingzhongdata/{code}.js';
   static const String apiEastmoneyFundArchives = 'https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=10';

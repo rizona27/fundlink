@@ -30,8 +30,6 @@
 
 ### 🔒 信息安全
 - **隐私模式**：脱敏展示基金信息，方便截屏转发
-- **生物识别保护**：支持Face ID/Touch ID/指纹识别锁定应用
-- **后台自动锁定**：应用切换到后台后自动锁定，返回时需验证身份
 - **本地化存储**：数据全量存储于本地 SQLite 数据库，不经过第三方服务器
 
 ### 🎨 用户体验
@@ -91,20 +89,22 @@ flutter build ios --release
 
 ```
 lib/
-├── main.dart                              # 应用入口，初始化DataManager，配置主题模式（浅色/深色/跟随系统）
+├── main.dart                              # 应用入口，初始化 DataManager，配置主题模式（浅色/深色/跟随系统）
 │
 ├── constants/
-│   └── app_constants.dart                 # 全局常量管理，统一管理API地址、缓存键名、业务常量等
+│   └── app_constants.dart                 # 全局常量管理，统一管理 API 地址、缓存键名、业务常量、User-Agent 等
+│
+├── utils/
+│   └── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
 │
 ├── services/
-│   ├── biometric_guard.dart               # 生物识别保护服务，监听应用生命周期、触发身份验证、管理锁定状态
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算
-│   ├── database_helper.dart               # SQLite数据库帮助类，跨平台数据库支持，提供CRUD操作和Schema管理
-│   ├── file_export_service.dart           # 文件导出服务，支持CSV/Excel格式
-│   ├── file_import_service.dart           # 文件导入服务，支持CSV/Excel格式，具备模糊匹配能力
-│   ├── fund_service.dart                  # 基金API服务，调用接口获取数据，含多源冗余、缓存和重试机制
-│   └── version_check_service.dart         # 版本检查服务，基于GitHub Release API自动检测最新版本
+│   ├── database_helper.dart               # SQLite 数据库帮助类，跨平台数据库支持，提供 CRUD 操作和 Schema 管理
+│   ├── file_export_service.dart           # 文件导出服务，支持 CSV/Excel 格式
+│   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配能力
+│   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
+│   └── version_check_service.dart         # 版本检查服务，优先从 NAS 后端检查，失败时回退到 GitHub Release API
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益
@@ -120,24 +120,23 @@ lib/
 │   ├── client_view.dart                   # 客户视图页，分组展示持仓
 │   ├── config_view.dart                   # 程序设置页面，隐私/主题切换/日志查询/持仓管理等
 │   ├── edit_holding_view.dart             # 编辑持仓页，显示持仓详情，支持加仓/减仓操作，查看交易历史
-│   ├── export_holding_view.dart           # 导出数据页面，支持CSV/Excel格式
+│   ├── export_holding_view.dart           # 导出数据页面，支持 CSV/Excel 格式
 │   ├── fund_detail_view.dart              # 基金详情页，包含估值/净值趋势/十大重仓
 │   ├── history_view.dart                  # 历史净值弹窗页
-│   ├── import_holding_view.dart           # 导入数据页面，支持CSV/Excel格式
+│   ├── import_holding_view.dart           # 导入数据页面，支持 CSV/Excel 格式
 │   ├── license_view.dart                  # 开源协议页面（AGPL v3）
 │   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
 │   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量重命名
-│   ├── pending_transactions_view.dart     # 待确认交易管理页，展示T+1/T+2待确认的交易列表
+│   ├── pending_transactions_view.dart     # 待确认交易管理页，展示 T+1/T+2 待确认的交易列表
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序
-│   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明
+│   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明，始终显示 Update 按钮
 │
 └── widgets/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入
-    ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测
-    ├── biometric_lock_overlay.dart        # 生物识别锁定覆盖层组件，应用从后台恢复时显示验证界面，应用从后台恢复时显示验证界面
+    ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测，优化键盘交互
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值
     ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，支持基金代码验证
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
@@ -149,11 +148,11 @@ lib/
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
     ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
     ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
-    ├── stock_candle_chart.dart            # 股票K线蜡烛图组件，支持日K/周K/月K切换
-    ├── stock_chart_widget.dart            # 股票图表容器组件，封装K线图和成交量图
-    ├── stock_detail_dialog.dart           # 股票详情弹窗组件，显示实时行情、价格呼吸动画、K线图
+    ├── stock_candle_chart.dart            # 股票 K 线蜡烛图组件，支持日 K/周 K/月 K 切换
+    ├── stock_chart_widget.dart            # 股票图表容器组件，封装 K 线图和成交量图
+    ├── stock_detail_dialog.dart           # 股票详情弹窗组件，显示实时行情、价格呼吸动画、K 线图
     ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关
-    ├── toast.dart                         # Toast提示组件，全局消息提示
+    ├── toast.dart                         # Toast 提示组件，全局消息提示
     ├── top_holdings_widget.dart           # 前十大重仓股展示组件
     ├── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
     └── update_dialog.dart                 # 版本更新提示对话框，显示新版本信息和下载选项

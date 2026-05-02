@@ -12,7 +12,6 @@ import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
 import 'pending_transactions_view.dart';
-import '../services/biometric_guard.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -24,8 +23,6 @@ class ConfigView extends StatefulWidget {
 class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
   late AnimationController _fadeController;
-  bool _biometricEnabled = false;
-  bool _isBiometricSupported = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -43,21 +40,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    _loadBiometricSettings();
-  }
-
-  Future<void> _loadBiometricSettings() async {
-    debugPrint('加载生物识别设置...');
-    final supported = await BiometricGuard.canCheckBiometrics();
-    debugPrint('生物识别支持状态: $supported');
-    final enabled = await BiometricGuard.isEnabled();
-    debugPrint('生物识别启用状态: $enabled');
-    if (mounted) {
-      setState(() {
-        _isBiometricSupported = supported;
-        _biometricEnabled = enabled;
-      });
-    }
   }
 
   @override
@@ -131,10 +113,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         ),
         _buildDivider(isDarkMode),
         _buildThemeItem(isDarkMode),
-        if (!isDesktop) ...[
-          _buildDivider(isDarkMode),
-          _buildBiometricSwitchItem(isDarkMode),
-        ],
       ],
     );
   }
@@ -242,8 +220,10 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
           title: '版本信息',
-          subtitle: APP_VERSION,
+          subtitle: '', // 清空subtitle，我们将自定义显示
           isDarkMode: isDarkMode,
+          trailing: null, // 不使用trailing
+          customSubtitle: _buildVersionWithBadge(isDarkMode), // 使用自定义subtitle
           onTap: () {
             Navigator.push(
               context,
@@ -380,6 +360,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     required VoidCallback onTap,
     bool isDestructive = false,
     Widget? trailing,
+    Widget? customSubtitle, // 自定义subtitle widget
   }) {
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -422,7 +403,10 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                         : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
                   ),
                 ),
-                if (subtitle.isNotEmpty) ...[
+                if (customSubtitle != null) ...[
+                  const SizedBox(height: 2),
+                  customSubtitle,
+                ] else if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
@@ -593,143 +577,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildBiometricSwitchItem(bool isDarkMode) {
-    return Column(
-      children: [
-        _buildSwitchItem(
-          icon: CupertinoIcons.person_crop_circle_badge_checkmark,
-          title: '生物识别',
-          subtitle: _isBiometricSupported ? '应用锁定保护' : '设备不支持',
-          value: _biometricEnabled,
-          isDarkMode: isDarkMode,
-          onChanged: (value) async {
-            if (value && !_isBiometricSupported) {
-              showCupertinoDialog(
-                context: context,
-                builder: (context) => CupertinoAlertDialog(
-                  title: const Text('不支持'),
-                  content: const Text('您的设备不支持生物识别功能'),
-                  actions: [
-                    CupertinoDialogAction(
-                      child: const Text('确定'),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              );
-              return;
-            }
-            
-            if (value) {
-              // 显示加载指示器
-              showCupertinoDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CupertinoActivityIndicator(),
-                ),
-              );
-            }
-            
-            try {
-              await BiometricGuard.setEnabled(value);
-              if (mounted) {
-                // 关闭加载指示器
-                Navigator.pop(context);
-                
-                setState(() {
-                  _biometricEnabled = value;
-                });
-                
-                if (value) {
-                  // 显示成功消息
-                  showCupertinoDialog(
-                    context: context,
-                    builder: (context) => CupertinoAlertDialog(
-                      title: const Text('启用成功'),
-                      content: const Text('生物识别保护已启用。当您切换到后台再返回时，应用将要求验证身份。'),
-                      actions: [
-                        CupertinoDialogAction(
-                          child: const Text('确定'),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              }
-            } catch (e) {
-              if (mounted) {
-                // 关闭加载指示器
-                Navigator.pop(context);
-                
-                showCupertinoDialog(
-                  context: context,
-                  builder: (context) => CupertinoAlertDialog(
-                    title: const Text('启用失败'),
-                    content: Text('无法启用生物识别: $e'),
-                    actions: [
-                      CupertinoDialogAction(
-                        child: const Text('确定'),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            }
-          },
-        ),
-        // 调试按钮 - 仅在开发模式下显示
-        if (_isBiometricSupported) ...[
-          _buildDivider(isDarkMode),
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            onPressed: () async {
-              debugPrint('手动测试生物识别...');
-              final success = await BiometricGuard.authenticate(
-                reason: '测试生物识别功能',
-              );
-              debugPrint('测试结果: $success');
-              if (mounted) {
-                showCupertinoDialog(
-                  context: context,
-                  builder: (context) => CupertinoAlertDialog(
-                    title: const Text('测试结果'),
-                    content: Text(success ? '生物识别认证成功！' : '生物识别认证失败或取消'),
-                    actions: [
-                      CupertinoDialogAction(
-                        child: const Text('确定'),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            },
-            child: Row(
-              children: [
-                Icon(
-                  CupertinoIcons.hammer_fill,
-                  size: 16,
-                  color: isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey2,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '测试生物识别',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildFooter(bool isDarkMode) {
     return Center(
       child: Column(
@@ -754,6 +601,72 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           ),
         ],
       ),
+    );
+  }
+
+  /// 构建版本徽章（NEW 或 Latest）
+  Widget _buildVersionBadge(bool isDarkMode) {
+    final versionInfo = _dataManager.latestVersionInfo;
+    
+    if (versionInfo == null) {
+      // 还在检查中或未获取到信息，不显示徽章
+      return const SizedBox.shrink();
+    }
+    
+    final hasUpdate = versionInfo.hasUpdate;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: hasUpdate ? const Color(0xFF007AFF) : const Color(0xFF34C759),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        hasUpdate ? 'NEW' : 'Latest',
+        style: const TextStyle(
+          color: CupertinoColors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  /// 构建带徽章的版本号（内联显示）
+  Widget _buildVersionWithBadge(bool isDarkMode) {
+    final versionInfo = _dataManager.latestVersionInfo;
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          APP_VERSION,
+          style: TextStyle(
+            fontSize: 12,
+            color: isDarkMode
+                ? CupertinoColors.white.withOpacity(0.6)
+                : CupertinoColors.systemGrey,
+          ),
+        ),
+        if (versionInfo != null) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: versionInfo.hasUpdate ? const Color(0xFF007AFF) : const Color(0xFF34C759),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              versionInfo.hasUpdate ? 'NEW' : 'Latest',
+              style: const TextStyle(
+                color: CupertinoColors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

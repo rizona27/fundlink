@@ -51,16 +51,72 @@ class VersionCheckService {
     try {
       debugPrint('正在检查版本更新...');
       
+      // 尝试从NAS后端获取版本信息
       final response = await http.get(
-        Uri.parse(AppConstants.githubReleaseApiUrl),
+        Uri.parse('${AppConstants.nasBackendUrl}/api/version'),
         headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'FundLink-Version-Checker',
+          'User-Agent': AppConstants.userAgentApp,
+          'Accept': 'application/json',
         },
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        debugPrint('版本检查失败: HTTP ${response.statusCode}');
+        debugPrint('NAS版本检查失败: HTTP ${response.statusCode}，回退到GitHub');
+        return await _checkFromGitHub(currentVersion);
+      }
+
+      final data = jsonDecode(response.body);
+      
+      final latestVersion = data['version'] as String? ?? '';
+      final versionCode = data['versionCode'] as String? ?? '';
+      final releaseNotes = data['releaseNotes'] as String? ?? '暂无更新说明';
+      
+      // 根据平台获取下载链接
+      final downloads = data['downloads'] as Map<String, dynamic>? ?? {};
+      String downloadUrl = _getDownloadUrlFromNas(downloads);
+      
+      // 如果没有找到对应平台的文件，使用项目主页
+      if (downloadUrl.isEmpty) {
+        downloadUrl = AppConstants.githubProjectUrl;
+      }
+
+      // 比较版本号
+      final hasUpdate = _compareVersions(currentVersion, latestVersion) < 0;
+
+      debugPrint('当前版本: $currentVersion');
+      debugPrint('最新版本: $latestVersion');
+      debugPrint('需要更新: $hasUpdate');
+
+      return VersionInfo(
+        version: latestVersion,
+        versionCode: versionCode,
+        releaseNotes: releaseNotes,
+        downloadUrl: downloadUrl,
+        hasUpdate: hasUpdate,
+        forceUpdate: false,
+      );
+
+    } catch (e) {
+      debugPrint('NAS版本检查异常: $e，回退到GitHub');
+      return await _checkFromGitHub(currentVersion);
+    }
+  }
+  
+  /// 从GitHub检查版本（备用方案）
+  static Future<VersionInfo?> _checkFromGitHub(String currentVersion) async {
+    try {
+      debugPrint('正在从 GitHub 检查版本更新...');
+      
+      final response = await http.get(
+        Uri.parse(AppConstants.githubReleaseApiUrl),
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': AppConstants.userAgentVersionChecker,
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        debugPrint('GitHub版本检查失败: HTTP ${response.statusCode}');
         return null;
       }
 
@@ -100,7 +156,7 @@ class VersionCheckService {
       );
 
     } catch (e) {
-      debugPrint('版本检查异常: $e');
+      debugPrint('GitHub版本检查异常: $e');
       return null;
     }
   }
@@ -159,7 +215,29 @@ class VersionCheckService {
     return parts.length > 1 ? parts[1] : '0';
   }
 
-  /// 根据平台获取下载链接
+  /// 从NAS后端获取下载链接
+  static String _getDownloadUrlFromNas(Map<String, dynamic> downloads) {
+    final platform = defaultTargetPlatform;
+    
+    if (platform == TargetPlatform.android) {
+      final android = downloads['android'] as Map<String, dynamic>?;
+      return android?['url'] as String? ?? '';
+    }
+    
+    if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
+      final ios = downloads['ios'] as Map<String, dynamic>?;
+      return ios?['url'] as String? ?? '';
+    }
+    
+    if (platform == TargetPlatform.windows) {
+      final windows = downloads['windows'] as Map<String, dynamic>?;
+      return windows?['url'] as String? ?? '';
+    }
+    
+    return '';
+  }
+
+  /// 根据平台获取下载链接（GitHub）
   static String _getDownloadUrlForPlatform(Map<String, dynamic> releaseData) {
     final assets = releaseData['assets'] as List? ?? [];
     final platform = defaultTargetPlatform;

@@ -173,166 +173,158 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         ? CupertinoColors.white.withOpacity(0.6)
         : CupertinoColors.systemGrey;
 
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: CupertinoPopupSurface(
-          isSurfacePainted: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 标题栏
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '批量重命名',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
+    return GestureDetector(
+      onTap: () {
+        // 点击空白处收起键盘
+        FocusScope.of(context).unfocus();
+      },
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            child: CupertinoPopupSurface(
+              isSurfacePainted: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 标题栏
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? CupertinoColors.systemGrey.withOpacity(0.3)
-                              : CupertinoColors.systemGrey.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          CupertinoIcons.xmark,
-                          size: 16,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 内容区域
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: bgColor,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 说明信息
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                CupertinoIcons.pencil_circle_fill,
-                                color: CupertinoColors.activeBlue,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '将客户 "${widget.currentName}" 的所有持仓记录批量修改为新名称。',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: textColor,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '影响范围: ${widget.holdings.length} 条持仓记录',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: CupertinoColors.activeBlue,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 输入框
-                    Text(
-                      '新客户姓名',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: secondaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: CupertinoTextField(
-                        controller: _nameController,
-                        placeholder: '请输入新客户姓名',
-                        placeholderStyle: TextStyle(
-                          color: secondaryColor,
-                          fontSize: 15,
-                        ),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: textColor,
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        autofocus: true,
-                        clearButtonMode: OverlayVisibilityMode.editing,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // 确认按钮 - 横向排列
-                    Row(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: GlassButton(
-                            label: '取消',
-                            onPressed: _isProcessing ? null : () => Navigator.pop(context),
-                            isPrimary: false,
-                            height: 44,
+                        Text(
+                          '批量重命名',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GlassButton(
-                            label: _isProcessing ? '处理中...' : '确认修改',
-                            onPressed: _isProcessing ? null : _handleRename,
-                            isPrimary: true,
-                            height: 44,
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? CupertinoColors.systemGrey.withOpacity(0.3)
+                                  : CupertinoColors.systemGrey.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              CupertinoIcons.xmark,
+                              size: 14,
+                              color: textColor,
+                            ),
                           ),
                         ),
                       ],
                     ),
+                  ),
+
+                  // 内容区域
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    color: bgColor,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 影响范围提示
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.info_circle_fill,
+                                color: CupertinoColors.activeBlue,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '影响范围: ${widget.holdings.length} 条持仓记录',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoColors.activeBlue,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 输入框
+                        Text(
+                          '新客户姓名',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: secondaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: CupertinoTextField(
+                            controller: _nameController,
+                            placeholder: '请输入新客户姓名',
+                            placeholderStyle: TextStyle(
+                              color: secondaryColor,
+                              fontSize: 14,
+                            ),
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: textColor,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            autofocus: true,
+                            clearButtonMode: OverlayVisibilityMode.editing,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // 确认按钮 - 横向排列
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GlassButton(
+                                label: '取消',
+                                onPressed: _isProcessing ? null : () => Navigator.pop(context),
+                                isPrimary: false,
+                                height: 40,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: GlassButton(
+                                label: _isProcessing ? '处理中...' : '确认修改',
+                                onPressed: _isProcessing ? null : _handleRename,
+                                isPrimary: true,
+                                height: 40,
+                              ),
+                            ),
+                          ],
+                        ),
                   ],
                 ),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

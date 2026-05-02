@@ -10,6 +10,7 @@ import '../models/profit_result.dart';
 import '../models/fund_info_cache.dart';
 import '../services/fund_service.dart';
 import '../services/china_trading_day_service.dart';
+import '../services/version_check_service.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
 import '../constants/app_constants.dart';
 
@@ -50,6 +51,9 @@ class DataManager extends ChangeNotifier {
   final Map<String, ProfitResult> _profitCache = {};
   final Map<String, List<TransactionRecord>> _transactionHistoryCache = {};
   
+  // 版本信息
+  VersionInfo? _latestVersionInfo;
+  
   // Helper to clear related caches automatically
   void _clearRelatedCaches(String clientId, String fundCode) {
     final cacheKey = '${clientId}_$fundCode';
@@ -69,6 +73,7 @@ class DataManager extends ChangeNotifier {
   String get lastValuationUpdateTime => _lastValuationUpdateTime;
   bool get isValuationRefreshInProgress => _isValuationRefreshInProgress;
   bool get showHoldersOnSummaryCard => _showHoldersOnSummaryCard;
+  VersionInfo? get latestVersionInfo => _latestVersionInfo;
 
   FundInfoCache? getFundInfoCache(String fundCode) {
     final cached = _fundInfoCache[fundCode];
@@ -294,6 +299,12 @@ class DataManager extends ChangeNotifier {
 
   void setValuationUpdateTime(String time) {
     _lastValuationUpdateTime = time;
+    notifyListeners();
+  }
+
+  /// 设置最新版本信息
+  void setLatestVersionInfo(VersionInfo? versionInfo) {
+    _latestVersionInfo = versionInfo;
     notifyListeners();
   }
 

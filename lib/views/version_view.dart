@@ -1,12 +1,16 @@
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../services/data_manager.dart';
+import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.0';
+const String APP_VERSION = 'v1.2.1';
 
 const List<String> UPDATE_LOGS = [
-  'v1.2.0 - 新增版本检测；优化生物识别',
+  'v1.2.1 - 优化版本检测逻辑、多端下载支持',
+  'v1.2.0 - 新增版本检测',
   'v1.1.9 - 新增全局常量管理，统一API、缓存，设计冗余逻辑，优化日志系统',
   'v1.1.8 - 新增本地缓存功能，已缓存数据支持离线，体验大幅提升',
   'v1.1.7 - 优化十大重仓股布局，新增股票K线蜡烛图功能，支持查看历史数据',
@@ -192,6 +196,45 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   }
 }
 
+/// 版本更新按钮组件
+class _VersionUpdateButton extends StatelessWidget {
+  const _VersionUpdateButton();
+
+  Future<void> _openProjectUrl() async {
+    // 优先使用NAS后端地址，如果失败则使用GitHub
+    final url = Uri.parse(AppConstants.nasBackendUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dataManager = DataManagerProvider.of(context);
+    final versionInfo = dataManager.latestVersionInfo;
+    
+    // 始终显示 Update 按钮，不管是否有更新
+    return GestureDetector(
+      onTap: _openProjectUrl,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFF007AFF),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'Update',
+          style: TextStyle(
+            color: CupertinoColors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class VersionView extends StatelessWidget {
   const VersionView({super.key});
 
@@ -304,6 +347,8 @@ class VersionView extends StatelessWidget {
                                               : CupertinoColors.systemGrey,
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
+                                      _VersionUpdateButton(),
                                     ],
                                   ),
                                 ],

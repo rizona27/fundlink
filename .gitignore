@@ -40,3 +40,4 @@ update_bundle_id.py
 *.sh
 *.py
 IPA_BUILD_GUIDE.md
+/nas_backend
