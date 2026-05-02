@@ -17,7 +17,9 @@ class BiometricGuard {
   /// 检查设备是否支持生物识别
   static Future<bool> canCheckBiometrics() async {
     try {
-      return await _auth.canCheckBiometrics;
+      final result = await _auth.canCheckBiometrics;
+      debugPrint('canCheckBiometrics 结果: $result');
+      return result;
     } catch (e) {
       debugPrint('检查生物识别支持失败: $e');
       return false;
@@ -60,6 +62,7 @@ class BiometricGuard {
     String reason = '请验证身份以继续',
   }) async {
     try {
+      debugPrint('开始生物识别认证...');
       final canCheck = await _auth.canCheckBiometrics;
       if (!canCheck) {
         debugPrint('设备不支持生物识别');
@@ -67,14 +70,15 @@ class BiometricGuard {
       }
       
       final available = await _auth.getAvailableBiometrics();
+      debugPrint('可用的生物识别方式: $available');
       if (available.isEmpty) {
         debugPrint('未设置生物识别方式');
         return false;
       }
       
-      debugPrint('可用的生物识别方式: $available');
+      debugPrint('使用原因: $reason');
       
-      return await _auth.authenticate(
+      final result = await _auth.authenticate(
         localizedReason: reason,
         options: const AuthenticationOptions(
           useErrorDialogs: true,
@@ -82,6 +86,9 @@ class BiometricGuard {
           biometricOnly: true,
         ),
       );
+      
+      debugPrint('生物识别认证结果: $result');
+      return result;
     } catch (e) {
       debugPrint('生物识别认证失败: $e');
       return false;
@@ -119,6 +126,41 @@ class BiometricGuard {
   /// 启用/禁用生物识别
   static Future<void> setEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
+    
+    if (enabled) {
+      // 在启用时，先检查是否支持并请求权限
+      final canCheck = await canCheckBiometrics();
+      if (!canCheck) {
+        debugPrint('设备不支持生物识别');
+        return;
+      }
+      
+      // 尝试进行一次认证以获取权限
+      final available = await _auth.getAvailableBiometrics();
+      if (available.isEmpty) {
+        debugPrint('未设置生物识别方式');
+        return;
+      }
+      
+      debugPrint('可用的生物识别方式: $available');
+      
+      // 在 iOS 上，首次调用 authenticate 会触发权限请求
+      try {
+        await _auth.authenticate(
+          localizedReason: '验证身份以启用生物识别保护',
+          options: const AuthenticationOptions(
+            useErrorDialogs: true,
+            stickyAuth: true,
+            biometricOnly: true,
+          ),
+        );
+        debugPrint('生物识别权限已授予');
+      } catch (e) {
+        debugPrint('生物识别认证失败: $e');
+        // 即使认证失败，也要保存设置，让用户可以稍后重试
+      }
+    }
+    
     await prefs.setBool('biometric_enabled', enabled);
     debugPrint('生物识别已${enabled ? "启用" : "禁用"}');
   }

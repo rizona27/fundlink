@@ -47,8 +47,11 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   }
 
   Future<void> _loadBiometricSettings() async {
+    debugPrint('加载生物识别设置...');
     final supported = await BiometricGuard.canCheckBiometrics();
+    debugPrint('生物识别支持状态: $supported');
     final enabled = await BiometricGuard.isEnabled();
+    debugPrint('生物识别启用状态: $enabled');
     if (mounted) {
       setState(() {
         _isBiometricSupported = supported;
@@ -591,35 +594,139 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   }
 
   Widget _buildBiometricSwitchItem(bool isDarkMode) {
-    return _buildSwitchItem(
-      icon: CupertinoIcons.person_crop_circle_badge_checkmark,
-      title: '生物识别',
-      subtitle: _isBiometricSupported ? '应用锁定保护' : '设备不支持',
-      value: _biometricEnabled,
-      isDarkMode: isDarkMode,
-      onChanged: (value) async {
-        if (value && !_isBiometricSupported) {
-          showCupertinoDialog(
-            context: context,
-            builder: (context) => CupertinoAlertDialog(
-              title: const Text('不支持'),
-              content: const Text('您的设备不支持生物识别功能'),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('确定'),
-                  onPressed: () => Navigator.pop(context),
+    return Column(
+      children: [
+        _buildSwitchItem(
+          icon: CupertinoIcons.person_crop_circle_badge_checkmark,
+          title: '生物识别',
+          subtitle: _isBiometricSupported ? '应用锁定保护' : '设备不支持',
+          value: _biometricEnabled,
+          isDarkMode: isDarkMode,
+          onChanged: (value) async {
+            if (value && !_isBiometricSupported) {
+              showCupertinoDialog(
+                context: context,
+                builder: (context) => CupertinoAlertDialog(
+                  title: const Text('不支持'),
+                  content: const Text('您的设备不支持生物识别功能'),
+                  actions: [
+                    CupertinoDialogAction(
+                      child: const Text('确定'),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              );
+              return;
+            }
+            
+            if (value) {
+              // 显示加载指示器
+              showCupertinoDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CupertinoActivityIndicator(),
+                ),
+              );
+            }
+            
+            try {
+              await BiometricGuard.setEnabled(value);
+              if (mounted) {
+                // 关闭加载指示器
+                Navigator.pop(context);
+                
+                setState(() {
+                  _biometricEnabled = value;
+                });
+                
+                if (value) {
+                  // 显示成功消息
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (context) => CupertinoAlertDialog(
+                      title: const Text('启用成功'),
+                      content: const Text('生物识别保护已启用。当您切换到后台再返回时，应用将要求验证身份。'),
+                      actions: [
+                        CupertinoDialogAction(
+                          child: const Text('确定'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+            } catch (e) {
+              if (mounted) {
+                // 关闭加载指示器
+                Navigator.pop(context);
+                
+                showCupertinoDialog(
+                  context: context,
+                  builder: (context) => CupertinoAlertDialog(
+                    title: const Text('启用失败'),
+                    content: Text('无法启用生物识别: $e'),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: const Text('确定'),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            }
+          },
+        ),
+        // 调试按钮 - 仅在开发模式下显示
+        if (_isBiometricSupported) ...[
+          _buildDivider(isDarkMode),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            onPressed: () async {
+              debugPrint('手动测试生物识别...');
+              final success = await BiometricGuard.authenticate(
+                reason: '测试生物识别功能',
+              );
+              debugPrint('测试结果: $success');
+              if (mounted) {
+                showCupertinoDialog(
+                  context: context,
+                  builder: (context) => CupertinoAlertDialog(
+                    title: const Text('测试结果'),
+                    content: Text(success ? '生物识别认证成功！' : '生物识别认证失败或取消'),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: const Text('确定'),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.hammer_fill,
+                  size: 16,
+                  color: isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey2,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '测试生物识别',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDarkMode ? CupertinoColors.systemGrey : CupertinoColors.systemGrey2,
+                  ),
                 ),
               ],
             ),
-          );
-          return;
-        }
-        
-        await BiometricGuard.setEnabled(value);
-        setState(() {
-          _biometricEnabled = value;
-        });
-      },
+          ),
+        ],
+      ],
     );
   }
 

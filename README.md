@@ -103,7 +103,8 @@ lib/
 │   ├── database_helper.dart               # SQLite数据库帮助类，跨平台数据库支持，提供CRUD操作和Schema管理
 │   ├── file_export_service.dart           # 文件导出服务，支持CSV/Excel格式
 │   ├── file_import_service.dart           # 文件导入服务，支持CSV/Excel格式，具备模糊匹配能力
-│   └── fund_service.dart                  # 基金API服务，调用接口获取数据，含多源冗余、缓存和重试机制
+│   ├── fund_service.dart                  # 基金API服务，调用接口获取数据，含多源冗余、缓存和重试机制
+│   └── version_check_service.dart         # 版本检查服务，基于GitHub Release API自动检测最新版本
 │
 ├── models/
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益
@@ -136,7 +137,7 @@ lib/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入
     ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测
-    ├── biometric_lock_overlay.dart        # 生物识别锁定覆盖层组件
+    ├── biometric_lock_overlay.dart        # 生物识别锁定覆盖层组件，应用从后台恢复时显示验证界面，应用从后台恢复时显示验证界面
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值
     ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，支持基金代码验证
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
@@ -154,7 +155,8 @@ lib/
     ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关
     ├── toast.dart                         # Toast提示组件，全局消息提示
     ├── top_holdings_widget.dart           # 前十大重仓股展示组件
-    └── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
+    ├── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
+    └── update_dialog.dart                 # 版本更新提示对话框，显示新版本信息和下载选项
 ```
 
 ## ⚖️ 开源协议

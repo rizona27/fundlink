@@ -4,13 +4,18 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'services/data_manager.dart';
+import 'services/version_check_service.dart';
+import 'services/biometric_guard.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
+import 'widgets/update_dialog.dart';
+import 'widgets/biometric_lock_overlay.dart';
 import 'views/splash_view.dart';
 import 'constants/app_constants.dart';
 
@@ -70,6 +75,38 @@ class _MyAppState extends State<MyApp> {
     _dataManager = DataManager();
     _currentBrightness = _getBrightness();
     _dataManager.addListener(_onThemeChanged);
+    
+    // 初始化生物识别保护
+    BiometricGuard.initialize(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+    
+    // 延迟检查版本更新（等待应用完全启动）
+    Future.delayed(const Duration(seconds: 2), _checkForUpdates);
+  }
+  
+  /// 检查版本更新
+  Future<void> _checkForUpdates() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      
+      debugPrint('当前版本: $currentVersion');
+      
+      final versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
+      
+      if (versionInfo != null && versionInfo.hasUpdate && mounted) {
+        showCupertinoDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => UpdateDialog(versionInfo: versionInfo),
+        );
+      }
+    } catch (e) {
+      debugPrint('版本检查失败: $e');
+    }
   }
 
   void _onThemeChanged() {
@@ -126,7 +163,9 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        home: const SplashView(),
+        home: const BiometricLockOverlay(
+          child: SplashView(),
+        ),
         debugShowCheckedModeBanner: false,
       ),
     );

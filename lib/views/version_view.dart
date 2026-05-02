@@ -3,9 +3,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import '../widgets/adaptive_top_bar.dart';
 
-const String APP_VERSION = 'v1.1.9';
+const String APP_VERSION = 'v1.2.0';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.0 - 新增版本检测；优化生物识别',
   'v1.1.9 - 新增全局常量管理，统一API、缓存，设计冗余逻辑，优化日志系统',
   'v1.1.8 - 新增本地缓存功能，已缓存数据支持离线，体验大幅提升',
   'v1.1.7 - 优化十大重仓股布局，新增股票K线蜡烛图功能，支持查看历史数据',
