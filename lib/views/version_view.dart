@@ -2,8 +2,10 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../services/data_manager.dart';
+import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
 const String APP_VERSION = 'v1.2.1';
@@ -197,11 +199,149 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 }
 
 /// 版本更新按钮组件
-class _VersionUpdateButton extends StatelessWidget {
+class _VersionUpdateButton extends StatefulWidget {
   const _VersionUpdateButton();
 
+  @override
+  State<_VersionUpdateButton> createState() => _VersionUpdateButtonState();
+}
+
+class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
+  bool _isChecking = false;
+
+  Future<void> _handleUpdateTap() async {
+    if (_isChecking) return; // 防止重复点击
+    
+    setState(() {
+      _isChecking = true;
+    });
+
+    try {
+      final dataManager = DataManagerProvider.of(context);
+      final versionInfo = dataManager.latestVersionInfo;
+      
+      // 如果已经有版本信息，直接判断
+      if (versionInfo != null) {
+        await _showUpdateDialog(versionInfo);
+      } else {
+        // 如果没有版本信息，先检查一次
+        final packageInfo = await PackageInfo.fromPlatform();
+        final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+        
+        // 显示加载提示
+        if (mounted) {
+          showCupertinoDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const CupertinoAlertDialog(
+              content: Row(
+                children: [
+                  CupertinoActivityIndicator(),
+                  SizedBox(width: 16),
+                  Text('检查版本中...'),
+                ],
+              ),
+            ),
+          );
+        }
+        
+        final newVersionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
+        
+        // 关闭加载提示
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        
+        if (newVersionInfo != null && mounted) {
+          // 更新缓存的版本信息
+          dataManager.setLatestVersionInfo(newVersionInfo);
+          await _showUpdateDialog(newVersionInfo);
+        } else {
+          // 检查失败，直接跳转
+          await _openProjectUrl();
+        }
+      }
+    } catch (e) {
+      debugPrint('版本检查异常: $e');
+      // 异常情况下直接跳转
+      if (mounted) {
+        await _openProjectUrl();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChecking = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showUpdateDialog(VersionInfo versionInfo) async {
+    if (!mounted) return;
+    
+    if (!versionInfo.hasUpdate) {
+      // 当前已是最新版本
+      final shouldOpen = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('当前已是最新版本'),
+          content: Text('您的版本 ${versionInfo.version} 已经是最新版本，无需更新。\n\n是否仍要打开下载页面？'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('打开'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      );
+      
+      if (shouldOpen == true && mounted) {
+        await _openProjectUrl();
+      }
+    } else {
+      // 有新版本可用
+      final shouldOpen = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('发现新版本'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('最新版本: ${versionInfo.version}'),
+              const SizedBox(height: 8),
+              if (versionInfo.releaseNotes.isNotEmpty)
+                Text('更新内容:\n${versionInfo.releaseNotes}'),
+              const SizedBox(height: 8),
+              const Text('是否前往下载页面？'),
+            ],
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('稍后'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('前往下载'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      );
+      
+      if (shouldOpen == true && mounted) {
+        await _openProjectUrl();
+      }
+    }
+  }
+
   Future<void> _openProjectUrl() async {
-    // 优先使用NAS后端地址，如果失败则使用GitHub
     final url = Uri.parse(AppConstants.nasBackendUrl);
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -210,26 +350,30 @@ class _VersionUpdateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dataManager = DataManagerProvider.of(context);
-    final versionInfo = dataManager.latestVersionInfo;
-    
-    // 始终显示 Update 按钮，不管是否有更新
     return GestureDetector(
-      onTap: _openProjectUrl,
+      onTap: _handleUpdateTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: const Color(0xFF007AFF),
+          color: _isChecking 
+              ? const Color(0xFF007AFF).withOpacity(0.5)
+              : const Color(0xFF007AFF),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Text(
-          'Update',
-          style: TextStyle(
-            color: CupertinoColors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: _isChecking
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CupertinoActivityIndicator(radius: 7),
+              )
+            : const Text(
+                'Update',
+                style: TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
       ),
     );
   }

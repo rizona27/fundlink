@@ -78,35 +78,13 @@ class _MyAppState extends State<MyApp> {
     _waitForNetworkPermissionAndCheck();
   }
   
-  /// 等待网络权限授权后检查版本更新
+  /// 等待网络就绪后检查版本更新
   Future<void> _waitForNetworkPermissionAndCheck() async {
-    // 最多等待 30 秒，每 2 秒检查一次权限状态
-    for (int i = 0; i < 15; i++) {
-      try {
-        final status = await Permission.internet.status;
-        
-        if (status.isGranted) {
-          debugPrint('网络权限已授予，开始检查版本...');
-          await Future.delayed(const Duration(seconds: 2)); // 再等 2 秒确保网络就绪
-          await _checkForUpdatesSilently();
-          return;
-        }
-        
-        // 如果用户明确拒绝，停止等待
-        if (status.isPermanentlyDenied) {
-          debugPrint('网络权限被永久拒绝，跳过版本检查');
-          return;
-        }
-        
-        // 等待 2 秒后再次检查
-        await Future.delayed(const Duration(seconds: 2));
-      } catch (e) {
-        debugPrint('检查网络权限失败: $e');
-        break;
-      }
-    }
+    // 网络访问不需要特殊权限，直接等待2秒确保网络初始化完成
+    debugPrint('等待网络初始化...');
+    await Future.delayed(const Duration(seconds: 2));
     
-    debugPrint('等待网络权限超时，尝试直接检查版本...');
+    debugPrint('开始检查版本...');
     await _checkForUpdatesSilently();
   }
   
