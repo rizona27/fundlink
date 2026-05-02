@@ -12,7 +12,6 @@ import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
 import 'pending_transactions_view.dart';
-import '../widgets/alert_edit_dialog.dart';
 import '../services/biometric_guard.dart';
 
 class ConfigView extends StatefulWidget {
@@ -129,16 +128,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
         ),
         _buildDivider(isDarkMode),
         _buildThemeItem(isDarkMode),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.bell_fill,
-          title: '估值预警',
-          subtitle: '设置净值变动提醒',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            _showAlertEditDialog();
-          },
-        ),
         if (!isDesktop) ...[
           _buildDivider(isDarkMode),
           _buildBiometricSwitchItem(isDarkMode),
@@ -631,14 +620,6 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           _biometricEnabled = value;
         });
       },
-    );
-  }
-
-  void _showAlertEditDialog() {
-    showCupertinoDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => const AlertEditDialog(),
     );
   }
 

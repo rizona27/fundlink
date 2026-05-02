@@ -19,6 +19,9 @@ class AppConstants {
   static const String keyValuationRefreshInterval = 'valuationRefreshInterval';
 
   // --- API URLs & Sources ---
+  // 服务器基础 URL（用于健康检查和未来推送服务）
+  static const String baseUrl = 'https://your-server.com';  // TODO: 替换为实际服务器地址
+  
   static const String apiEastmoneyPingzhongdata = 'https://fund.eastmoney.com/pingzhongdata/{code}.js';
   static const String apiEastmoneyFundArchives = 'https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=10';
   static const String apiGtimgStockQuote = 'https://qt.gtimg.cn/q={codes}';

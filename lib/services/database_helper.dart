@@ -159,23 +159,7 @@ class DatabaseHelper {
         updated_at TEXT NOT NULL
       )
     ''');
-
-    // 估值预警表
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS valuation_alerts (
-        id TEXT PRIMARY KEY,
-        fund_code TEXT NOT NULL,
-        fund_name TEXT,
-        threshold_up REAL,
-        threshold_down REAL,
-        is_enabled INTEGER NOT NULL DEFAULT 1,
-        active_hours_start TEXT,
-        active_hours_end TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    ''');
-
+    
     // 创建索引以提升查询性能
     await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_client ON holdings(client_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_fund ON holdings(fund_code)');
@@ -183,36 +167,14 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_holding ON transactions(holding_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(trade_date)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_alerts_fund ON valuation_alerts(fund_code)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_alerts_enabled ON valuation_alerts(is_enabled)');
 
     debugPrint('数据库 schema 创建完成 (version $version)');
   }
 
-  /// 数据库升级处理
-  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
-    debugPrint('数据库升级: $oldVersion -> $newVersion');
-    
-    if (oldVersion < 2) {
-      // 添加估值预警表
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS valuation_alerts (
-          id TEXT PRIMARY KEY,
-          fund_code TEXT NOT NULL,
-          fund_name TEXT,
-          threshold_up REAL,
-          threshold_down REAL,
-          is_enabled INTEGER NOT NULL DEFAULT 1,
-          active_hours_start TEXT,
-          active_hours_end TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        )
-      ''');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_alerts_fund ON valuation_alerts(fund_code)');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_alerts_enabled ON valuation_alerts(is_enabled)');
-    }
-  }
+/// 数据库升级处理
+Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+  debugPrint('数据库升级: $oldVersion -> $newVersion');
+}
 
   // ==================== 持仓操作 ====================
 
@@ -357,57 +319,6 @@ class DatabaseHelper {
     
     if (result.isEmpty) return null;
     return result.first['value'] as String?;
-  }
-
-  // ==================== 估值预警操作 ====================
-
-  Future<int> insertAlert(Map<String, dynamic> alert) async {
-    final db = await database;
-    return await db.insert('valuation_alerts', alert, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<List<Map<String, dynamic>>> queryAllAlerts() async {
-    final db = await database;
-    return await db.query('valuation_alerts', orderBy: 'created_at DESC');
-  }
-
-  Future<List<Map<String, dynamic>>> queryEnabledAlerts() async {
-    final db = await database;
-    return await db.query(
-      'valuation_alerts',
-      where: 'is_enabled = ?',
-      whereArgs: [1],
-      orderBy: 'created_at DESC',
-    );
-  }
-
-  Future<int> updateAlert(String id, Map<String, dynamic> alert) async {
-    final db = await database;
-    return await db.update(
-      'valuation_alerts',
-      alert,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> deleteAlert(String id) async {
-    final db = await database;
-    return await db.delete(
-      'valuation_alerts',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> toggleAlert(String id, bool enabled) async {
-    final db = await database;
-    return await db.update(
-      'valuation_alerts',
-      {'is_enabled': enabled ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
   }
 
   /// 关闭数据库
