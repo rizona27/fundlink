@@ -74,10 +74,43 @@ class _MyAppState extends State<MyApp> {
     _currentBrightness = _getBrightness();
     _dataManager.addListener(_onThemeChanged);
     
-    Future.delayed(const Duration(seconds: 2), _checkForUpdatesSilently);
+    // 等待网络权限授权后再检查版本
+    _waitForNetworkPermissionAndCheck();
   }
   
-  /// 静默检查版本更新
+  /// 等待网络权限授权后检查版本更新
+  Future<void> _waitForNetworkPermissionAndCheck() async {
+    // 最多等待 30 秒，每 2 秒检查一次权限状态
+    for (int i = 0; i < 15; i++) {
+      try {
+        final status = await Permission.internet.status;
+        
+        if (status.isGranted) {
+          debugPrint('网络权限已授予，开始检查版本...');
+          await Future.delayed(const Duration(seconds: 2)); // 再等 2 秒确保网络就绪
+          await _checkForUpdatesSilently();
+          return;
+        }
+        
+        // 如果用户明确拒绝，停止等待
+        if (status.isPermanentlyDenied) {
+          debugPrint('网络权限被永久拒绝，跳过版本检查');
+          return;
+        }
+        
+        // 等待 2 秒后再次检查
+        await Future.delayed(const Duration(seconds: 2));
+      } catch (e) {
+        debugPrint('检查网络权限失败: $e');
+        break;
+      }
+    }
+    
+    debugPrint('等待网络权限超时，尝试直接检查版本...');
+    await _checkForUpdatesSilently();
+  }
+  
+  /// 静默检查版本更新（带多阶段重试机制）
   Future<void> _checkForUpdatesSilently() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -85,14 +118,59 @@ class _MyAppState extends State<MyApp> {
       
       debugPrint('当前版本: $currentVersion');
       
+      // 首次尝试 + 3次快速重试（间隔5秒）
+      bool success = await _tryCheckVersion(currentVersion, '首次尝试');
+      
+      if (!success) {
+        // 3次快速重试，间隔5秒
+        for (int i = 1; i <= 3; i++) {
+          debugPrint('快速重试 #$i/3，等待5秒...');
+          await Future.delayed(const Duration(seconds: 5));
+          
+          success = await _tryCheckVersion(currentVersion, '快速重试 #$i');
+          if (success) return;
+        }
+        
+        // 5分钟后重试
+        debugPrint('快速重试全部失败，5分钟后再次尝试...');
+        await Future.delayed(const Duration(minutes: 5));
+        
+        if (mounted) {
+          success = await _tryCheckVersion(currentVersion, '5分钟后重试');
+          if (success) return;
+          
+          // 10分钟后最终尝试
+          debugPrint('5分钟后重试失败，10分钟后最终尝试...');
+          await Future.delayed(const Duration(minutes: 10));
+          
+          if (mounted) {
+            await _tryCheckVersion(currentVersion, '10分钟后最终尝试');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('版本检查异常: $e');
+    }
+  }
+  
+  /// 单次尝试检查版本，返回是否成功
+  Future<bool> _tryCheckVersion(String currentVersion, String attemptName) async {
+    try {
+      debugPrint('$attemptName - 开始检查版本...');
+      
       final versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
       
       if (versionInfo != null && mounted) {
         _dataManager.setLatestVersionInfo(versionInfo);
-        debugPrint('最新版本: ${versionInfo.version}, 需要更新: ${versionInfo.hasUpdate}');
+        debugPrint('$attemptName - 成功！最新版本: ${versionInfo.version}, 需要更新: ${versionInfo.hasUpdate}');
+        return true;
+      } else {
+        debugPrint('$attemptName - 失败，未获取到版本信息');
+        return false;
       }
     } catch (e) {
-      debugPrint('版本检查失败: $e');
+      debugPrint('$attemptName - 异常: $e');
+      return false;
     }
   }
 
