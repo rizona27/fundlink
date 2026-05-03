@@ -564,6 +564,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     if (!widget.showValuationRefresh || widget.valuationRefreshIntervalSeconds == null) {
       return const SizedBox.shrink();
     }
+    
+    // 检查是否为交易时间
+    final isTradingTime = _checkIsTradingTime();
+    
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -574,6 +578,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           refreshProgress: widget.valuationRefreshProgress,
           size: 32,
           onIntervalChanged: widget.onValuationRefreshIntervalChanged,
+          isTradingTime: isTradingTime, // 传递交易时间状态
         ),
         if (widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) ...[
           const SizedBox(width: 4),
@@ -589,6 +594,30 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ],
       ],
     );
+  }
+  
+  /// 检查当前是否为交易时间
+  bool _checkIsTradingTime() {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    
+    // 周末不交易
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      return false;
+    }
+    
+    final hour = now.hour;
+    final minute = now.minute;
+    final currentTime = hour * 60 + minute;
+    
+    // 交易时间：9:30-11:30, 13:00-15:00
+    final morningStart = 9 * 60 + 30;
+    final morningEnd = 11 * 60 + 30;
+    final afternoonStart = 13 * 60;
+    final afternoonEnd = 15 * 60;
+    
+    return (currentTime >= morningStart && currentTime <= morningEnd) ||
+           (currentTime >= afternoonStart && currentTime <= afternoonEnd);
   }
 
   Widget _buildLeftForMenuStyle() {
@@ -712,6 +741,9 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       );
     }
     if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
+      // 检查是否为交易时间
+      final isTradingTime = _checkIsTradingTime();
+      
       children.add(CountdownRefreshButton(
         onRefresh: _onValuationRefresh,
         refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
@@ -719,6 +751,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         refreshProgress: widget.valuationRefreshProgress,
         size: 32,
         onIntervalChanged: widget.onValuationRefreshIntervalChanged,
+        isTradingTime: isTradingTime, // 传递交易时间状态
       ));
       if (widget.showReset || widget.showFilter || widget.showSearch || widget.showExpandCollapse) {
         children.add(const SizedBox(width: 4));

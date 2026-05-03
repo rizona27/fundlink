@@ -188,9 +188,23 @@ class StockCandleChartState extends State<StockCandleChart> {
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
       
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      // 增加超时时间和重试机制，处理网络切换问题
+      http.Response? res;
+      int retryCount = 0;
+      const maxRetries = 3;
       
-      if (res.statusCode == 200) {
+      while (retryCount < maxRetries) {
+        try {
+          res = await http.get(url).timeout(const Duration(seconds: 15));
+          if (res.statusCode == 200) break;
+        } catch (e) {
+          retryCount++;
+          if (retryCount >= maxRetries) rethrow;
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        }
+      }
+      
+      if (res != null && res.statusCode == 200) {
         final json = jsonDecode(res.body);
         final data = json['data'];
         
@@ -232,6 +246,10 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
+      // 网络错误时，如果有缓存数据则继续使用
+      if (_candleDataList.isEmpty) {
+        debugPrint('K线数据加载失败: $e');
+      }
     } finally {
       setState(() => _isLoading = false);
     }

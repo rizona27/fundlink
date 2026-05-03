@@ -360,20 +360,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     }
   }
 
-  void _onValuationRefreshIntervalChanged() async {
+  void _onValuationRefreshIntervalChanged(int seconds) async {
     setState(() {
-      if (_valuationRefreshIntervalSeconds == 60) {
-        _valuationRefreshIntervalSeconds = 180;
-      } else if (_valuationRefreshIntervalSeconds == 180) {
-        _valuationRefreshIntervalSeconds = 300;
-      } else {
-        _valuationRefreshIntervalSeconds = 60;
-      }
+      _valuationRefreshIntervalSeconds = seconds;
     });
     await _saveValuationRefreshInterval(_valuationRefreshIntervalSeconds);
     _restartValuationTimer();
-    String intervalText = _valuationRefreshIntervalSeconds == 60 ? '1分钟'
-        : (_valuationRefreshIntervalSeconds == 180 ? '3分钟' : '5分钟');
+    String intervalText = seconds == 60 ? '1分钟'
+        : (seconds == 180 ? '3分钟' : '5分钟');
     if (mounted) {
       context.showToast('估值刷新间隔已改为 $intervalText', duration: const Duration(seconds: 2));
     }

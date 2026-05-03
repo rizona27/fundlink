@@ -80,12 +80,19 @@ class VersionCheckService {
         downloadUrl = AppConstants.githubProjectUrl;
       }
 
+      // 构造完整的版本号用于比较 (version + '+' + versionCode)
+      final fullLatestVersion = versionCode.isNotEmpty ? '$latestVersion+$versionCode' : latestVersion;
+      
       // 比较版本号
-      final hasUpdate = _compareVersions(currentVersion, latestVersion) < 0;
+      final hasUpdate = _compareVersions(currentVersion, fullLatestVersion) < 0;
 
+      debugPrint('========== 版本检查详情 ==========');
       debugPrint('当前版本: $currentVersion');
-      debugPrint('最新版本: $latestVersion');
+      debugPrint('后端版本: $latestVersion');
+      debugPrint('后端构建号: $versionCode');
+      debugPrint('完整最新版本: $fullLatestVersion');
       debugPrint('需要更新: $hasUpdate');
+      debugPrint('=================================');
 
       return VersionInfo(
         version: latestVersion,

@@ -76,6 +76,18 @@ class _MyAppState extends State<MyApp> {
     
     // 等待网络权限授权后再检查版本
     _waitForNetworkPermissionAndCheck();
+    
+    // 启动时立即检查主题模式，确保在程序打开时就应用正确的主题
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final newBrightness = _getBrightness();
+        if (newBrightness != _currentBrightness) {
+          setState(() {
+            _currentBrightness = newBrightness;
+          });
+        }
+      }
+    });
   }
   
   /// 等待网络就绪后检查版本更新
@@ -86,6 +98,13 @@ class _MyAppState extends State<MyApp> {
     
     debugPrint('开始检查版本...');
     await _checkForUpdatesSilently();
+    
+    // 监听DataManager变化，当版本信息更新时立即通知UI刷新
+    _dataManager.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
   
   /// 静默检查版本更新（带多阶段重试机制）

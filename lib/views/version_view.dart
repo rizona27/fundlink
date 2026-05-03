@@ -8,9 +8,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.1';
+const String APP_VERSION = 'v1.2.2';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.2 - 估值模块根据交易时间优化，优化股票图在不同网络下的表现',
   'v1.2.1 - 优化版本检测逻辑、多端下载支持',
   'v1.2.0 - 新增版本检测',
   'v1.1.9 - 新增全局常量管理，统一API、缓存，设计冗余逻辑，优化日志系统',

@@ -8,7 +8,8 @@ class CountdownRefreshButton extends StatefulWidget {
   final bool isRefreshing;
   final double refreshProgress;
   final double size;
-  final VoidCallback? onIntervalChanged;
+  final Function(int)? onIntervalChanged; // 传递选择的间隔时间(秒)
+  final bool? isTradingTime; // 新增：是否为交易时间
 
   const CountdownRefreshButton({
     super.key,
@@ -18,6 +19,7 @@ class CountdownRefreshButton extends StatefulWidget {
     this.refreshProgress = 0.0,
     this.size = 32,
     this.onIntervalChanged,
+    this.isTradingTime, // 新增参数
   });
 
   @override
@@ -46,6 +48,13 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (widget.isRefreshing) return;
 
+      // 检查是否为交易时间，非交易时间时暂停倒计时
+      final isTradingTime = widget.isTradingTime ?? _checkIsTradingTime();
+      if (!isTradingTime) {
+        // 非交易时间，不更新倒计时，但保持圆圈显示
+        return;
+      }
+
       final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;
       final remaining = widget.refreshIntervalSeconds - elapsed;
 
@@ -65,6 +74,30 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
         }
       }
     });
+  }
+  
+  /// 检查当前是否为交易时间
+  bool _checkIsTradingTime() {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    
+    // 周末不交易
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      return false;
+    }
+    
+    final hour = now.hour;
+    final minute = now.minute;
+    final currentTime = hour * 60 + minute;
+    
+    // 交易时间：9:30-11:30, 13:00-15:00
+    final morningStart = 9 * 60 + 30;
+    final morningEnd = 11 * 60 + 30;
+    final afternoonStart = 13 * 60;
+    final afternoonEnd = 15 * 60;
+    
+    return (currentTime >= morningStart && currentTime <= morningEnd) ||
+           (currentTime >= afternoonStart && currentTime <= afternoonEnd);
   }
 
   void _restartTimer() {
@@ -110,7 +143,8 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
           return CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);
-              widget.onIntervalChanged?.call();
+              // 传递用户选择的间隔时间
+              widget.onIntervalChanged?.call(seconds);
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
