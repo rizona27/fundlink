@@ -28,5 +28,18 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册以导入/导出基金持仓数据</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要保存基金持仓数据到相册</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>需要访问文档文件夹以导入/导出基金持仓数据</string>
+	<key>NSSupportsOpeningFilesInPlace</key>
+	<true/>
 </dict>
 </plist>
