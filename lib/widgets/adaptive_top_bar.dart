@@ -223,7 +223,7 @@ class AdaptiveTopBar extends StatefulWidget {
   final bool showValuationRefresh;
   final int? valuationRefreshIntervalSeconds;
   final VoidCallback? onValuationRefresh;
-  final VoidCallback? onValuationRefreshIntervalChanged;
+  final Function(int)? onValuationRefreshIntervalChanged;
   final String? valuationUpdateTime;
   final double valuationRefreshProgress;
   final bool isValuationRefreshing;
