@@ -6,32 +6,43 @@
 .pub-cache/
 .pub/
 /build/
+
+# iOS
 /ios/Pods/
 /ios/.symlinks/
 /ios/Flutter/App.framework
 /ios/Flutter/Flutter.framework
 /ios/Flutter/Generated.xcconfig
 /ios/Flutter/ephemeral/
+
+# Android
 /android/.gradle/
 /android/local.properties
 /android/*.iml
+/android/.kotlin/
+
+# IDE
 .idea/
 .vscode/
-*.swp
-*.lock
+
+# OS
 .DS_Store
+*.swp
+
+# Secrets & Keys
 .env
 *.key
 *.p12
-android/.kotlin/errors/errors-1775973091001.log
-/android/.kotlin/errors
-/android/.kotlin
-/linux
-/linux
-/windows_package
-/FundLink_Windows
+
+# Build artifacts
 *.zip
-/test
+
+# Platform directories (if not needed)
+/linux/
+/windows_package/
+/FundLink_Windows/
+
+# Scripts and docs (if not needed)
 build_windows_release.bat
 build_windows_release.ps1
 BUILD_WINDOWS_GUIDE.md
@@ -40,4 +51,6 @@ update_bundle_id.py
 *.sh
 *.py
 IPA_BUILD_GUIDE.md
-/nas_backend
+
+# Backend
+/nas_backend/
