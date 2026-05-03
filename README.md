@@ -31,6 +31,7 @@
 ### 🔒 信息安全
 - **隐私模式**：脱敏展示基金信息，方便截屏转发
 - **本地化存储**：数据全量存储于本地 SQLite 数据库，不经过第三方服务器
+- **安全加固**：文件大小限制(5MB)、客户姓名长度限制、错误消息脱敏处理
 
 ### 🎨 用户体验
 - **跨平台支持**：iOS / Android / Windows / macOS / Linux
@@ -95,7 +96,9 @@ lib/
 │   └── app_constants.dart                 # 全局常量管理，统一管理 API 地址、缓存键名、业务常量、User-Agent 等
 │
 ├── utils/
-│   └── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
+│   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
+│   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名等格式化器
+│   └── security_utils.dart                # 安全工具类，错误消息脱敏、敏感数据掩码、输入清理
 │
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略

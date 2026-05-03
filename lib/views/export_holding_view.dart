@@ -6,6 +6,7 @@ import '../models/log_entry.dart';
 import '../services/file_export_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
 
 class ExportHoldingView extends StatefulWidget {
   const ExportHoldingView({super.key});
@@ -797,6 +798,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
         keyboardType: isNumber
             ? TextInputType.numberWithOptions(decimal: true, signed: allowNegative)
             : TextInputType.text,
+        inputFormatters: isNumber ? [AmountInputFormatter()] : null,
         onChanged: (v) {
           setState(() {
             _filters[key] = v;

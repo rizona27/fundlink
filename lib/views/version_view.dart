@@ -8,9 +8,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.2';
+const String APP_VERSION = 'v1.2.3';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.3 - 安全加固：新增文件大小限制、客户姓名长度限制、错误消息脱敏',
   'v1.2.2 - 估值模块根据交易时间优化，优化股票图在不同网络下的表现',
   'v1.2.1 - 优化版本检测逻辑、多端下载支持',
   'v1.2.0 - 新增版本检测',
@@ -735,12 +736,12 @@ class VersionView extends StatelessWidget {
 
   Widget _buildUpdateLogMarquee(bool isDarkMode) {
     final updateLogs = [
-      ...UPDATE_LOGS,  
+      ACKNOWLEDGMENT_LINE_1,  
+      ACKNOWLEDGMENT_LINE_2,  
       '',  
       '──────────────────────',  
       '',  
-      ACKNOWLEDGMENT_LINE_1,  
-      ACKNOWLEDGMENT_LINE_2,  
+      ...UPDATE_LOGS,  
     ];
 
     return Column(

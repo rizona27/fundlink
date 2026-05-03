@@ -6,6 +6,7 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
 
 class AddTransactionDialog extends StatefulWidget {
   final String clientId;
@@ -462,11 +463,16 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         ? CupertinoColors.white.withOpacity(0.6)
         : CupertinoColors.systemGrey;
 
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: CupertinoPopupSurface(
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: CupertinoPopupSurface(
           isSurfacePainted: true,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1009,12 +1015,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     ),
                   ],
                 ), 
-              ), 
+              ),
             ), 
-          ], 
+            ], 
+          ), 
         ), 
       ), 
-    ), 
+    ),
     ); 
   }
 
@@ -1056,6 +1063,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             style: TextStyle(color: textColor, fontSize: 15),
             placeholderStyle: TextStyle(color: placeholderColor),
             onChanged: onChanged,
+            inputFormatters: [AmountInputFormatter()],
             suffix: suffix.isNotEmpty
                 ? Padding(
                     padding: const EdgeInsets.only(right: 12),

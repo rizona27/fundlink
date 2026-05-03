@@ -104,7 +104,9 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     if (_isDisposed) return;
     _timer.cancel();
     _lastRefreshTime = DateTime.now();
-    _remainingSeconds = widget.refreshIntervalSeconds;
+    setState(() {
+      _remainingSeconds = widget.refreshIntervalSeconds;
+    });
     _startTimer();
   }
 
@@ -142,8 +144,10 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
           final isSelected = seconds == widget.refreshIntervalSeconds;
           return CupertinoActionSheetAction(
             onPressed: () {
+              print('DEBUG countdown_refresh_button: 用户点击了 $label ($seconds 秒)');
               Navigator.pop(context);
               // 传递用户选择的间隔时间
+              print('DEBUG countdown_refresh_button: 调用回调函数 onIntervalChanged?.call($seconds)');
               widget.onIntervalChanged?.call(seconds);
             },
             child: Row(
@@ -193,8 +197,10 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
       });
     }
     if (oldWidget.refreshIntervalSeconds != widget.refreshIntervalSeconds) {
+      print('DEBUG didUpdateWidget: refreshIntervalSeconds 从 ${oldWidget.refreshIntervalSeconds} 变为 ${widget.refreshIntervalSeconds}');
       _remainingSeconds = widget.refreshIntervalSeconds;
       _lastRefreshTime = DateTime.now();
+      print('DEBUG didUpdateWidget: 调用 _restartTimer()');
       _restartTimer();
     }
   }

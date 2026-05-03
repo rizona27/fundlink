@@ -361,9 +361,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _onValuationRefreshIntervalChanged(int seconds) async {
+    print('DEBUG: 用户选择的刷新间隔 = $seconds 秒');
     setState(() {
       _valuationRefreshIntervalSeconds = seconds;
     });
+    print('DEBUG: 设置后的值 = $_valuationRefreshIntervalSeconds 秒');
     await _saveValuationRefreshInterval(_valuationRefreshIntervalSeconds);
     _restartValuationTimer();
     String intervalText = seconds == 60 ? '1分钟'

@@ -4,6 +4,8 @@ import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
+import '../utils/input_formatters.dart';
 
 class BatchRenameDialog extends StatefulWidget {
   final String clientKey;
@@ -292,6 +294,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             autofocus: true,
                             clearButtonMode: OverlayVisibilityMode.editing,
+                            inputFormatters: [ClientNameInputFormatter()],
                             onChanged: (_) => setState(() {}),
                           ),
                         ),

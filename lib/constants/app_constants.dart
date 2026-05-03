@@ -62,4 +62,11 @@ class AppConstants {
   static const int tradingDayCheckBatchSize = 5;
   static const int refreshBatchSize = 5;
   static const double tradeTimeThreshold = 15.0; // 15:00
+
+  // --- Input Validation Constants ---
+  /// 输入验证相关常量
+  /// 用于 lib/utils/input_formatters.dart 中的各种输入格式化器
+  static const int maxDecimalPlaces = 4; // 小数点后最多位数（金额、份额、净值等）
+  static const int maxIntegerDigits = 10; // 整数部分最多位数
+  static const String numberPattern = r'^[0-9]*\.?[0-9]*$'; // 数字格式正则表达式
 }

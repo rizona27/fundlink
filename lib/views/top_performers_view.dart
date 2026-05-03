@@ -11,6 +11,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../utils/input_formatters.dart';
 import 'add_holding_view.dart';
 
 class TopPerformersView extends StatefulWidget {
@@ -742,6 +743,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
                 keyboardType: TextInputType.number,
+                inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 
               ),
@@ -778,6 +780,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
                 keyboardType: TextInputType.number,
+                inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 
               ),

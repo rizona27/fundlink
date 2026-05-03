@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import '../services/fund_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
 
 class CustomFundConfigDialog extends StatefulWidget {
   final String currentCode;
@@ -148,6 +149,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                             placeholder: '输入6位基金代码',
                             keyboardType: TextInputType.number,
                             maxLength: 6,
+                            inputFormatters: [IntegerInputFormatter(maxLength: 6)],
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             onChanged: (_) {
                               if (_validationError != null || _fundExists) {

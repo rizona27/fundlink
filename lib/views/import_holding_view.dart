@@ -15,6 +15,7 @@ import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
+import '../utils/security_utils.dart';
 
 class ImportHoldingView extends StatefulWidget {
   const ImportHoldingView({super.key});
@@ -1205,6 +1206,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       withData: true,
     );
     if (result != null) {
+      // 检查文件大小(限制5MB)
+      final fileSize = result.files.single.size;
+      const int maxFileSize = 5 * 1024 * 1024; // 5MB
+      
+      if (fileSize > maxFileSize) {
+        if (mounted) {
+          context.showToast('文件大小超过限制(最大5MB)');
+        }
+        return;
+      }
+      
       setState(() {
         _fileResult = result;
         _fileName = result.files.single.name;
@@ -1321,14 +1333,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       setState(() => _currentStep = 2);
     } catch (e, stack) {
       final dataManager = DataManagerProvider.of(context);
+      // 详细错误记录到日志(不显示给用户)
       dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
-        context.showToast('解析文件失败: $e');
+        // 显示友好的错误消息(不泄露技术细节)
+        final friendlyMessage = SecurityUtils.getFriendlyErrorMessage(e);
+        context.showToast(friendlyMessage);
         showCupertinoDialog(
           context: context,
           builder: (ctx) => CupertinoAlertDialog(
             title: const Text('导入失败'),
-            content: Text('$e'),
+            content: Text(friendlyMessage),
             actions: [
               CupertinoDialogAction(
                 child: const Text('确定'),

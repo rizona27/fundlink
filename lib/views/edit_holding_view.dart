@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
-import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
@@ -10,6 +9,7 @@ import '../widgets/toast.dart';
 import '../widgets/add_transaction_dialog.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
 import 'add_holding_view.dart';
 
 class EditHoldingView extends StatefulWidget {
@@ -78,23 +78,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
-    if (tx.isPending) {
-      await showCupertinoDialog(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('无法删除'),
-          content: const Text('待确认交易不能删除\n请等待净值确认后操作'),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('知道了'),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    
+    // 检查是否是基石交易(第一笔买入)
     final isFoundationBuy = tx.type == TransactionType.buy && 
                             _transactions.isNotEmpty && 
                             tx.id == _transactions.first.id;
@@ -116,31 +100,58 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       return;
     }
     
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      barrierDismissible: true, 
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('确认删除'),
-        content: Text(
-          '确定要删除这条${tx.type.displayName}记录吗？\n'
-          '金额：${tx.amount.toStringAsFixed(2)}元\n'
-          '份额：${tx.shares.toStringAsFixed(2)}份',
+    // 非基石交易的待确认交易可以删除
+    if (tx.isPending) {
+      final confirmed = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('删除待确认交易'),
+          content: const Text('此交易尚未确认净值\n删除后将无法恢复，是否继续？'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(context, false),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: const Text('删除'),
+              onPressed: () => Navigator.pop(context, true),
+            ),
+          ],
         ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context, false),
+      );
+      
+      if (confirmed != true) return;
+    } else {
+      // 已确认交易需要二次确认
+      final confirmed = await showCupertinoDialog<bool>(
+        context: context,
+        barrierDismissible: true, 
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('确认删除'),
+          content: Text(
+            '确定要删除这条${tx.type.displayName}记录吗？\n'
+            '金额：${tx.amount.toStringAsFixed(2)}元\n'
+            '份额：${tx.shares.toStringAsFixed(2)}份',
           ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('删除'),
-            onPressed: () => Navigator.pop(context, true),
-          ),
-        ],
-      ),
-    );
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(context, false),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: const Text('删除'),
+              onPressed: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed != true) return;
+    }
 
-    if (confirmed == true && mounted) {
+    if (mounted) {
       try {
         await _dataManager.deleteTransaction(tx.id);
         _loadTransactions();
@@ -583,12 +594,17 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _editTransaction(TransactionRecord tx) async {
-    if (tx.isPending) {
+    // 检查是否是基石交易(第一笔买入)
+    final isFoundationBuy = tx.type == TransactionType.buy && 
+                            _transactions.isNotEmpty && 
+                            tx.id == _transactions.first.id;
+    
+    if (isFoundationBuy) {
       await showCupertinoDialog(
         context: context,
         builder: (context) => CupertinoAlertDialog(
           title: const Text('无法编辑'),
-          content: const Text('待确认交易不能编辑\n请等待净值确认后操作'),
+          content: const Text('第一笔买入交易是基石交易\n不能编辑或删除，以保障持仓数据完整性'),
           actions: [
             CupertinoDialogAction(
               child: const Text('知道了'),
@@ -598,6 +614,30 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         ),
       );
       return;
+    }
+    
+    // 非基石交易的待确认交易可以编辑
+    if (tx.isPending) {
+      final confirmed = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('编辑待确认交易'),
+          content: const Text('此交易尚未确认净值\n修改后将重新计算，是否继续？'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(context, false),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('继续'),
+              onPressed: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed != true) return;
     }
     
     final sharesController = TextEditingController(text: tx.shares.toStringAsFixed(2));
