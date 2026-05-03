@@ -78,10 +78,11 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
-    // 检查是否是基石交易(第一笔买入)
-    final isFoundationBuy = tx.type == TransactionType.buy && 
-                            _transactions.isNotEmpty && 
-                            tx.id == _transactions.first.id;
+    // 检查是否是基石交易(该基金的第一笔买入交易)
+    // _transactions按日期降序排列,last是最早的交易
+    final buyTransactions = _transactions.where((t) => t.type == TransactionType.buy).toList();
+    final isFoundationBuy = buyTransactions.isNotEmpty && 
+                            tx.id == buyTransactions.last.id;  // last是时间最早的买入
     
     if (isFoundationBuy) {
       await showCupertinoDialog(
@@ -594,10 +595,11 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _editTransaction(TransactionRecord tx) async {
-    // 检查是否是基石交易(第一笔买入)
-    final isFoundationBuy = tx.type == TransactionType.buy && 
-                            _transactions.isNotEmpty && 
-                            tx.id == _transactions.first.id;
+    // 检查是否是基石交易(时间上最早的那笔买入交易)
+    // 注意:_transactions是按日期降序排列的,所以last才是最早的
+    final buyTransactions = _transactions.where((t) => t.type == TransactionType.buy).toList();
+    final isFoundationBuy = buyTransactions.isNotEmpty && 
+                            tx.id == buyTransactions.last.id;  // last是最早的交易
     
     if (isFoundationBuy) {
       await showCupertinoDialog(
@@ -657,7 +659,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             constraints: const BoxConstraints(maxWidth: 400),
             child: StatefulBuilder(
-            builder: (context, setDialogState) {
+              builder: (context, setDialogState) {
               final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
               final textColor = isDark ? CupertinoColors.white : const Color(0xFF1C1C1E);
               final secondaryTextColor = isDark 
@@ -933,7 +935,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
         ),
       ),
     ),
-  );
+    );
   }
 }
 

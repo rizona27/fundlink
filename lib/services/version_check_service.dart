@@ -46,12 +46,72 @@ class VersionInfo {
 
 /// 版本检查服务
 class VersionCheckService {
-  /// 检查最新版本
+  /// 检查最新版本（同时检查NAS和GitHub，取最高版本）
   static Future<VersionInfo?> checkLatestVersion(String currentVersion) async {
-    try {
-      debugPrint('正在检查版本更新...');
+    debugPrint('========== 开始版本检查 ==========');
+    debugPrint('当前版本: $currentVersion');
+    
+    // 同时检查NAS和GitHub
+    final nasFuture = _checkFromNas(currentVersion).catchError((e) {
+      debugPrint('NAS检查异常: $e');
+      return null;
+    });
+    
+    final githubFuture = _checkFromGitHub(currentVersion).catchError((e) {
+      debugPrint('GitHub检查异常: $e');
+      return null;
+    });
+    
+    final results = await Future.wait([nasFuture, githubFuture]);
+    final nasInfo = results[0] as VersionInfo?;
+    final githubInfo = results[1] as VersionInfo?;
+    
+    debugPrint('NAS版本: ${nasInfo?.version ?? "连接失败"}');
+    debugPrint('GitHub版本: ${githubInfo?.version ?? "连接失败"}');
+    
+    // 选择版本号更高的
+    VersionInfo? bestInfo;
+    String source = '';
+    
+    if (nasInfo != null && githubInfo != null) {
+      // 两者都成功，比较版本号
+      final nasFullVersion = '${nasInfo.version}+${nasInfo.versionCode}';
+      final githubFullVersion = '${githubInfo.version}+${githubInfo.versionCode}';
+      final compare = _compareVersions(nasFullVersion, githubFullVersion);
       
-      // 尝试从NAS后端获取版本信息
+      if (compare >= 0) {
+        bestInfo = nasInfo;
+        source = 'NAS';
+      } else {
+        bestInfo = githubInfo;
+        source = 'GitHub';
+      }
+    } else if (nasInfo != null) {
+      bestInfo = nasInfo;
+      source = 'NAS (GitHub失败)';
+    } else if (githubInfo != null) {
+      bestInfo = githubInfo;
+      source = 'GitHub (NAS失败)';
+    }
+    
+    if (bestInfo != null) {
+      debugPrint('最终选择: $source');
+      debugPrint('最新版本: ${bestInfo.version}+${bestInfo.versionCode}');
+      debugPrint('需要更新: ${bestInfo.hasUpdate}');
+      debugPrint('=================================');
+    } else {
+      debugPrint('两个源都检查失败');
+      debugPrint('=================================');
+    }
+    
+    return bestInfo;
+  }
+  
+  /// 从NAS后端检查版本
+  static Future<VersionInfo?> _checkFromNas(String currentVersion) async {
+    try {
+      debugPrint('正在从 NAS 检查版本更新...');
+      
       final response = await http.get(
         Uri.parse('${AppConstants.nasBackendUrl}/api/version'),
         headers: {
@@ -61,8 +121,8 @@ class VersionCheckService {
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        debugPrint('NAS版本检查失败: HTTP ${response.statusCode}，回退到GitHub');
-        return await _checkFromGitHub(currentVersion);
+        debugPrint('NAS版本检查失败: HTTP ${response.statusCode}');
+        return null;
       }
 
       final data = jsonDecode(response.body);
@@ -86,13 +146,7 @@ class VersionCheckService {
       // 比较版本号
       final hasUpdate = _compareVersions(currentVersion, fullLatestVersion) < 0;
 
-      debugPrint('========== 版本检查详情 ==========');
-      debugPrint('当前版本: $currentVersion');
-      debugPrint('后端版本: $latestVersion');
-      debugPrint('后端构建号: $versionCode');
-      debugPrint('完整最新版本: $fullLatestVersion');
-      debugPrint('需要更新: $hasUpdate');
-      debugPrint('=================================');
+      debugPrint('NAS检查结果: $latestVersion+$versionCode, 需要更新: $hasUpdate');
 
       return VersionInfo(
         version: latestVersion,
@@ -104,8 +158,8 @@ class VersionCheckService {
       );
 
     } catch (e) {
-      debugPrint('NAS版本检查异常: $e，回退到GitHub');
-      return await _checkFromGitHub(currentVersion);
+      debugPrint('NAS版本检查异常: $e');
+      return null;
     }
   }
   

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:http/http.dart' as http;
 import '../widgets/adaptive_top_bar.dart';
 import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
@@ -202,7 +203,9 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 
 /// 版本更新按钮组件
 class _VersionUpdateButton extends StatefulWidget {
-  const _VersionUpdateButton();
+  final VoidCallback? onSmartNavigate;
+  
+  const _VersionUpdateButton({this.onSmartNavigate});
 
   @override
   State<_VersionUpdateButton> createState() => _VersionUpdateButtonState();
@@ -259,15 +262,15 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
           dataManager.setLatestVersionInfo(newVersionInfo);
           await _showUpdateDialog(newVersionInfo);
         } else {
-          // 检查失败，直接跳转
-          await _openProjectUrl();
+          // 检查失败，使用智能导航
+          await _smartNavigate();
         }
       }
     } catch (e) {
       debugPrint('版本检查异常: $e');
-      // 异常情况下直接跳转
+      // 异常情况下使用智能导航
       if (mounted) {
-        await _openProjectUrl();
+        await _smartNavigate();
       }
     } finally {
       if (mounted) {
@@ -275,6 +278,20 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
           _isChecking = false;
         });
       }
+    }
+  }
+
+  Future<void> _smartNavigate() async {
+    // 尝试获取父widget的智能导航回调
+    if (widget.onSmartNavigate != null) {
+      widget.onSmartNavigate!();
+      return;
+    }
+    
+    // 否则默认打开NAS后端
+    final url = Uri.parse(AppConstants.nasBackendUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -303,7 +320,8 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
       );
       
       if (shouldOpen == true && mounted) {
-        await _openProjectUrl();
+        // 使用智能导航
+        await _smartNavigate();
       }
     } else {
       // 有新版本可用
@@ -338,12 +356,23 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
       );
       
       if (shouldOpen == true && mounted) {
-        await _openProjectUrl();
+        // 使用智能导航
+        await _smartNavigate();
       }
     }
   }
 
   Future<void> _openProjectUrl() async {
+    // 获取父widget的连通性状态
+    final versionViewState = context.findAncestorStateOfType<_VersionViewState>();
+    
+    if (versionViewState != null) {
+      // 使用智能导航逻辑
+      await versionViewState._handleUpdateTap();
+      return;
+    }
+    
+    // Fallback: 默认打开NAS后端
     final url = Uri.parse(AppConstants.nasBackendUrl);
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -381,8 +410,156 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
   }
 }
 
-class VersionView extends StatelessWidget {
+class VersionView extends StatefulWidget {
   const VersionView({super.key});
+
+  @override
+  State<VersionView> createState() => _VersionViewState();
+}
+
+class _VersionViewState extends State<VersionView> {
+  bool _isCheckingConnectivity = false;
+  bool? _nasConnected;
+  bool? _githubConnected;
+  int? _nasLatency;
+  int? _githubLatency;
+
+  @override
+  void initState() {
+    super.initState();
+    // 启动时自动检查版本和连通性
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkVersionOnStartup();
+      // 延迟500ms后检查连通性，避免同时发起太多请求
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _checkConnectivity();
+        }
+      });
+    });
+  }
+
+  Future<void> _checkVersionOnStartup() async {
+    try {
+      final dataManager = DataManagerProvider.of(context);
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      
+      // 后台检查版本，不阻塞UI
+      final versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
+      
+      if (mounted && versionInfo != null) {
+        dataManager.setLatestVersionInfo(versionInfo);
+      }
+    } catch (e) {
+      debugPrint('启动时版本检查失败: $e');
+    }
+  }
+
+  Future<void> _checkConnectivity() async {
+    if (_isCheckingConnectivity) return;
+    
+    setState(() {
+      _isCheckingConnectivity = true;
+      _nasConnected = null;
+      _githubConnected = null;
+      _nasLatency = null;
+      _githubLatency = null;
+    });
+
+    // 同时检查两个连接 - 都使用API端点进行公平比较
+    final nasFuture = _testConnection('${AppConstants.nasBackendUrl}/api/version');
+    final githubFuture = _testConnection(AppConstants.githubReleaseApiUrl);
+    
+    final results = await Future.wait([nasFuture, githubFuture]);
+    
+    if (mounted) {
+      setState(() {
+        _nasConnected = results[0].connected;
+        _nasLatency = results[0].latency;
+        _githubConnected = results[1].connected;
+        _githubLatency = results[1].latency;
+        _isCheckingConnectivity = false;
+      });
+    }
+  }
+
+  Future<({bool connected, int? latency})> _testConnection(String url) async {
+    try {
+      final startTime = DateTime.now();
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'User-Agent': AppConstants.userAgentApp},
+      ).timeout(const Duration(seconds: 5));
+      final endTime = DateTime.now();
+      
+      final latency = endTime.difference(startTime).inMilliseconds;
+      return (connected: response.statusCode == 200, latency: latency);
+    } catch (e) {
+      return (connected: false, latency: null);
+    }
+  }
+
+  Future<void> _handleUpdateTap() async {
+    debugPrint('========== Update按钮点击 ==========');
+    debugPrint('_nasConnected: $_nasConnected');
+    debugPrint('_githubConnected: $_githubConnected');
+    debugPrint('_nasLatency: $_nasLatency');
+    debugPrint('_githubLatency: $_githubLatency');
+    
+    // 如果已经有连通性数据，根据连接状态智能选择
+    if (_nasConnected != null || _githubConnected != null) {
+      // 优先使用后端服务器，只有后端不可用时才用GitHub
+      if (_nasConnected == true) {
+        // 后端可用，直接使用后端
+        debugPrint('========== 智能导航决策 ==========');
+        debugPrint('NAS: 已连接 (${_nasLatency}ms)');
+        debugPrint('GitHub: ${_githubConnected == true ? "已连接 (${_githubLatency}ms)" : "连接失败"}');
+        debugPrint('选择: NAS (fundlink.cr315.com) - 优先策略');
+        debugPrint('=================================');
+        
+        final uri = Uri.parse(AppConstants.nasBackendUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        return;
+      }
+      
+      // 后端不可用，使用GitHub
+      if (_githubConnected == true) {
+        debugPrint('========== 智能导航决策 ==========');
+        debugPrint('NAS: 连接失败');
+        debugPrint('GitHub: 已连接 (${_githubLatency}ms)');
+        debugPrint('选择: GitHub Release - 后端不可用');
+        debugPrint('=================================');
+        
+        final uri = Uri.parse(AppConstants.githubReleasePageUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        return;
+      }
+      
+      // 两者都不可用，默认使用GitHub
+      debugPrint('========== 智能导航决策 ==========');
+      debugPrint('NAS: 连接失败');
+      debugPrint('GitHub: 连接失败');
+      debugPrint('选择: GitHub Release (默认)');
+      debugPrint('=================================');
+      
+      final uri = Uri.parse(AppConstants.githubReleasePageUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return;
+    }
+    
+    // 否则使用原有逻辑（检查版本后决定）
+    final state = context.findAncestorStateOfType<_VersionUpdateButtonState>();
+    if (state != null) {
+      await state._handleUpdateTap();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -494,7 +671,9 @@ class VersionView extends StatelessWidget {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      _VersionUpdateButton(),
+                                      _VersionUpdateButton(
+                                        onSmartNavigate: _handleUpdateTap,
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -524,11 +703,11 @@ class VersionView extends StatelessWidget {
                               constraints: BoxConstraints(maxWidth: 500),
                               child: GridView.count(
                                 crossAxisCount: crossAxisCount,
-                                mainAxisSpacing: 2, 
+                                mainAxisSpacing: 8, // 增加垂直间距
                                 crossAxisSpacing: 8,
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
-                                childAspectRatio: 5.0, 
+                                childAspectRatio: 8.0, // 调整比例，避免文字挤压
                                 children: [
                                   _buildFeatureItem(CupertinoIcons.doc_plaintext, '基金持仓管理', isDarkMode, fontSize, iconSize),
                                   _buildFeatureItem(CupertinoIcons.square_grid_2x2, '多维度视图', isDarkMode, fontSize, iconSize),
@@ -545,6 +724,8 @@ class VersionView extends StatelessWidget {
                             );
                           },
                         ),
+                        const SizedBox(height: 24),
+                        _buildConnectivitySection(isDarkMode),
                         const SizedBox(height: 24),
                         _buildUpdateLogMarquee(isDarkMode),
                         const SizedBox(height: 24),
@@ -670,6 +851,193 @@ class VersionView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildConnectivitySection(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '连通性',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _checkConnectivity,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _isCheckingConnectivity
+                      ? const Color(0xFF007AFF).withOpacity(0.5)
+                      : const Color(0xFF007AFF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: _isCheckingConnectivity
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CupertinoActivityIndicator(radius: 7),
+                      )
+                    : const Text(
+                        '检查',
+                        style: TextStyle(
+                          color: CupertinoColors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final screenWidth = constraints.maxWidth;
+            final effectiveWidth = screenWidth > 500 ? 500 : screenWidth;
+            final fontSize = effectiveWidth > 400 ? 13.0 : 11.0;
+            
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 500),
+              child: GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 2,
+                crossAxisSpacing: 8,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 10.0,
+                children: [
+                  _buildConnectivityItem(
+                    '后端服务器:',
+                    _nasConnected,
+                    _nasLatency,
+                    isDarkMode,
+                    fontSize,
+                  ),
+                  _buildConnectivityItem(
+                    'Github:',
+                    _githubConnected,
+                    _githubLatency,
+                    isDarkMode,
+                    fontSize,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnectivityItem(
+    String label,
+    bool? connected,
+    int? latency,
+    bool isDarkMode,
+    double fontSize,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: isDarkMode
+                ? CupertinoColors.white.withOpacity(0.85)
+                : CupertinoColors.label,
+          ),
+        ),
+        const SizedBox(width: 6),
+        if (connected == null)
+          // 未检查状态：灰色空条
+          _buildSignalBars(0, isDarkMode)
+        else if (connected && latency != null)
+          // 连接成功：根据延迟显示信号条
+          _buildSignalBars(_calculateSignalLevel(latency), isDarkMode)
+        else
+          // 连接失败：红色空条
+          _buildSignalBars(0, isDarkMode, failed: true),
+      ],
+    );
+  }
+
+  /// 计算信号等级 (0-10)
+  int _calculateSignalLevel(int latency) {
+    if (latency <= 100) return 10;      // 非常快
+    if (latency <= 200) return 9;
+    if (latency <= 300) return 8;
+    if (latency <= 400) return 7;
+    if (latency <= 500) return 6;
+    if (latency <= 600) return 5;
+    if (latency <= 800) return 4;
+    if (latency <= 1000) return 3;
+    if (latency <= 1500) return 2;
+    if (latency <= 2000) return 1;
+    return 0;                            // 非常慢
+  }
+
+  /// 构建信号条
+  Widget _buildSignalBars(int level, bool isDarkMode, {bool failed = false}) {
+    const totalBars = 10;
+    const barWidth = 2.0;
+    const barHeight = 12.0;
+    const spacing = 1.0;
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(totalBars, (index) {
+        final isActive = index < level;
+        Color barColor;
+        
+        if (failed) {
+          // 失败状态：全红
+          barColor = const Color(0xFFFF3B30);
+        } else if (!isActive) {
+          // 未激活：灰色
+          barColor = isDarkMode 
+              ? CupertinoColors.systemGrey.withOpacity(0.3)
+              : CupertinoColors.systemGrey4;
+        } else {
+          // 激活状态：根据位置渐变
+          final position = index / (totalBars - 1); // 0.0 - 1.0
+          if (position < 0.5) {
+            // 前半段：橙色到黄色
+            final t = position * 2; // 0.0 - 1.0
+            barColor = Color.lerp(
+              const Color(0xFFFF9500), // 橙色
+              const Color(0xFFFFCC00), // 黄色
+              t,
+            )!;
+          } else {
+            // 后半段：黄色到绿色
+            final t = (position - 0.5) * 2; // 0.0 - 1.0
+            barColor = Color.lerp(
+              const Color(0xFFFFCC00), // 黄色
+              const Color(0xFF34C759), // 绿色
+              t,
+            )!;
+          }
+        }
+        
+        return Container(
+          width: barWidth,
+          height: barHeight,
+          margin: EdgeInsets.only(right: index < totalBars - 1 ? spacing : 0),
+          decoration: BoxDecoration(
+            color: barColor,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        );
+      }),
     );
   }
 
