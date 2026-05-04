@@ -95,16 +95,20 @@ lib/
 │
 ├── utils/
 │   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
-│   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名等格式化器
-│   └── security_utils.dart                # 安全工具类，错误消息脱敏、敏感数据掩码、输入清理
+│   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名、客户号等格式化器
+│   ├── memory_monitor.dart                # 内存监控工具类，监控应用内存使用情况，防止内存泄漏
+│   ├── security_utils.dart                # 安全工具类，错误消息脱敏、敏感数据掩码、输入清理
+│   └── smart_cache.dart                   # 智能 LRU 缓存工具类，支持 TTL 过期和容量限制，用于 API 数据缓存
 │
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算
 │   ├── database_helper.dart               # SQLite 数据库帮助类，跨平台数据库支持，提供 CRUD 操作和 Schema 管理
+│   ├── database_repository.dart           # 数据访问层封装，统一管理所有数据库操作，支持批量插入和高级查询
 │   ├── file_export_service.dart           # 文件导出服务，支持 CSV/Excel 格式
 │   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配能力
 │   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
+│   ├── ui_state_service.dart              # UI 状态管理服务，使用 SQLite 存储 UI 状态（如展开/折叠状态）
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
 │
 ├── models/
@@ -120,14 +124,14 @@ lib/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户信息、基金代码、交易金额/份额/日期
 │   ├── client_view.dart                   # 客户视图页，分组展示持仓
 │   ├── config_view.dart                   # 程序设置页面，隐私/主题切换/日志查询/持仓管理等
-│   ├── edit_holding_view.dart             # 编辑持仓页，显示持仓详情，支持加仓/减仓操作，查看交易历史
+│   ├── edit_holding_view.dart             # 编辑持仓页，显示持仓详情，支持加仓/减仓操作，查看交易历史，编辑基金备注
 │   ├── export_holding_view.dart           # 导出数据页面，支持 CSV/Excel 格式
 │   ├── fund_detail_view.dart              # 基金详情页，包含估值/净值趋势/十大重仓
 │   ├── history_view.dart                  # 历史净值弹窗页
 │   ├── import_holding_view.dart           # 导入数据页面，支持 CSV/Excel 格式
 │   ├── license_view.dart                  # 开源协议页面（AGPL v3）
 │   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
-│   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量重命名
+│   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量编辑客户信息（姓名+客户号）
 │   ├── pending_transactions_view.dart     # 待确认交易管理页，展示 T+1/T+2 待确认的交易列表
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
@@ -137,7 +141,7 @@ lib/
 └── widgets/
     ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
     ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入
-    ├── batch_rename_dialog.dart           # 批量重命名弹窗组件，支持同名客户冲突检测，优化键盘交互
+    ├── batch_rename_dialog.dart           # 批量编辑客户信息弹窗组件，支持姓名和客户号修改，同名客户冲突检测
     ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值
     ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，支持基金代码验证
     ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
@@ -147,6 +151,7 @@ lib/
     ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现
     ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
     ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
+    ├── paginated_list_view.dart           # 分页列表组件，支持懒加载和无限滚动
     ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
     ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
     ├── stock_candle_chart.dart            # 股票 K 线蜡烛图组件，支持日 K/周 K/月 K 切换

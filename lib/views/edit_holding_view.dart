@@ -174,6 +174,187 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     return '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}';
   }
 
+  Future<void> _showEditRemarksDialog(FundHolding holding) async {
+    final controller = TextEditingController(text: holding.remarks);
+    int charCount = holding.remarks.length;
+    
+    await showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+        final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
+        final secondaryColor = isDark 
+            ? CupertinoColors.white.withOpacity(0.6)
+            : CupertinoColors.systemGrey;
+        
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: SingleChildScrollView(
+                    child: CupertinoPopupSurface(
+                      isSurfacePainted: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 标题栏
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '编辑备注',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: textColor,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? CupertinoColors.systemGrey.withOpacity(0.3)
+                                          : CupertinoColors.systemGrey.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      CupertinoIcons.xmark,
+                                      size: 14,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // 内容区域
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            color: bgColor,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '基金备注',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: secondaryColor,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$charCount/30',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: charCount >= 30 
+                                            ? CupertinoColors.systemRed
+                                            : secondaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: CupertinoTextField(
+                                    controller: controller,
+                                    placeholder: '请输入备注信息（最多30个字符）',
+                                    placeholderStyle: TextStyle(
+                                      color: secondaryColor,
+                                      fontSize: 14,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: textColor,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    minLines: 3,
+                                    maxLines: 5,
+                                    autofocus: true,
+                                    clearButtonMode: OverlayVisibilityMode.editing,
+                                    maxLength: 30,
+                                    onChanged: (text) {
+                                      setState(() {
+                                        charCount = text.length;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                // 确认按钮
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: GlassButton(
+                                        label: '取消',
+                                        onPressed: () => Navigator.pop(context),
+                                        isPrimary: false,
+                                        height: 40,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: GlassButton(
+                                        label: '保存',
+                                        onPressed: () async {
+                                          final newRemarks = controller.text.trim();
+                                          if (newRemarks.length > 30) {
+                                            context.showToast('备注不能超过30个字符');
+                                            return;
+                                          }
+                                          final updated = holding.copyWith(remarks: newRemarks);
+                                          await _dataManager.updateHolding(updated);
+                                          if (mounted) {
+                                            context.showToast('备注已保存');
+                                            Navigator.pop(context);
+                                            _updateCurrentHolding();
+                                          }
+                                        },
+                                        isPrimary: true,
+                                        height: 40,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    
+    controller.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -226,7 +407,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     children: [
                       Expanded(
                         child: Text(
-                          holding.fundName,
+                          '${holding.fundName} (${holding.fundCode})',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -234,11 +415,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           ),
                         ),
                       ),
-                      Text(
-                        '(${holding.fundCode})',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: secondaryTextColor,
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 0,
+                        onPressed: () => _showEditRemarksDialog(holding),
+                        child: Icon(
+                          CupertinoIcons.pencil,
+                          size: 20,
+                          color: CupertinoColors.activeBlue,
                         ),
                       ),
                     ],
@@ -341,6 +525,39 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ],
                   ),
+                  // 备注显示区域
+                  if (holding.remarks.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDarkMode 
+                            ? const Color(0xFF3A3A3C).withOpacity(0.5)
+                            : const Color(0xFFF2F2F7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            CupertinoIcons.text_quote,
+                            size: 12,
+                            color: secondaryTextColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              holding.remarks,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: textColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                         ],
                       ),
                     ),

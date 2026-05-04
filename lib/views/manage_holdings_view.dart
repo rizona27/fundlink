@@ -395,7 +395,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                           padding: EdgeInsets.zero,
                                           minSize: 0,
                                           onPressed: () => _navigateToBatchRename(key),
-                                          child: Text('批量重命名', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
+                                          child: Text('编辑', style: TextStyle(fontSize: 12, color: CupertinoColors.activeBlue)),
                                         ),
                                         const SizedBox(width: 12),
                                         CupertinoButton(

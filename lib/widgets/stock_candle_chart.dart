@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class CandleData {
   final String date;
@@ -84,9 +83,7 @@ class StockCandleChartState extends State<StockCandleChart> {
   @override
   void initState() {
     super.initState();
-    _loadFromCache().then((_) {
-      _loadInitialData();
-    });
+    _loadInitialData();
   }
   
   @override
@@ -106,38 +103,8 @@ class StockCandleChartState extends State<StockCandleChart> {
     return 'candle_cache_${widget.stockCode}_$_selectedPeriod';
   }
   
-  Future<void> _loadFromCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getCacheKey();
-      final cachedData = prefs.getString(cacheKey);
-      
-      if (cachedData != null && cachedData.isNotEmpty) {
-        final List<dynamic> jsonList = jsonDecode(cachedData);
-        final cachedCandles = jsonList.map((json) => CandleData(
-          date: json['date'] as String,
-          open: (json['open'] as num).toDouble(),
-          close: (json['close'] as num).toDouble(),
-          high: (json['high'] as num).toDouble(),
-          low: (json['low'] as num).toDouble(),
-          volume: (json['volume'] as num).toDouble(),
-        )).toList();
-        
-        if (cachedCandles.isNotEmpty) {
-          setState(() {
-            _candleDataList = cachedCandles;
-            _earliestDate = DateTime.parse(cachedCandles.first.date);
-            _displayOffset = cachedCandles.length > _actualVisibleCount
-                ? cachedCandles.length - _actualVisibleCount
-                : 0;
-            _hasLoadedInitial = true;
-          });
-        }
-      } else {
-      }
-    } catch (e) {
-    }
-  }
+  // 注意：已移除 SharedPreferences 缓存，直接使用网络请求
+  // 如需缓存，建议使用 SmartCache 或数据库
   
   Future<void> _loadInitialData() async {
     if (_isLoading) return;
@@ -238,8 +205,6 @@ class StockCandleChartState extends State<StockCandleChart> {
                   : 0;
               _hasLoadedInitial = true;
             });
-            
-            _saveToCache(mergedList);
             
             _preloadMoreHistory();
           }
@@ -349,7 +314,7 @@ class StockCandleChartState extends State<StockCandleChart> {
               _hasPreloaded = true;
             });
             
-            _saveToCache(mergedList);
+            // 已移除缓存保存
           }
         }
       }
@@ -377,24 +342,8 @@ class StockCandleChartState extends State<StockCandleChart> {
     return mergedList;
   }
   
-  Future<void> _saveToCache(List<CandleData> candles) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getCacheKey();
-      
-      final jsonList = candles.map((c) => {
-        'date': c.date,
-        'open': c.open,
-        'close': c.close,
-        'high': c.high,
-        'low': c.low,
-        'volume': c.volume,
-      }).toList();
-      
-      await prefs.setString(cacheKey, jsonEncode(jsonList));
-    } catch (e) {
-    }
-  }
+  // 注意：已移除 SharedPreferences 缓存方法
+  // Future<void> _saveToCache(List<CandleData> candles) async { ... }
 
   Future<void> _loadData({int retryCount = 0}) async {
     if (_isLoading) return;
@@ -664,7 +613,7 @@ class StockCandleChartState extends State<StockCandleChart> {
                 _earliestDate = DateTime.parse(uniqueNewCandles.first.date);
                 _displayOffset += uniqueNewCandles.length;
                 
-                _saveToCache(_candleDataList);
+              // 已移除缓存保存
               }
             });
           }

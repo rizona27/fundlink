@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:pinyin/pinyin.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/ui_state_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/gradient_card.dart';
@@ -55,7 +55,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   bool get wantKeepAlive => true;
 
-  static const String _keyExpandedClients = AppConstants.keyExpandedClients;
   static const String _keyPinnedSectionExpanded = AppConstants.keyPinnedSectionExpanded;
 
   @override
@@ -73,22 +72,22 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   Future<void> _loadState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      final pinnedExpanded = prefs.getBool(_keyPinnedSectionExpanded);
+      final uiState = UIStateService();
+      final pinnedExpanded = await uiState.getBool(_keyPinnedSectionExpanded);
       if (pinnedExpanded != null) {
         _isPinnedSectionExpanded = pinnedExpanded;
       }
-      
     } catch (e) {
+      debugPrint('加载UI状态失败: $e');
     }
   }
 
   Future<void> _saveState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyPinnedSectionExpanded, _isPinnedSectionExpanded);
+      final uiState = UIStateService();
+      await uiState.saveBool(_keyPinnedSectionExpanded, _isPinnedSectionExpanded);
     } catch (e) {
+      debugPrint('保存UI状态失败: $e');
     }
   }
 

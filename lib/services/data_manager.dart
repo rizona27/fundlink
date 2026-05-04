@@ -11,8 +11,11 @@ import '../models/fund_info_cache.dart';
 import '../services/fund_service.dart';
 import '../services/china_trading_day_service.dart';
 import '../services/version_check_service.dart';
+import '../services/database_repository.dart';
+import '../services/database_helper.dart';
 import '../widgets/theme_switch.dart' show ThemeMode;
 import '../constants/app_constants.dart';
+import '../utils/smart_cache.dart';
 
 extension ThemeModeDisplayName on ThemeMode {
   String get displayName {
@@ -28,7 +31,7 @@ extension ThemeModeDisplayName on ThemeMode {
 }
 
 class DataManager extends ChangeNotifier {
-  // SharedPreferences Keys are now in AppConstants
+  final DatabaseRepository? _repository = kIsWeb ? null : DatabaseRepository();
 
   List<FundHolding> _holdings = [];
   List<TransactionRecord> _transactions = [];
@@ -48,8 +51,16 @@ class DataManager extends ChangeNotifier {
 
   bool _shouldNotifyListeners = true;
   
-  final Map<String, ProfitResult> _profitCache = {};
-  final Map<String, List<TransactionRecord>> _transactionHistoryCache = {};
+  // 使用智能缓存
+  final SmartCache<String, ProfitResult> _profitCache = SmartCache(
+    maxSize: 50,
+    ttl: const Duration(minutes: 30),
+  );
+  
+  final SmartCache<String, List<TransactionRecord>> _transactionHistoryCache = SmartCache(
+    maxSize: 30,
+    ttl: const Duration(hours: 1),
+  );
   
   // 版本信息
   VersionInfo? _latestVersionInfo;
@@ -107,39 +118,11 @@ class DataManager extends ChangeNotifier {
 
   Future<void> loadData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final holdingsJson = prefs.getStringList(AppConstants.keyHoldings);
-      if (holdingsJson != null) {
-        _holdings = holdingsJson
-            .map((json) => FundHolding.fromJson(jsonDecode(json)))
-            .toList();
-      }
-
-      final transactionsJson = prefs.getStringList(AppConstants.keyTransactions);
-      if (transactionsJson != null) {
-        _transactions = transactionsJson
-            .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
-            .toList();
-      }
-
-      final logsJson = prefs.getStringList(AppConstants.keyLogs);
-      if (logsJson != null) {
-        _logs = logsJson
-            .map((json) => LogEntry.fromJson(jsonDecode(json)))
-            .toList();
-      }
-
-      _isPrivacyMode = prefs.getBool(AppConstants.keyPrivacyMode) ?? true;
-
-      final themeModeString = prefs.getString(AppConstants.keyThemeMode);
-      if (themeModeString != null) {
-        _themeMode = _parseThemeMode(themeModeString);
+      if (kIsWeb) {
+        await _loadDataFromPrefs();
       } else {
-        _themeMode = ThemeMode.system;
+        await _loadDataFromSQLite();
       }
-
-      _showHoldersOnSummaryCard = prefs.getBool(AppConstants.keyShowHoldersOnSummaryCard) ?? true;
 
       await loadValuationCache();
       await loadFundInfoCache();
@@ -148,6 +131,65 @@ class DataManager extends ChangeNotifier {
     } catch (e) {
       await addLog('数据加载异常: $e', type: LogType.error);
     }
+  }
+  
+  Future<void> _loadDataFromSQLite() async {
+    _holdings = await _repository!.getAllHoldings();
+    _transactions = await _repository!.getAllTransactions();
+    _logs = await _repository!.getLogs(limit: AppConstants.maxLogEntries);
+    
+    final privacyModeStr = await _repository!.getSetting('privacy_mode');
+    if (privacyModeStr != null) {
+      _isPrivacyMode = privacyModeStr == 'true';
+    }
+    
+    final themeModeStr = await _repository!.getSetting('theme_mode');
+    if (themeModeStr != null) {
+      _themeMode = _parseThemeMode(themeModeStr);
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+    
+    final showHoldersStr = await _repository!.getSetting('show_holders_on_summary');
+    if (showHoldersStr != null) {
+      _showHoldersOnSummaryCard = showHoldersStr == 'true';
+    }
+  }
+  
+  Future<void> _loadDataFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final holdingsJson = prefs.getStringList(AppConstants.keyHoldings);
+    if (holdingsJson != null) {
+      _holdings = holdingsJson
+          .map((json) => FundHolding.fromJson(jsonDecode(json)))
+          .toList();
+    }
+
+    final transactionsJson = prefs.getStringList(AppConstants.keyTransactions);
+    if (transactionsJson != null) {
+      _transactions = transactionsJson
+          .map((json) => TransactionRecord.fromJson(jsonDecode(json)))
+          .toList();
+    }
+
+    final logsJson = prefs.getStringList(AppConstants.keyLogs);
+    if (logsJson != null) {
+      _logs = logsJson
+          .map((json) => LogEntry.fromJson(jsonDecode(json)))
+          .toList();
+    }
+
+    _isPrivacyMode = prefs.getBool(AppConstants.keyPrivacyMode) ?? true;
+
+    final themeModeString = prefs.getString(AppConstants.keyThemeMode);
+    if (themeModeString != null) {
+      _themeMode = _parseThemeMode(themeModeString);
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+
+    _showHoldersOnSummaryCard = prefs.getBool(AppConstants.keyShowHoldersOnSummaryCard) ?? true;
   }
 
   ThemeMode _parseThemeMode(String value) {
@@ -173,80 +215,52 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> saveData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final holdingsJson = _holdings
-          .map((holding) => jsonEncode(holding.toJson()))
-          .toList();
-      await prefs.setStringList(AppConstants.keyHoldings, holdingsJson);
-
-      final transactionsJson = _transactions
-          .map((tx) => jsonEncode(tx.toJson()))
-          .toList();
-      await prefs.setStringList(AppConstants.keyTransactions, transactionsJson);
-
-      final logsJson = _logs
-          .take(AppConstants.maxLogEntries)
-          .map((log) => jsonEncode(log.toJson()))
-          .toList();
-      await prefs.setStringList(AppConstants.keyLogs, logsJson);
-
-      await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
-      await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
-      await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
-    } catch (e) {
-      await addLog('数据保存异常: $e', type: LogType.error);
+    if (kIsWeb) {
+      await _saveDataToPrefs();
     }
+    notifyListeners();
+  }
+  
+  Future<void> _saveDataToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final holdingsJson = _holdings
+        .map((holding) => jsonEncode(holding.toJson()))
+        .toList();
+    await prefs.setStringList(AppConstants.keyHoldings, holdingsJson);
+
+    final transactionsJson = _transactions
+        .map((tx) => jsonEncode(tx.toJson()))
+        .toList();
+    await prefs.setStringList(AppConstants.keyTransactions, transactionsJson);
+
+    final logsJson = _logs
+        .take(AppConstants.maxLogEntries)
+        .map((log) => jsonEncode(log.toJson()))
+        .toList();
+    await prefs.setStringList(AppConstants.keyLogs, logsJson);
+
+    await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
+    await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
+    await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
   }
 
   Future<void> loadValuationCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(AppConstants.keyValuationCache);
-      if (jsonStr != null) {
-        final Map<String, dynamic> raw = jsonDecode(jsonStr);
-        _valuationCache = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
-      }
-    } catch (e) {
-      // Ignore cache corruption
-    }
+    // 估值缓存使用内存存储，无需加载
+    _valuationCache = {};
   }
 
   Future<void> saveValuationCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(AppConstants.keyValuationCache, jsonEncode(_valuationCache));
-    } catch (e) {
-      // Ignore save error
-    }
+    // 估值缓存使用内存存储，无需保存
   }
 
   Future<void> loadFundInfoCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(AppConstants.keyFundInfoCache);
-      if (jsonStr != null) {
-        final List<dynamic> rawList = jsonDecode(jsonStr);
-        _fundInfoCache = {};
-        for (final raw in rawList) {
-          final fundInfo = FundInfoCache.fromJson(Map<String, dynamic>.from(raw));
-          _fundInfoCache[fundInfo.fundCode] = fundInfo;
-        }
-      }
-    } catch (e) {
-      // Ignore cache corruption
-    }
+    // 基金信息缓存使用内存存储，无需加载
+    _fundInfoCache = {};
   }
 
   Future<void> saveFundInfoCacheToPrefs() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheList = _fundInfoCache.values.map((info) => info.toJson()).toList();
-      await prefs.setString(AppConstants.keyFundInfoCache, jsonEncode(cacheList));
-    } catch (e) {
-      // Ignore save error
-    }
+    // 基金信息缓存使用内存存储，无需保存
   }
 
   Map<String, dynamic>? getValuation(String fundCode) {
@@ -427,9 +441,13 @@ class DataManager extends ChangeNotifier {
       throw Exception('无效的持仓数据');
     }
 
+    if (!kIsWeb) {
+      await _repository!.insertHolding(holding);
+    }
     _holdings = [..._holdings, holding];
-    await saveData();
+    
     await addLog('新增持仓: ${holding.fundCode} - ${holding.clientName}', type: LogType.success);
+    await saveData();
     notifyListeners();
   }
 
@@ -444,20 +462,22 @@ class DataManager extends ChangeNotifier {
       throw Exception('无效的交易数据');
     }
 
+    if (!kIsWeb) {
+      await _repository!.insertTransaction(transaction);
+    }
     _transactions = [..._transactions, transaction];
     
-    // Automatic cache invalidation
     _clearRelatedCaches(transaction.clientId, transaction.fundCode);
 
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
-    await saveData();
     await addLog(
       '${transaction.type.displayName}交易: ${transaction.fundCode} - ${transaction.clientName}, '
       '金额: ${transaction.amount.toStringAsFixed(2)}元, '
       '份额: ${transaction.shares.toStringAsFixed(2)}份',
       type: LogType.success,
     );
+    await saveData();
     notifyListeners();
   }
 
@@ -537,6 +557,10 @@ class DataManager extends ChangeNotifier {
     }
 
     final transaction = _transactions[index];
+    
+    if (!kIsWeb) {
+      await _repository!.deleteTransaction(transactionId);
+    }
     _transactions = List.from(_transactions)..removeAt(index);
     
     // Automatic cache invalidation
@@ -544,7 +568,6 @@ class DataManager extends ChangeNotifier {
 
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
-    await saveData();
     await addLog('删除交易记录: ${transaction.fundCode} - ${transaction.type.displayName}', type: LogType.info);
     notifyListeners();
   }
@@ -556,11 +579,14 @@ class DataManager extends ChangeNotifier {
       throw Exception('持仓不存在');
     }
 
+    if (!kIsWeb) {
+      await _repository!.updateHolding(updatedHolding.id, updatedHolding);
+    }
+    
     final newHoldings = List<FundHolding>.from(_holdings);
     newHoldings[index] = updatedHolding;
     _holdings = newHoldings;
 
-    await saveData();
     await addLog('更新持仓: ${updatedHolding.fundCode} - ${updatedHolding.clientName}', type: LogType.success);
     notifyListeners();
   }
@@ -580,7 +606,6 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> commitBatchUpdates() async {
-    await saveData();
     notifyListeners();
   }
 
@@ -623,25 +648,39 @@ class DataManager extends ChangeNotifier {
     if (index < 0 || index >= _holdings.length) return;
 
     final removed = _holdings[index];
+    
+    if (!kIsWeb) {
+      await _repository!.deleteHolding(removed.id);
+    }
+    
     _holdings = List.from(_holdings)..removeAt(index);
-    await saveData();
     await addLog('删除持仓: ${removed.fundCode} - ${removed.clientName}', type: LogType.info);
     notifyListeners();
   }
 
   Future<void> clearAllHoldings() async {
     final count = _holdings.length;
+    
+    if (!kIsWeb) {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('holdings');
+      await db.delete('transactions');
+    }
+    
     _holdings = [];
+    _transactions = [];
     _profitCache.clear();
     _transactionHistoryCache.clear();
-    await saveData();
+    
     await addLog('清空所有持仓数据，共删除 $count 条记录', type: LogType.warning);
     notifyListeners();
   }
 
   Future<void> batchUpdateHoldings(List<FundHolding> newHoldings) async {
+    if (!kIsWeb) {
+      await _repository!.batchInsertHoldings(newHoldings);
+    }
     _holdings = newHoldings;
-    await saveData();
     notifyListeners();
   }
 
@@ -696,6 +735,11 @@ class DataManager extends ChangeNotifier {
         isPinned: newIsPinned,
         pinnedTimestamp: newIsPinned ? DateTime.now() : null,
       );
+      
+      if (!kIsWeb) {
+        await _repository!.updateHolding(holdingId, newHolding);
+      }
+      
       newHoldings[index] = newHolding;
 
       newHoldings.sort((a, b) {
@@ -710,7 +754,6 @@ class DataManager extends ChangeNotifier {
       });
 
       _holdings = newHoldings;
-      await saveData();
       await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
       notifyListeners();
     }
@@ -759,26 +802,38 @@ class DataManager extends ChangeNotifier {
 
   Future<void> addLog(String message, {LogType type = LogType.info}) async {
     final logEntry = LogEntry.create(message: message, type: type);
+    
+    if (!kIsWeb) {
+      await _repository!.insertLog(logEntry);
+    }
+    
     _logs = [logEntry, ..._logs];
 
     if (_logs.length > 200) {
       _logs = _logs.take(200).toList();
     }
 
-    await saveData();
     notifyListeners();
   }
 
   Future<void> clearAllLogs() async {
+    if (!kIsWeb) {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('logs');
+    }
+    
     _logs = [];
-    await saveData();
     await addLog('日志已清空', type: LogType.info);
     notifyListeners();
   }
 
   Future<void> togglePrivacyMode() async {
     _isPrivacyMode = !_isPrivacyMode;
-    await saveData();
+    
+    if (!kIsWeb) {
+      await _repository!.saveSetting('privacy_mode', _isPrivacyMode.toString());
+    }
+    
     await addLog('隐私模式: ${_isPrivacyMode ? "开启" : "关闭"}', type: LogType.info);
     notifyListeners();
   }
@@ -786,7 +841,11 @@ class DataManager extends ChangeNotifier {
   Future<void> setThemeMode(ThemeMode mode) async {
     if (_themeMode != mode) {
       _themeMode = mode;
-      await saveData();
+      
+      if (!kIsWeb) {
+        await _repository!.saveSetting('theme_mode', _themeModeToString(_themeMode));
+      }
+      
       await addLog('主题模式: ${mode.displayName}', type: LogType.info);
       notifyListeners();
     }
@@ -795,7 +854,11 @@ class DataManager extends ChangeNotifier {
   Future<void> setShowHoldersOnSummaryCard(bool value) async {
     if (_showHoldersOnSummaryCard != value) {
       _showHoldersOnSummaryCard = value;
-      await saveData();
+      
+      if (!kIsWeb) {
+        await _repository!.saveSetting('show_holders_on_summary', value.toString());
+      }
+      
       await addLog('一览卡片持有人显示: ${value ? "开启" : "关闭"}', type: LogType.info);
       notifyListeners();
     }

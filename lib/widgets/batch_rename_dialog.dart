@@ -5,7 +5,6 @@ import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
-import '../utils/input_formatters.dart';
 
 class BatchRenameDialog extends StatefulWidget {
   final String clientKey;
@@ -26,12 +25,14 @@ class BatchRenameDialog extends StatefulWidget {
 class _BatchRenameDialogState extends State<BatchRenameDialog> {
   late DataManager _dataManager;
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _idController = TextEditingController();
   bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
     _nameController.text = widget.currentName;
+    _idController.text = widget.holdings.first.clientId;
   }
 
   @override
@@ -43,19 +44,21 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _idController.dispose();
     super.dispose();
   }
 
   Future<void> _handleRename() async {
     final newName = _nameController.text.trim();
+    final newId = _idController.text.trim();
     
     if (newName.isEmpty) {
       context.showToast('客户姓名不能为空');
       return;
     }
 
-    if (newName == widget.currentName) {
-      context.showToast('新名称与原名称相同');
+    if (newName == widget.currentName && newId == widget.holdings.first.clientId) {
+      context.showToast('信息未发生变化');
       return;
     }
 
@@ -85,13 +88,16 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     try {
       int updatedCount = 0;
       for (final holding in widget.holdings) {
-        final updated = holding.copyWith(clientName: newName);
+        final updated = holding.copyWith(
+          clientName: newName,
+          clientId: newId,
+        );
         await _dataManager.updateHolding(updated);
         updatedCount++;
       }
 
       await _dataManager.addLog(
-        '批量重命名客户: ${widget.currentName} -> $newName (共$updatedCount条记录)',
+        '批量编辑客户: ${widget.currentName} -> $newName (共$updatedCount条记录)',
         type: LogType.info,
       );
 
@@ -201,7 +207,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '批量重命名',
+                          '编辑',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -265,9 +271,9 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 输入框
+                        // 客户姓名输入框
                         Text(
-                          '新客户姓名',
+                          '客户姓名',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -282,7 +288,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                           ),
                           child: CupertinoTextField(
                             controller: _nameController,
-                            placeholder: '请输入新客户姓名',
+                            placeholder: '请输入客户姓名',
                             placeholderStyle: TextStyle(
                               color: secondaryColor,
                               fontSize: 14,
@@ -295,6 +301,41 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                             autofocus: true,
                             clearButtonMode: OverlayVisibilityMode.editing,
                             inputFormatters: [ClientNameInputFormatter()],
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 客户号输入框
+                        Text(
+                          '客户号（选填）',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: secondaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: CupertinoTextField(
+                            controller: _idController,
+                            placeholder: '请输入客户号',
+                            placeholderStyle: TextStyle(
+                              color: secondaryColor,
+                              fontSize: 14,
+                            ),
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: textColor,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            clearButtonMode: OverlayVisibilityMode.editing,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [ClientIdInputFormatter()],
                             onChanged: (_) => setState(() {}),
                           ),
                         ),

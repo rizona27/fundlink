@@ -62,9 +62,9 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildGeneralSection(isDarkMode),
-              const SizedBox(height: 16),
               _buildHoldingsManagementSection(isDarkMode),
+              const SizedBox(height: 16),
+              _buildGeneralSection(isDarkMode),
               const SizedBox(height: 16),
               _buildImportExportSection(isDarkMode),
               const SizedBox(height: 16),

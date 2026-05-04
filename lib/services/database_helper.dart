@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 数据库帮助类 - 跨平台 SQLite 支持
 class DatabaseHelper {
@@ -20,18 +21,21 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
+    if (_database != null) return _database!;
+    
     if (kIsWeb) {
-      throw UnsupportedError('Web platform not supported with SQLite');
+      throw UnsupportedError('Web platform uses SharedPreferences instead of SQLite');
     }
 
-    // 根据平台选择初始化方式
     if (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS) {
-      return await _initDesktopDatabase();
+      _database = await _initDesktopDatabase();
     } else {
-      return await _initMobileDatabase();
+      _database = await _initMobileDatabase();
     }
+    
+    return _database!;
   }
 
   /// 移动端初始化（iOS/Android）
@@ -183,9 +187,26 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     return await db.insert('holdings', holding, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Map<String, dynamic>>> queryAllHoldings() async {
+  Future<List<Map<String, dynamic>>> queryAllHoldings({
+    int? limit,
+    int? offset,
+    String? sortBy,
+    bool ascending = false,
+  }) async {
     final db = await database;
-    return await db.query('holdings', orderBy: 'created_at DESC');
+    
+    String orderBy = 'created_at DESC';
+    if (sortBy != null) {
+      final direction = ascending ? 'ASC' : 'DESC';
+      orderBy = '$sortBy $direction';
+    }
+    
+    return await db.query(
+      'holdings',
+      orderBy: orderBy,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<List<Map<String, dynamic>>> queryPinnedHoldings() async {
@@ -224,9 +245,17 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     return await db.insert('transactions', transaction, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Map<String, dynamic>>> queryAllTransactions() async {
+  Future<List<Map<String, dynamic>>> queryAllTransactions({
+    int? limit,
+    int? offset,
+  }) async {
     final db = await database;
-    return await db.query('transactions', orderBy: 'trade_date DESC');
+    return await db.query(
+      'transactions',
+      orderBy: 'trade_date DESC',
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<List<Map<String, dynamic>>> queryTransactionsByHoldingId(String holdingId) async {

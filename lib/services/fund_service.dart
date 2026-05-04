@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
@@ -17,6 +16,9 @@ class FundService {
 
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
+  
+  // 净值缓存 - 使用内存缓存（替代 SharedPreferences）
+  final Map<String, List<NetWorthPoint>> _navCache = {};
 
   FundService([this._dataManager]);
 
@@ -794,53 +796,17 @@ class FundService {
   }
   
   Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getNavCacheKey(code);
-      final cachedData = prefs.getString(cacheKey);
-      
-      if (cachedData != null && cachedData.isNotEmpty) {
-        final List<dynamic> jsonList = jsonDecode(cachedData);
-        final cachedPoints = jsonList.map((json) => NetWorthPoint(
-          date: DateTime.fromMillisecondsSinceEpoch(json['date'] as int),
-          nav: (json['nav'] as num).toDouble(),
-          growth: json['growth'] != null ? (json['growth'] as num).toDouble() : null,
-          series: json['series'] as String? ?? 'fund',
-        )).toList();
-        
-        return cachedPoints;
-      }
-    } catch (e) {
-      _dataManager?.addLog('缓存加载失败: $e', type: LogType.error);
-    }
-    return null;
+    // 使用内存缓存
+    return _navCache[code];
   }
   
   Future<void> saveNavToCache(String code, List<NetWorthPoint> points) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getNavCacheKey(code);
-      
-      final jsonList = points.map((p) => {
-        'date': p.date.millisecondsSinceEpoch,
-        'nav': p.nav,
-        'growth': p.growth,
-        'series': p.series,
-      }).toList();
-      
-      await prefs.setString(cacheKey, jsonEncode(jsonList));
-    } catch (e) {
-      _dataManager?.addLog('缓存保存失败: $e', type: LogType.error);
-    }
+    // 保存到内存缓存
+    _navCache[code] = points;
   }
   
   Future<void> clearNavCache(String code) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getNavCacheKey(code);
-      await prefs.remove(cacheKey);
-    } catch (e) {
-      _dataManager?.addLog('清除缓存失败: $e', type: LogType.error);
-    }
+    // 清除内存缓存
+    _navCache.remove(code);
   }
 }

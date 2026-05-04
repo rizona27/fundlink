@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/ui_state_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
@@ -94,9 +94,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   Future<void> _loadState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final uiState = UIStateService();
       
-      final sortKeyStr = prefs.getString(_keySortKey);
+      final sortKeyStr = await uiState.getString(_keySortKey);
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
           (e) => e.toString() == sortKeyStr,
@@ -104,24 +104,25 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         );
       }
       
-      final sortOrderStr = prefs.getString(_keySortOrder);
+      final sortOrderStr = await uiState.getString(_keySortOrder);
       if (sortOrderStr != null) {
         _sortOrder = SortOrder.values.firstWhere(
           (e) => e.toString() == sortOrderStr,
           orElse: () => SortOrder.descending,
         );
       }
-      
     } catch (e) {
+      debugPrint('加载排序状态失败: $e');
     }
   }
 
   Future<void> _saveSortState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySortKey, _sortKey.toString());
-      await prefs.setString(_keySortOrder, _sortOrder.toString());
+      final uiState = UIStateService();
+      await uiState.saveString(_keySortKey, _sortKey.toString());
+      await uiState.saveString(_keySortOrder, _sortOrder.toString());
     } catch (e) {
+      debugPrint('保存排序状态失败: $e');
     }
   }
 

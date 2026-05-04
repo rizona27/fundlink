@@ -2,11 +2,12 @@ import 'package:flutter/cupertino.dart';
 import 'utils/animation_config.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, kReleaseMode;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'services/data_manager.dart';
 import 'services/version_check_service.dart';
+import 'utils/memory_monitor.dart';
 import 'views/client_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
@@ -24,6 +25,25 @@ void main() {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
+
+  // 启动内存监控（仅调试模式）
+  if (!kReleaseMode) {
+    final monitor = MemoryMonitor();
+    monitor.warningThresholdMB = 200;
+    monitor.criticalThresholdMB = 400;
+    
+    monitor.onWarning = (snapshot) {
+      debugPrint('⚡ 内存警告: ${snapshot.memoryUsageMB.toStringAsFixed(2)} MB');
+    };
+    
+    monitor.onCritical = (snapshot) {
+      debugPrint('⚠️ 严重警告: ${snapshot.memoryUsageMB.toStringAsFixed(2)} MB');
+      // 可以触发垃圾回收或清理缓存
+    };
+    
+    monitor.startMonitoring(interval: const Duration(seconds: 10));
+    debugPrint('内存监控已启动');
+  }
 
   _requestPermissionsOnStart();
 

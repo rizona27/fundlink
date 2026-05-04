@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../utils/animation_config.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/ui_state_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import '../widgets/empty_state.dart';
@@ -166,9 +166,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   Future<void> _loadSortState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final sortKeyStr = prefs.getString(_keySortKey);
-      final sortOrderStr = prefs.getString(_keySortOrder);
+      final uiState = UIStateService();
+      final sortKeyStr = await uiState.getString(_keySortKey);
+      final sortOrderStr = await uiState.getString(_keySortOrder);
       
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
@@ -187,17 +187,18 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       } else {
         _sortOrder = SortOrder.descending;
       }
-      
     } catch (e) {
+      debugPrint('加载排序状态失败: $e');
     }
   }
 
   Future<void> _saveSortState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySortKey, _sortKey.toString());
-      await prefs.setString(_keySortOrder, _sortOrder.toString());
+      final uiState = UIStateService();
+      await uiState.saveString(_keySortKey, _sortKey.toString());
+      await uiState.saveString(_keySortOrder, _sortOrder.toString());
     } catch (e) {
+      debugPrint('保存排序状态失败: $e');
     }
   }
   
@@ -323,8 +324,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   Future<void> _loadValuationRefreshInterval() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final seconds = prefs.getInt('valuationRefreshInterval');
+      final uiState = UIStateService();
+      final seconds = await uiState.getInt('valuationRefreshInterval');
       if (seconds != null && [60, 180, 300].contains(seconds)) {
         _valuationRefreshIntervalSeconds = seconds;
       } else {
@@ -332,6 +333,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
       _restartValuationTimer();
     } catch (e) {
+      debugPrint('加载估值刷新间隔失败: $e');
       _valuationRefreshIntervalSeconds = 180;
       _restartValuationTimer();
     }
@@ -354,9 +356,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   Future<void> _saveValuationRefreshInterval(int seconds) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('valuationRefreshInterval', seconds);
+      final uiState = UIStateService();
+      await uiState.saveInt('valuationRefreshInterval', seconds);
     } catch (e) {
+      debugPrint('保存估值刷新间隔失败: $e');
     }
   }
 
