@@ -27,15 +27,17 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   }
 
   void _loadPendingTransactions() {
-    setState(() {
-      _pendingTransactions = _dataManager.getPendingTransactions();
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _pendingTransactions = _dataManager.getPendingTransactions();
+      });
+    }
   }
 
   Future<void> _refreshAndConfirm() async {
     if (_isLoading) return;
 
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
 
     try {
       final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);

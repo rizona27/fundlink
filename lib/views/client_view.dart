@@ -120,6 +120,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
           setState(() {});
         }
       } catch (e) {
+        debugPrint('自动修复基金名称失败: $e');
+        // 静默失败，不影响用户使用
       }
     }
   }
@@ -598,7 +600,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   isExpanded: isExpanded,
                   child: Container(
                     margin: const EdgeInsets.only(left: 16, top: 8), 
-                    child: Column(children: _buildFundCards(group.holdings)),
+                    child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
                   ),
                 ),
               ],
@@ -680,7 +682,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
               isExpanded: isExpanded,
               child: Container(
                 margin: const EdgeInsets.only(left: 16, top: 8), 
-                child: Column(children: _buildFundCards(group.holdings)),
+                child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
               ),
             ),
           ],
@@ -689,29 +691,37 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     );
   }
 
-  List<Widget> _buildFundCards(List<FundHolding> holdings) {
-    final cards = <Widget>[];
-    for (int i = 0; i < holdings.length; i++) {
-      final holding = holdings[i];
-      cards.add(
-        RepaintBoundary(
-          key: ValueKey('card_${holding.id}'),
-          child: FundCard(
-            holding: holding,
-            hideClientInfo: true,
-            onCopyClientId: () {
-              _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-              context.showToast('客户号已复制');
-            },
-            onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
-            onShowToast: context.showToast,
-            onPinToggle: () => _dataManager.togglePinStatus(holding.id),
-          ),
-        ),
-      );
-      if (i < holdings.length - 1) cards.add(const SizedBox(height: 8));
+  Widget _buildFundCards(List<FundHolding> holdings) {
+    if (holdings.isEmpty) {
+      return const SizedBox.shrink();
     }
-    if (holdings.isNotEmpty) cards.add(const SizedBox(height: 8));
-    return cards;
+    
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: holdings.length,
+      itemBuilder: (context, index) {
+        final holding = holdings[index];
+        return Column(
+          children: [
+            RepaintBoundary(
+              key: ValueKey('card_${holding.id}'),
+              child: FundCard(
+                holding: holding,
+                hideClientInfo: true,
+                onCopyClientId: () {
+                  _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+                  context.showToast('客户号已复制');
+                },
+                onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
+                onShowToast: context.showToast,
+                onPinToggle: () => _dataManager.togglePinStatus(holding.id),
+              ),
+            ),
+            if (index < holdings.length - 1) const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
   }
 }

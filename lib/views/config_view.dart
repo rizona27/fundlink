@@ -96,7 +96,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.togglePrivacyMode();
-            setState(() {});
+            if (mounted) setState(() {});  // ✅ 添加 mounted 检查
           },
         ),
         _buildDivider(isDarkMode),
@@ -108,7 +108,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.setShowHoldersOnSummaryCard(value);
-            setState(() {});
+            if (mounted) setState(() {});  // ✅ 添加 mounted 检查
           },
         ),
         _buildDivider(isDarkMode),
@@ -726,7 +726,7 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                       ],
                     ),
                   );
-                  setState(() {});
+                  if (mounted) setState(() {});  // ✅ 添加 mounted 检查
                 }
               } catch (e) {
                 await _dataManager.addLog('清空持仓失败: $e', type: LogType.error);

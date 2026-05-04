@@ -40,6 +40,8 @@ PODS:
   - file_saver (0.0.1):
     - Flutter
   - Flutter (1.0.0)
+  - flutter_memory_info (0.0.1):
+    - Flutter
   - open_file_ios (1.0.3):
     - Flutter
   - package_info_plus (0.4.5):
@@ -70,6 +72,7 @@ DEPENDENCIES:
   - file_save_directory (from `.symlinks/plugins/file_save_directory/ios`)
   - file_saver (from `.symlinks/plugins/file_saver/ios`)
   - Flutter (from `Flutter`)
+  - flutter_memory_info (from `.symlinks/plugins/flutter_memory_info/ios`)
   - open_file_ios (from `.symlinks/plugins/open_file_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
@@ -97,6 +100,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/file_saver/ios"
   Flutter:
     :path: Flutter
+  flutter_memory_info:
+    :path: ".symlinks/plugins/flutter_memory_info/ios"
   open_file_ios:
     :path: ".symlinks/plugins/open_file_ios/ios"
   package_info_plus:
@@ -122,6 +127,7 @@ SPEC CHECKSUMS:
   file_save_directory: 3f279c21bb0d050f346265445c26a66e7da841c7
   file_saver: 6cdbcddd690cb02b0c1a0c225b37cd805c2bf8b6
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_memory_info: ba0a8aa54cfbae8972fd65b014737e063cd75217
   open_file_ios: 46184d802ee7959203f6392abcfa0dd49fdb5be0
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880

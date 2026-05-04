@@ -102,19 +102,19 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   }
   
   Future<void> _loadFirstPage() async {
-    setState(() {
+    if (mounted) setState(() {  // ✅ 添加 mounted 检查
       _isInitialLoading = true;
     });
     
     try {
       final items = await widget.onLoadPage(0, widget.pageSize);
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _items = items;
         _isInitialLoading = false;
         _controller.setTotalCount(items.length); // 简化处理，实际应该从后端获取总数
       });
     } catch (e) {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _isInitialLoading = false;
       });
     }
@@ -122,7 +122,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   
   Future<void> _onRefresh() async {
     if (widget.onRefresh != null) {
-      await widget.onRefresh!();
+      widget.onRefresh!();  // ✅ 修复：VoidCallback返回void，不能await
     }
     await _loadFirstPage();
   }
@@ -182,9 +182,9 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
         return false;
       },
       child: widget.enablePullRefresh
-        ? CupertinoScrollView(
+        ? CustomScrollView(  // ✅ 修复：使用 CustomScrollView 而不是 CupertinoScrollView
             physics: const BouncingScrollPhysics(),
-            children: [
+            slivers: [  // ✅ 修复：使用 slivers 而不是 children
               CupertinoSliverRefreshControl(
                 onRefresh: _onRefresh,
               ),
@@ -226,7 +226,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
                     
                     return AnimationConfig.fadeTransition(
                       duration: const Duration(milliseconds: 300),
-                      delay: Duration(milliseconds: 50 * (index % 10)),
+                      opacity: 1.0,  // ✅ 修复：添加必需的 opacity 参数
                       child: widget.itemBuilder(context, _items[index], index),
                     );
                   },
@@ -274,7 +274,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
               
               return AnimationConfig.fadeTransition(
                 duration: const Duration(milliseconds: 300),
-                delay: Duration(milliseconds: 50 * (index % 10)),
+                opacity: 1.0,  // ✅ 修复：添加必需的 opacity 参数
                 child: widget.itemBuilder(context, _items[index], index),
               );
             },

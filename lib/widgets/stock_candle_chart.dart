@@ -109,7 +109,7 @@ class StockCandleChartState extends State<StockCandleChart> {
   Future<void> _loadInitialData() async {
     if (_isLoading) return;
     
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
     
     try {
       final now = DateTime.now();
@@ -319,6 +319,8 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
+      debugPrint('加载K线数据失败 (${widget.stockCode}): $e');
+      // 静默失败，不影响用户界面
     }
   }
   
@@ -348,7 +350,7 @@ class StockCandleChartState extends State<StockCandleChart> {
   Future<void> _loadData({int retryCount = 0}) async {
     if (_isLoading) return;
     
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
 
     try {
       String formattedSecid = widget.stockCode;
@@ -466,7 +468,7 @@ class StockCandleChartState extends State<StockCandleChart> {
         return;
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);  // ✅ 添加 mounted 检查
     }
   }
 
@@ -620,6 +622,8 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
+      debugPrint('加载K线数据失败 (${widget.stockCode}): $e');  // ✅ 修复：使用 widget.stockCode
+      // 静默失败，不影响用户界面
     }
   }
 

@@ -248,6 +248,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         await _cacheTrendDataAndUpdateLatest(fundCode);
       }
     } catch (e) {
+      debugPrint('加载基金信息失败 ($fundCode): $e');
+      // 静默失败，不影响用户输入
     }
   }
   
@@ -260,6 +262,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         });
       }
     } catch (e) {
+      debugPrint('缓存基金趋势数据失败 ($fundCode): $e');
+      // 静默失败，不影响主要功能
     }
   }
   
@@ -269,23 +273,27 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (mounted && trendData.isNotEmpty) {
         final latestPoint = trendData.last;
         
-        setState(() {
-          _cachedTrendData = trendData;
-          
-          if (_navDate == null || latestPoint.date.isAfter(_navDate!)) {
-            _currentNav = latestPoint.nav;
-            _navDate = latestPoint.date;
+        if (mounted) {  // ✅ 添加 mounted 检查
+          setState(() {
+            _cachedTrendData = trendData;
             
-            if (!_isTodayTransaction) {
-              _confirmNav = latestPoint.nav;
-              if (_confirmNav != null && _confirmNav! > 0) {
-                _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+            if (_navDate == null || latestPoint.date.isAfter(_navDate!)) {
+              _currentNav = latestPoint.nav;
+              _navDate = latestPoint.date;
+              
+              if (!_isTodayTransaction) {
+                _confirmNav = latestPoint.nav;
+                if (_confirmNav != null && _confirmNav! > 0) {
+                  _confirmNavController.text = _confirmNav!.toStringAsFixed(4);
+                }
               }
             }
-          }
-        });
+          });
+        }
       }
     } catch (e) {
+      debugPrint('更新最新净值失败 ($fundCode): $e');
+      // 静默失败，使用已有数据
     }
   }
   
@@ -586,10 +594,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       builder: (context) => _DatePickerModal(
         initialDate: _purchaseDate,
         onConfirm: (newDate) async {
-          setState(() {
-            _purchaseDate = newDate;
-            _pendingHintFuture = null;
-          });
+          if (mounted) {  // ✅ 添加 mounted 检查
+            setState(() {
+              _purchaseDate = newDate;
+              _pendingHintFuture = null;
+            });
+          }
           await _updatePendingStatus();
           
           if (_fundCodeController.text.trim().length == 6) {
@@ -614,10 +624,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDateNotAvailable = !targetNavDate.isBefore(today);
       
       if (navDateNotAvailable) {
-        setState(() {
-          _confirmNavController.clear();
-          _confirmNav = null;
-        });
+        if (mounted) {  // ✅ 添加 mounted 检查
+          setState(() {
+            _confirmNavController.clear();
+            _confirmNav = null;
+          });
+        }
         return;
       }
       
@@ -686,8 +698,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           _calculateShares();
         }
       } else {
+        debugPrint('未找到 $fundCode 在 ${targetDate.year}-${targetDate.month}-${targetDate.day} 的净值数据');
       }
     } catch (e) {
+      debugPrint('根据日期获取净值失败 ($fundCode): $e');
+      // 静默失败，用户可以手动输入
     }
   }
 
@@ -818,10 +833,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                         _buildTimeSegmentField(
                           isAfter1500: _isAfter1500,
                           onChanged: (value) async {
-                            setState(() {
-                              _isAfter1500 = value;
-                              _pendingHintFuture = null;
-                            });
+                            if (mounted) {  // ✅ 添加 mounted 检查
+                              setState(() {
+                                _isAfter1500 = value;
+                                _pendingHintFuture = null;
+                              });
+                            }
                             await _updatePendingStatus();
                             if (_fundCodeController.text.trim().length == 6) {
                               await _fetchNavByDate(_fundCodeController.text.trim(), _purchaseDate);

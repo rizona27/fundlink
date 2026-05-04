@@ -96,11 +96,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
   Future<void> _fetchCurrentNavIfNeeded() async {
     if (_isTodayTransaction) {
-      setState(() => _isFetchingNav = false);
+      if (mounted) setState(() => _isFetchingNav = false);  // ✅ 添加 mounted 检查
       return;
     }
     
-    setState(() => _isFetchingNav = true);
+    if (mounted) setState(() => _isFetchingNav = true);  // ✅ 添加 mounted 检查
     try {
       final fundService = FundService(_dataManager);
       final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
@@ -227,10 +227,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       builder: (context) => _TransactionDatePickerModal(
         initialDate: _tradeDate,
         onConfirm: (date) {
-          setState(() {
-            _tradeDate = date;
-            _pendingHintFuture = null;
-          });
+          if (mounted) {  // ✅ 添加 mounted 检查
+            setState(() {
+              _tradeDate = date;
+              _pendingHintFuture = null;
+            });
+          }
           _updatePendingStatus().then((_) {
             _fetchNavByDate().then((_) {
               if (!_isTodayTransaction && mounted) {
@@ -251,7 +253,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
       
       if (isPending) {
-        if (_navController.text.isEmpty) {
+        if (_navController.text.isEmpty && mounted) {  // ✅ 添加 mounted 检查
           setState(() {
             _navController.clear();
           });
@@ -305,6 +307,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         }
       }
     } catch (e) {
+      debugPrint('根据日期获取净值失败 (${widget.fundCode}): $e');  // ✅ 修复：使用 widget.fundCode
+      // 静默失败，用户可以手动输入
     }
   }
 

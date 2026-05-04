@@ -30,6 +30,37 @@ extension ThemeModeDisplayName on ThemeMode {
   }
 }
 
+/// 数据管理器 - 应用核心数据服务
+/// 
+/// 负责管理所有业务数据，包括：
+/// - 持仓管理（增删改查）
+/// - 交易记录管理
+/// - 日志系统
+/// - 缓存管理（智能缓存 + 自动清理）
+/// - 用户设置（隐私模式、主题等）
+/// - 估值数据刷新
+/// 
+/// 特性：
+/// - 跨平台支持（Web 使用 SharedPreferences，移动端/桌面端使用 SQLite）
+/// - 智能缓存机制（TTL + LRU）
+/// - 自动内存监控和缓存清理
+/// - 响应式数据更新（ChangeNotifier）
+/// 
+/// 使用示例：
+/// ```dart
+/// final dataManager = DataManager();
+/// 
+/// // 监听数据变化
+/// dataManager.addListener(() {
+///   print('数据已更新');
+/// });
+/// 
+/// // 添加持仓
+/// await dataManager.addHolding(holding);
+/// 
+/// // 获取持仓列表
+/// final holdings = dataManager.holdings;
+/// ```
 class DataManager extends ChangeNotifier {
   final DatabaseRepository? _repository = kIsWeb ? null : DatabaseRepository();
 
@@ -51,6 +82,9 @@ class DataManager extends ChangeNotifier {
 
   bool _shouldNotifyListeners = true;
   
+  // 防止已销毁后仍执行操作
+  bool _disposed = false;
+  
   // 使用智能缓存
   final SmartCache<String, ProfitResult> _profitCache = SmartCache(
     maxSize: 50,
@@ -61,6 +95,11 @@ class DataManager extends ChangeNotifier {
     maxSize: 30,
     ttl: const Duration(hours: 1),
   );
+  
+  // 内存监控和自动清理
+  Timer? _cacheCleanupTimer;
+  static const int memoryWarningThresholdMB = 200;
+  static const int memoryCriticalThresholdMB = 400;
   
   // 版本信息
   VersionInfo? _latestVersionInfo;
@@ -114,6 +153,85 @@ class DataManager extends ChangeNotifier {
 
   DataManager() {
     loadData();
+    _startCacheCleanup();
+  }
+  
+  /// 启动定期缓存清理
+  void _startCacheCleanup() {
+    if (_disposed) return;  // ✅ 防止已销毁后仍启动
+    
+    // 每 5 分钟清理一次过期缓存
+    _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (!_disposed) {  // ✅ 每次执行前检查
+        _cleanupExpiredCaches();
+      }
+    });
+  }
+  
+  /// 清理过期缓存
+  Future<void> _cleanupExpiredCaches() async {
+    if (_disposed) return;  // ✅ 防止已销毁后仍执行
+    
+    try {
+      // 清理收益缓存
+      final profitCleaned = _profitCache.cleanup();
+      if (profitCleaned > 0) {
+        debugPrint('清理收益缓存: $profitCleaned 条');
+      }
+      
+      // 清理交易历史缓存
+      final transactionCleaned = _transactionHistoryCache.cleanup();
+      if (transactionCleaned > 0) {
+        debugPrint('清理交易历史缓存: $transactionCleaned 条');
+      }
+      
+      // 检查内存使用情况，如果超过阈值则主动清理
+      await _checkMemoryAndCleanup();
+    } catch (e) {
+      debugPrint('缓存清理异常: $e');
+    }
+  }
+  
+  /// 检查内存并主动清理
+  Future<void> _checkMemoryAndCleanup() async {
+    try {
+      // 这里可以集成 MemoryMonitor 来获取真实内存数据
+      // 简化版本：当缓存数量超过一定阈值时主动清理
+      if (_profitCache.size > 40 || _transactionHistoryCache.size > 25) {
+        debugPrint('缓存数量较多，执行主动清理');
+        _profitCache.clear();
+        _transactionHistoryCache.clear();
+        await addLog('内存优化：已清理缓存', type: LogType.info);
+      }
+    } catch (e) {
+      debugPrint('内存检查异常: $e');
+    }
+  }
+  
+  /// 手动触发缓存清理（供外部调用）
+  Future<void> forceCleanupCaches() async {
+    if (_disposed) return;  // ✅ 防止已销毁后仍执行
+    
+    _profitCache.clear();
+    _transactionHistoryCache.clear();
+    await addLog('手动清理所有缓存', type: LogType.info);
+  }
+  
+  /// 释放资源（在应用退出时调用）
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    
+    // 取消定时器
+    _cacheCleanupTimer?.cancel();
+    _cacheCleanupTimer = null;
+    
+    // 清理所有缓存
+    _profitCache.clear();
+    _transactionHistoryCache.clear();
+    
+    super.dispose();
   }
 
   Future<void> loadData() async {
@@ -333,6 +451,8 @@ class DataManager extends ChangeNotifier {
         }
       }
     } catch (e) {
+      debugPrint('格式化估值时间失败 ($gztime): $e');
+      // 返回原始字符串
     }
     return gztime;
   }
@@ -572,6 +692,22 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 更新持仓信息
+  /// 
+  /// 用于更新持仓的净值、收益率等动态数据。
+  /// 注意：此方法不会触发交易记录重建，仅更新持仓对象本身。
+  /// 
+  /// 参数：
+  /// - [updatedHolding]: 更新后的持仓对象
+  /// 
+  /// 异常：
+  /// - [Exception]: 当持仓不存在时抛出
+  /// 
+  /// 示例：
+  /// ```dart
+  /// final updated = holding.copyWith(currentNav: 1.2345, navDate: DateTime.now());
+  /// await dataManager.updateHolding(updated);
+  /// ```
   Future<void> updateHolding(FundHolding updatedHolding) async {
     final index = _holdings.indexWhere((h) => h.id == updatedHolding.id);
     if (index == -1) {
@@ -632,6 +768,7 @@ class DataManager extends ChangeNotifier {
             }
           }
         } catch (e) {
+          await addLog('自动确认单笔交易失败 (${tx.fundCode}): $e', type: LogType.error);
         }
       }
       
@@ -644,6 +781,17 @@ class DataManager extends ChangeNotifier {
     }
   }
 
+  /// 删除持仓
+  /// 
+  /// 根据索引删除指定持仓，同时会删除相关的交易记录。
+  /// 
+  /// 参数：
+  /// - [index]: 持仓在列表中的索引位置
+  /// 
+  /// 注意：
+  /// - 删除操作不可逆
+  /// - 会自动清理相关缓存
+  /// - 会记录日志
   Future<void> deleteHoldingAt(int index) async {
     if (index < 0 || index >= _holdings.length) return;
 
@@ -684,7 +832,29 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
+  /// 刷新所有持仓信息
+  /// 
+  /// [fundService] 基金服务
+  /// [onProgress] 进度回调函数 (current, total)
+  /// 刷新所有持仓信息
+  /// 
+  /// 从 API 获取最新的基金净值和收益率数据，并更新所有持仓。
+  /// 此方法会：
+  /// 1. 批量获取基金信息（每批5个，避免并发过多）
+  /// 2. 自动确认已到确认日的待确认交易
+  /// 3. 更新持仓的净值、收益率等字段
+  /// 
+  /// 参数：
+  /// - [fundService]: 基金服务实例，用于调用 API
+  /// - [onProgress]: 进度回调函数 (current, total)
+  /// 
+  /// 示例：
+  /// ```dart
+  /// await dataManager.refreshAllHoldings(fundService, (current, total) {
+  ///   print('进度: $current/$total');
+  /// });
+  /// ```
+  Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress) async {
     final total = _holdings.length;
     
     const batchSize = 5; 
@@ -710,6 +880,7 @@ class DataManager extends ChangeNotifier {
             _holdings[index] = updated;
           }
           
+          // 自动确认相关待确认交易
           await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
         } else {
           await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
@@ -723,6 +894,18 @@ class DataManager extends ChangeNotifier {
     }
     
     await commitBatchUpdates();
+  }
+  
+  /// 向后兼容的方法名（已废弃，请使用 refreshAllHoldings）
+  @Deprecated('Use refreshAllHoldings instead')
+  Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
+    await refreshAllHoldings(fundService, onProgress);
+  }
+  
+  /// 向后兼容的方法名（已废弃，请使用 refreshAllHoldings）
+  @Deprecated('Use refreshAllHoldings instead')
+  Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
+    await refreshAllHoldings(fundService, onProgress);
   }
 
   Future<void> togglePinStatus(String holdingId) async {
@@ -757,47 +940,6 @@ class DataManager extends ChangeNotifier {
       await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
       notifyListeners();
     }
-  }
-
-  Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
-    final total = _holdings.length;
-    
-    const batchSize = 5; 
-    for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
-      final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
-      
-      for (int i = batchStart; i < batchEnd; i++) {
-        final holding = _holdings[i];
-        final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
-        if (fetched['isValid'] == true) {
-          final index = _holdings.indexWhere((h) => h.id == holding.id);
-          if (index != -1) {
-            final updated = _holdings[index].copyWith(
-              fundName: fetched['fundName'] as String? ?? holding.fundName,
-              currentNav: fetched['currentNav'] as double? ?? holding.currentNav,
-              navDate: fetched['navDate'] as DateTime? ?? holding.navDate,
-              isValid: true,
-              navReturn1m: fetched['navReturn1m'],
-              navReturn3m: fetched['navReturn3m'],
-              navReturn6m: fetched['navReturn6m'],
-              navReturn1y: fetched['navReturn1y'],
-            );
-            _holdings[index] = updated;
-          }
-          
-          await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
-        } else {
-          await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
-        }
-        onProgress?.call(i + 1, total);
-      }
-      
-      if (batchEnd < total) {
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-    }
-    
-    await commitBatchUpdates();
   }
 
   Future<void> addLog(String message, {LogType type = LogType.info}) async {
@@ -1198,6 +1340,11 @@ class DataManagerProvider extends InheritedWidget {
     final provider = context.dependOnInheritedWidgetOfExactType<DataManagerProvider>();
     assert(provider != null, 'No DataManagerProvider found in context');
     return provider!.dataManager;
+  }
+  
+  static DataManager? maybeOf(BuildContext context) {  // ✅ 添加 maybeOf 方法
+    final provider = context.dependOnInheritedWidgetOfExactType<DataManagerProvider>();
+    return provider?.dataManager;
   }
 
   @override

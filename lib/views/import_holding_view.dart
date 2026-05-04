@@ -1200,7 +1200,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    // ✅ 修复：file_picker 11.x API变更，直接使用 FilePicker.pickFiles
+    final result = await FilePicker.pickFiles(  // 移除 .platform
       type: FileType.custom,
       allowedExtensions: ['csv', 'xlsx', 'xls'],
       withData: true,
@@ -1217,10 +1218,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         return;
       }
       
-      setState(() {
-        _fileResult = result;
-        _fileName = result.files.single.name;
-      });
+      if (mounted) {  // ✅ 添加 mounted 检查
+        setState(() {
+          _fileResult = result;
+          _fileName = result.files.single.name;
+        });
+      }
       _processFile();
     }
   }
@@ -1269,7 +1272,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
 
   Future<void> _processFile() async {
     if (_fileResult == null) return;
-    setState(() => _isProcessing = true);
+    if (mounted) setState(() => _isProcessing = true);  // ✅ 添加 mounted 检查
     try {
       final file = _fileResult!.files.single;
       final bytes = file.bytes;
@@ -1362,12 +1365,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     try {
       return DateTime.parse(dateStr);
     } catch (_) {
+      // 尝试其他格式
     }
     final parts = dateStr.split('-');
     if (parts.length == 3) {
       try {
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       } catch (_) {
+        // 继续尝试其他格式
       }
     }
     final slashParts = dateStr.split('/');
@@ -1375,16 +1380,19 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       try {
         return DateTime(int.parse(slashParts[0]), int.parse(slashParts[1]), int.parse(slashParts[2]));
       } catch (_) {
+        // 所有格式都失败，返回 null
       }
     }
     return null;
   }
 
   Future<void> _startImport() async {
-    setState(() {
-      _isImporting = true;
-      _importProgress = 0;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _isImporting = true;
+        _importProgress = 0;
+      });
+    }
 
     final dataManager = DataManagerProvider.of(context);
     final fundService = FundService(dataManager);

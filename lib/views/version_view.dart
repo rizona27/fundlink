@@ -9,9 +9,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.4';
+const String APP_VERSION = 'v1.2.5';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.5 - 新增跨平台内存监控、修复Web端编译问题',
   'v1.2.4 - 数据访问层封装，SQLite 存储，优化TTL 过期和容量限制',
   'v1.2.3 - 安全加固：新增文件大小限制、客户姓名长度限制、错误消息脱敏',
   'v1.2.2 - 估值模块根据交易时间优化，优化股票图在不同网络下的表现',
@@ -218,9 +219,11 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
   Future<void> _handleUpdateTap() async {
     if (_isChecking) return; // 防止重复点击
     
-    setState(() {
-      _isChecking = true;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _isChecking = true;
+      });
+    }
 
     try {
       final dataManager = DataManagerProvider.of(context);

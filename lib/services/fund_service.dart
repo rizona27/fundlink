@@ -196,8 +196,10 @@ class FundService {
             navDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
           }
         } catch (e) {
+          _dataManager?.addLog('基金 $code 解析净值趋势数据失败: $e', type: LogType.error);
         }
       } else {
+        _dataManager?.addLog('基金 $code 未找到净值趋势数据', type: LogType.error);
       }
 
       double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
@@ -653,9 +655,11 @@ class FundService {
         try {
           jsString = utf8.decode(bodyBytes);
         } catch (e) {
+          _dataManager?.addLog('基金 $code 解码响应失败: $e', type: LogType.error);
           try {
             jsString = String.fromCharCodes(bodyBytes);
           } catch (e2) {
+            _dataManager?.addLog('基金 $code 二次解码也失败: $e2', type: LogType.error);
             continue;
           }
         }
@@ -684,8 +688,10 @@ class FundService {
         try {
           data = jsonDecode(jsonStr);
         } on FormatException catch (e) {
+          _dataManager?.addLog('基金 $code JSON格式错误: $e', type: LogType.error);
           continue;
         } catch (e) {
+          _dataManager?.addLog('基金 $code JSON解析异常: $e', type: LogType.error);
           continue;
         }
 
@@ -701,6 +707,7 @@ class FundService {
           gsz = double.tryParse(gszStr) ?? 0.0;
           gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
         } catch (e) {
+          _dataManager?.addLog('基金 $code 解析估值数据失败: $e', type: LogType.error);
           continue;
         }
 
@@ -782,6 +789,7 @@ class FundService {
             ));
           }
         } catch (e) {
+          _dataManager?.addLog('解析指数数据行失败: $e', type: LogType.error);
           continue;
         }
       }
@@ -809,4 +817,53 @@ class FundService {
     // 清除内存缓存
     _navCache.remove(code);
   }
+  
+  /// 并行获取基金的完整数据（净值趋势、基准数据、重仓股）
+  /// 
+  /// 这个方法会同时发起多个 API 请求，提高加载速度
+  Future<FundCompleteData> fetchFundCompleteData(String code) async {
+    try {
+      // 并行发起三个请求
+      final results = await Future.wait([
+        fetchNetWorthTrend(code).catchError((e) {
+          _dataManager?.addLog('获取净值趋势失败: $e', type: LogType.error);
+          return <NetWorthPoint>[];
+        }),
+        fetchBenchmarkData(code).catchError((e) {
+          _dataManager?.addLog('获取基准数据失败: $e', type: LogType.error);
+          return <String, List<NetWorthPoint>>{'average': [], 'hs300': []};
+        }),
+        fetchTopHoldingsFromHtml(code).catchError((e) {
+          _dataManager?.addLog('获取重仓股失败: $e', type: LogType.error);
+          return <TopHolding>[];
+        }),
+      ]);
+      
+      return FundCompleteData(
+        netWorthPoints: results[0] as List<NetWorthPoint>,
+        benchmarkData: results[1] as Map<String, List<NetWorthPoint>>,
+        topHoldings: results[2] as List<TopHolding>,
+      );
+    } catch (e) {
+      _dataManager?.addLog('获取基金完整数据失败: $e', type: LogType.error);
+      return FundCompleteData(
+        netWorthPoints: [],
+        benchmarkData: {'average': [], 'hs300': []},
+        topHoldings: [],
+      );
+    }
+  }
+}
+
+/// 基金完整数据
+class FundCompleteData {
+  final List<NetWorthPoint> netWorthPoints;
+  final Map<String, List<NetWorthPoint>> benchmarkData;
+  final List<TopHolding> topHoldings;
+  
+  FundCompleteData({
+    required this.netWorthPoints,
+    required this.benchmarkData,
+    required this.topHoldings,
+  });
 }

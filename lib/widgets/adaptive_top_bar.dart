@@ -463,7 +463,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       return;
     }
 
-    setState(() => _isRefreshing = true);
+    if (mounted) setState(() => _isRefreshing = true);  // ✅ 添加 mounted 检查
     context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
 
     try {
@@ -488,7 +488,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
-    setState(() => _isRefreshing = true);
+    if (mounted) setState(() => _isRefreshing = true);  // ✅ 添加 mounted 检查
     context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
 
     try {
@@ -1116,6 +1116,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         try {
           overlayEntry?.remove();
         } catch (e) {
+          debugPrint('移除菜单失败: $e');
+          // 可能已经被移除，忽略错误
         }
       }
     }
@@ -1126,6 +1128,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       try {
         overlayEntry?.remove();
       } catch (e) {
+        debugPrint('立即关闭菜单失败: $e');
+        // 可能已经被移除，忽略错误
       }
     }
     
@@ -1137,6 +1141,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             _closeMenuWithAnimation();
           }
         } catch (e) {
+          debugPrint('自动关闭菜单失败: $e');
+          // 定时器执行失败，静默处理
         }
       });
     }
@@ -1566,6 +1572,8 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
         await _controller.reverse();
       }
     } catch (e) {
+      debugPrint('关闭动画失败: $e');
+      // 动画已取消或完成，忽略错误
     }
     if (mounted) {
       widget.onHide();

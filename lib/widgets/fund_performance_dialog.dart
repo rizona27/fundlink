@@ -59,7 +59,7 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   }
 
   Future<void> _loadPerformanceData() async {
-    setState(() {
+    if (mounted) setState(() {  // ✅ 添加 mounted 检查
       _loading = true;
       _error = null;
     });
@@ -148,12 +148,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
           _periodDateRanges[label] = '${_formatDate(startDate)} ~ ${_formatDate(endDate)}';
         }
       }
-
-      setState(() {
+      
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _loading = false;
       });
     } catch (e) {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _error = e.toString();
         _loading = false;
       });

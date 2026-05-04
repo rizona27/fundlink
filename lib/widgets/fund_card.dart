@@ -53,7 +53,20 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   }
 
   void _onDataManagerChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    
+    // 选择性更新：只在持仓仍然存在时才重建
+    final holdingStillExists = _dataManager?.holdings.any((h) => h.id == widget.holding.id) ?? false;
+    
+    if (holdingStillExists) {
+      setState(() {});
+    } else {
+      // 持仓已被删除，移除监听器避免内存泄漏
+      if (_isListenerRegistered && _dataManager != null) {
+        _dataManager!.removeListener(_onDataManagerChanged);
+        _isListenerRegistered = false;
+      }
+    }
   }
 
   @override

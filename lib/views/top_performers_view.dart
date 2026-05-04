@@ -390,14 +390,16 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onSortKeyChanged(SortKey key) async {
-    setState(() {
-      if (_sortKey == key) {
-        _sortOrder = _sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
-      } else {
-        _sortKey = key;
-        _sortOrder = SortOrder.descending;
-      }
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        if (_sortKey == key) {
+          _sortOrder = _sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
+        } else {
+          _sortKey = key;
+          _sortOrder = SortOrder.descending;
+        }
+      });
+    }
     await _saveSortState(); 
     _updateCachedItems();
     String sortType = key.displayName;
@@ -406,9 +408,11 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onSortOrderChanged(SortOrder order) async {
-    setState(() {
-      _sortOrder = order;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _sortOrder = order;
+      });
+    }
     await _saveSortState(); 
     _updateCachedItems();
     String sortType = _sortKey.displayName;
@@ -511,9 +515,15 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final hasData = _hasData;
     final items = _cachedItems;
 
-    return Container(
-      color: backgroundColor,
-      child: SafeArea(
+    return GestureDetector(
+      onTap: () {
+        // ✅ 点击外部时收起键盘
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Container(
+        color: backgroundColor,
+        child: SafeArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollUpdateNotification) {
@@ -621,6 +631,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           ),
         ),
       ),
+      ),  // ✅ GestureDetector 结束
     );
   }
 
@@ -743,7 +754,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   fontSize: 12,
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),  // ✅ 允许正负小数
                 inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 
@@ -780,7 +791,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   fontSize: 12,
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),  // ✅ 允许正负小数
                 inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 

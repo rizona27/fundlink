@@ -123,7 +123,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       return;
     }
 
-    setState(() {
+    if (mounted) setState(() {  // ✅ 添加 mounted 检查
       _isDownloading = true;
       _downloadStatus = '准备下载...';
     });
@@ -148,7 +148,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         
         if (totalBytes > 0) {
           final progress = receivedBytes / totalBytes;
-          setState(() {
+          if (mounted) setState(() {  // ✅ 添加 mounted 检查
             _downloadProgress = progress;
             _downloadStatus = '下载中: ${(progress * 100).toStringAsFixed(1)}%';
           });
@@ -157,7 +157,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
       await sink.close();
 
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _downloadStatus = '下载完成，准备安装...';
       });
 
@@ -170,7 +170,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       }
 
     } catch (e) {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _isDownloading = false;
         _downloadStatus = '下载失败: $e';
       });

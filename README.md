@@ -96,7 +96,9 @@ lib/
 ├── utils/
 │   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
 │   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名、客户号等格式化器
-│   ├── memory_monitor.dart                # 内存监控工具类，监控应用内存使用情况，防止内存泄漏
+│   ├── memory_info_native.dart            # 原生平台内存信息实现（iOS/Android/macOS），使用 flutter_memory_info
+│   ├── memory_info_web.dart               # Web平台内存信息实现，使用 Performance API 或估算值
+│   ├── memory_monitor.dart                # 内存监控工具类，跨平台兼容，监控应用内存使用情况，防止内存泄漏
 │   ├── security_utils.dart                # 安全工具类，错误消息脱敏、敏感数据掩码、输入清理
 │   └── smart_cache.dart                   # 智能 LRU 缓存工具类，支持 TTL 过期和容量限制，用于 API 数据缓存
 │

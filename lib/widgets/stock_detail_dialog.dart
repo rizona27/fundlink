@@ -83,8 +83,8 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   }
 
   Future<void> _loadStockData({bool refreshOnly = false}) async {
-    if (!refreshOnly) {
-      setState(() => _loading = true);
+    if (!refreshOnly && mounted) {
+      setState(() => _loading = true);  // ✅ 添加 mounted 检查
     }
     
     try {

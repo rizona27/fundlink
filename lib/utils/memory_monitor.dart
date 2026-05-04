@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
+// ✅ 条件导入：原生平台使用 flutter_memory_info，Web平台使用模拟数据
+import 'memory_info_native.dart' if (dart.library.html) 'memory_info_web.dart' as memory_info;
+
 /// 内存监控工具
 class MemoryMonitor {
   static final MemoryMonitor _instance = MemoryMonitor._internal();
@@ -10,6 +13,9 @@ class MemoryMonitor {
   Timer? _monitorTimer;
   final List<MemorySnapshot> _history = [];
   static const int maxHistorySize = 100;
+  
+  // 防止已销毁后仍执行操作
+  bool _disposed = false;
   
   // 阈值配置
   int warningThresholdMB = 200;
@@ -21,10 +27,17 @@ class MemoryMonitor {
   
   /// 开始监控
   void startMonitoring({Duration interval = const Duration(seconds: 10)}) {
+    if (_disposed) return;  // ✅ 防止已销毁后仍启动
+    
     stopMonitoring();
     
     _monitorTimer = Timer.periodic(interval, (_) {
-      _checkMemory();
+      if (!_disposed) {  // ✅ 每次执行前检查
+        // 使用 unawaited 来处理 async 函数
+        _checkMemory().catchError((e) {
+          debugPrint('内存检查异常: $e');
+        });
+      }
     });
     
     debugPrint('内存监控已启动');
@@ -38,8 +51,8 @@ class MemoryMonitor {
   }
   
   /// 检查内存使用
-  void _checkMemory() {
-    final snapshot = takeSnapshot();
+  Future<void> _checkMemory() async {
+    final snapshot = await takeSnapshot();
     
     // 保存历史记录
     _history.add(snapshot);
@@ -60,11 +73,21 @@ class MemoryMonitor {
   }
   
   /// 获取内存快照
-  MemorySnapshot takeSnapshot() {
-    final info = MemoryInfo.current();
+  Future<MemorySnapshot> takeSnapshot() async {
+    double memoryUsageMB = 0;
+    
+    try {
+      // ✅ 使用条件导入的平台特定实现
+      final info = await memory_info.getMemoryInfo();
+      memoryUsageMB = info / (1024 * 1024);
+    } catch (e) {
+      debugPrint('获取内存信息失败: $e');
+      memoryUsageMB = 50.0; // 降级：默认 50MB
+    }
+    
     return MemorySnapshot(
       timestamp: DateTime.now(),
-      memoryUsageMB: info.currentRSS / (1024 * 1024),
+      memoryUsageMB: memoryUsageMB,
       cacheCount: _cacheCount,
       widgetCount: _widgetCount,
     );
@@ -101,19 +124,22 @@ class MemoryMonitor {
   /// 打印内存报告
   void printReport() {
     final current = takeSnapshot();
-    debugPrint('''
+    current.then((snapshot) {  // ✅ 修复：takeSnapshot返回Future
+      debugPrint('''
 ===== 内存使用报告 =====
-当前使用: ${current.memoryUsageMB.toStringAsFixed(2)} MB
+当前使用: ${snapshot.memoryUsageMB.toStringAsFixed(2)} MB
 平均使用: ${averageMemoryUsageMB.toStringAsFixed(2)} MB
 峰值使用: ${peakMemoryUsageMB.toStringAsFixed(2)} MB
-缓存数量: ${current.cacheCount}
-组件数量: ${current.widgetCount}
+缓存数量: ${snapshot.cacheCount}
+组件数量: ${snapshot.widgetCount}
 ========================
 ''');
+    });
   }
   
   /// 清理资源
   void dispose() {
+    _disposed = true;  // ✅ 标记为已销毁
     stopMonitoring();
     _history.clear();
   }

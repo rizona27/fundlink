@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';  // ✅ 添加 debugPrint
 import 'package:http/http.dart' as http;
 import 'package:world_holidays/world_holidays.dart';
 
@@ -136,6 +137,8 @@ class ChinaTradingDayService {
         }
       }
     } catch (e) {
+      debugPrint('检查交易日失败 (${_formatDate(date)}): $e');
+      // API请求失败，返回null使用备用方案
     }
     
     return null;

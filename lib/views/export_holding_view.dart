@@ -243,13 +243,15 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-      _exportProgress = 0.0;
-      _exportError = null;
-      _exportSuccess = false;
-      _currentStep = 2;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _isExporting = true;
+        _exportProgress = 0.0;
+        _exportError = null;
+        _exportSuccess = false;
+        _currentStep = 2;
+      });
+    }
 
     try {
       final selectedFieldIds = _fields.where((f) => f.selected).map((f) => f.id).toList();
@@ -277,7 +279,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       context.showToast('导出失败: $e');
       _dataManager.addLog('导出失败: $e', type: LogType.error);
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) setState(() => _isExporting = false);  // ✅ 添加 mounted 检查
     }
   }
 

@@ -192,9 +192,11 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isRefreshing != widget.isRefreshing && !widget.isRefreshing) {
       _lastRefreshTime = DateTime.now();
-      setState(() {
-        _remainingSeconds = widget.refreshIntervalSeconds;
-      });
+      if (mounted) {  // ✅ 添加 mounted 检查
+        setState(() {
+          _remainingSeconds = widget.refreshIntervalSeconds;
+        });
+      }
     }
     if (oldWidget.refreshIntervalSeconds != widget.refreshIntervalSeconds) {
       print('DEBUG didUpdateWidget: refreshIntervalSeconds 从 ${oldWidget.refreshIntervalSeconds} 变为 ${widget.refreshIntervalSeconds}');

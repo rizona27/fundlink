@@ -16,6 +16,7 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/custom_fund_config_dialog.dart';
 import '../widgets/top_holdings_widget.dart';
 import '../widgets/stock_detail_dialog.dart';
+import '../widgets/error_boundary.dart';
 import 'history_view.dart';
 
 class FundDetailPage extends StatefulWidget {
@@ -98,12 +99,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
       final elapsed = DateTime.now().difference(_lastFetchTime!);
       if (elapsed < _cacheDuration) {
         await _refreshValuationOnly();
-        setState(() {});
+        if (mounted) setState(() {});  // ✅ 添加 mounted 检查
         return;
       }
     }
 
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);  // ✅ 添加 mounted 检查
     try {
       final rawTrend = await _fundService!.fetchNetWorthTrend(widget.holding.fundCode);
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
@@ -198,9 +199,11 @@ class _FundDetailPageState extends State<FundDetailPage> {
   Future<void> _refreshValuationOnly() async {
     try {
       final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
-      setState(() {
-        _valuation = valuation;
-      });
+      if (mounted) {  // ✅ 添加 mounted 检查
+        setState(() {
+          _valuation = valuation;
+        });
+      }
     } catch (e) {
       _dataManager?.addLog('基金 ${widget.holding.fundCode} 估值刷新失败: $e', type: LogType.error);
     }
@@ -210,24 +213,28 @@ class _FundDetailPageState extends State<FundDetailPage> {
     if (_topHoldings.isEmpty) return;
     final stockCodes = _topHoldings.map((h) => h.stockCode).toList();
     final quotes = await _fundService!.fetchStockQuotes(stockCodes);
-    setState(() {
-      _stockQuotes = quotes;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _stockQuotes = quotes;
+      });
+    }
   }
   
   Future<void> _refreshValuation() async {
     if (_isRefreshingValuation) return;
-    setState(() => _isRefreshingValuation = true);
+    if (mounted) setState(() => _isRefreshingValuation = true);  // ✅ 添加 mounted 检查
     try {
       final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
-      setState(() {
-        _valuation = valuation;
-      });
-      context.showToast('估值已刷新');
+      if (mounted) {
+        setState(() {
+          _valuation = valuation;
+        });
+      }
+      if (mounted) context.showToast('估值已刷新');
       _startCountdown();
     } catch (e) {
-      context.showToast('刷新失败: $e');
-      setState(() => _isRefreshingValuation = false);
+      if (mounted) context.showToast('刷新失败: $e');
+      if (mounted) setState(() => _isRefreshingValuation = false);
     }
   }
 
@@ -260,18 +267,22 @@ class _FundDetailPageState extends State<FundDetailPage> {
         return CustomFundConfigDialog(
           currentCode: _customFundCode,
           onConfirm: (newCode) async {
-            setState(() {
-              _customFundCode = newCode;
-              _loading = true;
-            });
+            if (mounted) {  // ✅ 添加 mounted 检查
+              setState(() {
+                _customFundCode = newCode;
+                _loading = true;
+              });
+            }
             
             try {
               final customData = await _fundService!.fetchNetWorthTrend(newCode);
               if (customData.isNotEmpty) {
-                setState(() {
-                  _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
-                  _loading = false;
-                });
+                if (mounted) {
+                  setState(() {
+                    _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
+                    _loading = false;
+                  });
+                }
                 
                 if (mounted) {
                   setState(() {});
@@ -279,15 +290,19 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 
                 context.showToast('已更新');
               } else {
-                setState(() {
-                  _loading = false;
-                });
+                if (mounted) {
+                  setState(() {
+                    _loading = false;
+                  });
+                }
                 context.showToast('基金数据为空');
               }
             } catch (e) {
-              setState(() {
-                _loading = false;
-              });
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                });
+              }
               context.showToast('加载失败');
             }
           },
@@ -366,18 +381,22 @@ class _FundDetailPageState extends State<FundDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RepaintBoundary(
-          key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
-          child: FundPerformanceChart(
-            fundPoints: _fundPointsWithChanges,
-            avgPoints: _avgPoints,
-            hsPoints: _hsPoints,
-            zz500Points: _zz500Points,
-            zz1000Points: _zz1000Points,
-            customFundPoints: _customFundPoints,
-            onCustomFundConfig: _showCustomFundConfigDialog,
-            fundCode: widget.holding.fundCode,
-            customFundCode: _customFundCode.isNotEmpty ? _customFundCode : null,
+        // 使用错误边界包裹图表组件，防止图表崩溃导致整个页面白屏
+        ErrorBoundary(
+          errorMessage: '图表加载失败',
+          child: RepaintBoundary(
+            key: ValueKey('chart_${widget.holding.fundCode}_${_fundPoints.length}'),
+            child: FundPerformanceChart(
+              fundPoints: _fundPointsWithChanges,
+              avgPoints: _avgPoints,
+              hsPoints: _hsPoints,
+              zz500Points: _zz500Points,
+              zz1000Points: _zz1000Points,
+              customFundPoints: _customFundPoints,
+              onCustomFundConfig: _showCustomFundConfigDialog,
+              fundCode: widget.holding.fundCode,
+              customFundCode: _customFundCode.isNotEmpty ? _customFundCode : null,
+            ),
           ),
         ),
       ],

@@ -94,8 +94,10 @@ class _MyAppState extends State<MyApp> {
     _currentBrightness = _getBrightness();
     _dataManager.addListener(_onThemeChanged);
     
-    // 等待网络权限授权后再检查版本
-    _waitForNetworkPermissionAndCheck();
+    // 等待网络权限授权后再检查版本（延迟执行，不阻塞启动）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _waitForNetworkPermissionAndCheck();
+    });
     
     // 启动时立即检查主题模式，确保在程序打开时就应用正确的主题
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -112,9 +114,9 @@ class _MyAppState extends State<MyApp> {
   
   /// 等待网络就绪后检查版本更新
   Future<void> _waitForNetworkPermissionAndCheck() async {
-    // 网络访问不需要特殊权限，直接等待2秒确保网络初始化完成
+    // 网络访问不需要特殊权限，直接等待1秒确保网络初始化完成（优化启动速度）
     debugPrint('等待网络初始化...');
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
     
     debugPrint('开始检查版本...');
     await _checkForUpdatesSilently();
@@ -139,10 +141,10 @@ class _MyAppState extends State<MyApp> {
       bool success = await _tryCheckVersion(currentVersion, '首次尝试');
       
       if (!success) {
-        // 3次快速重试，间隔5秒
+        // 3次快速重试，间隔3秒（优化启动速度）
         for (int i = 1; i <= 3; i++) {
-          debugPrint('快速重试 #$i/3，等待5秒...');
-          await Future.delayed(const Duration(seconds: 5));
+          debugPrint('快速重试 #$i/3，等待3秒...');
+          await Future.delayed(const Duration(seconds: 3));
           
           success = await _tryCheckVersion(currentVersion, '快速重试 #$i');
           if (success) return;
@@ -214,6 +216,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     _dataManager.removeListener(_onThemeChanged);
+    _dataManager.dispose();  // ✅ 释放 DataManager 资源，防止内存泄漏
     super.dispose();
   }
 

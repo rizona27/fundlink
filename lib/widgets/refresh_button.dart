@@ -156,9 +156,11 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   }
 
   Future<void> _performRefresh({required bool forceAll}) async {
-    setState(() {
-      _isRefreshing = true;
-    });
+    if (mounted) {  // ✅ 添加 mounted 检查
+      setState(() {
+        _isRefreshing = true;
+      });
+    }
 
     widget.onRefreshStart?.call();
 

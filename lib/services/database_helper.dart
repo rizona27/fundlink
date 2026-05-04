@@ -171,6 +171,11 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_holding ON transactions(holding_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(trade_date)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)');
+    
+    // 新增复合索引，优化常用查询
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_fund ON transactions(client_id, fund_code)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, trade_date DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)');
 
     debugPrint('数据库 schema 创建完成 (version $version)');
   }

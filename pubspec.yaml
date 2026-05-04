@@ -1,7 +1,7 @@
 name: fund_holding_management
 description: A fund holding management app
 publish_to: 'none'
-version: 1.2.4+24
+version: 1.2.5+25
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   http: ^1.2.0
-  shared_preferences: ^2.2.3
+  shared_preferences: ^2.5.5  # 升级到最新版本，性能提升和bug修复
   uuid: ^4.3.3
   fast_gbk: ^1.0.0
   fl_chart: ^0.70.0
@@ -22,7 +22,7 @@ dependencies:
   share_plus: ^7.2.2
   file_saver: ^0.3.1
   path_provider: ^2.1.5
-  file_picker: ^8.0.0
+  file_picker: ^11.0.2  # 重要安全更新，从 8.3.7 升级
   url_launcher: ^6.3.0
   universal_html: ^2.3.0
   mime: ^1.0.0
@@ -30,11 +30,13 @@ dependencies:
   world_holidays: ^2.0.1
   pinyin: ^3.3.0
   # 数据库相关
-  sqflite: ^2.3.0
-  sqflite_common_ffi: ^2.3.0  # Windows/macOS/Linux 支持
+  sqflite: ^2.3.0  # 保持稳定版本
+  sqflite_common_ffi: ^2.3.7+1  # Windows/macOS/Linux 支持（兼容 Dart 3.9）
   path: ^1.8.3
   # 版本信息
-  package_info_plus: ^9.0.1
+  package_info_plus: ^9.0.1  # 保持当前版本（兼容 Dart 3.9）
+  # 内存监控
+  flutter_memory_info: ^0.0.3
 
 dev_dependencies:
   flutter_test:

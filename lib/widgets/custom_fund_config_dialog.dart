@@ -40,14 +40,14 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
     final code = _codeController.text.trim();
     
     if (code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _validationError = '请输入6位数字';
         _fundExists = false;
       });
       return;
     }
 
-    setState(() {
+    if (mounted) setState(() {  // ✅ 添加 mounted 检查
       _isValidating = true;
       _validationError = null;
       _fundExists = false;
@@ -58,23 +58,23 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
       final data = await fundService.fetchNetWorthTrend(code);
       
       if (data.isNotEmpty) {
-        setState(() {
+        if (mounted) setState(() {  // ✅ 添加 mounted 检查
           _fundExists = true;
           _validationError = null;
         });
       } else {
-        setState(() {
+        if (mounted) setState(() {  // ✅ 添加 mounted 检查
           _fundExists = false;
           _validationError = '未找到该基金数据';
         });
       }
     } catch (e) {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _fundExists = false;
         _validationError = '基金不存在或网络错误';
       });
     } finally {
-      setState(() {
+      if (mounted) setState(() {  // ✅ 添加 mounted 检查
         _isValidating = false;
       });
     }
@@ -153,7 +153,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             onChanged: (_) {
                               if (_validationError != null || _fundExists) {
-                                setState(() {
+                                if (mounted) setState(() {  // ✅ 添加 mounted 检查
                                   _validationError = null;
                                   _fundExists = false;
                                 });

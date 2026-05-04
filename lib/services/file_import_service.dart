@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';  // ✅ 添加 debugPrint
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
 import '../models/fund_holding.dart';
@@ -360,6 +361,8 @@ class FileImportService {
           try {
             exportTime = DateTime.parse(timeStr);
           } catch (e) {
+            debugPrint('解析导出时间失败 ($timeStr): $e');
+            // 使用默认值
           }
         }
         continue;
@@ -390,6 +393,8 @@ class FileImportService {
           final holding = _csvRowToFullBackupHolding(row, holdingFieldMapping!);
           holdings.add(holding);
         } catch (e) {
+          debugPrint('解析持仓数据行失败: $e');
+          // 跳过无效行，继续处理其他行
         }
       }
       
@@ -404,6 +409,8 @@ class FileImportService {
           final transaction = _csvRowToFullBackupTransaction(row, transactionFieldMapping!);
           transactions.add(transaction);
         } catch (e) {
+          debugPrint('解析交易数据行失败: $e');
+          // 跳过无效行，继续处理其他行
         }
       }
     }
@@ -439,6 +446,8 @@ class FileImportService {
             final holding = _excelRowToFullBackupHolding(row, fieldMapping);
             holdings.add(holding);
           } catch (e) {
+            debugPrint('解析Excel持仓数据行失败: $e');
+            // 跳过无效行，继续处理其他行
           }
         }
       }
@@ -456,6 +465,8 @@ class FileImportService {
             final transaction = _excelRowToFullBackupTransaction(row, fieldMapping);
             transactions.add(transaction);
           } catch (e) {
+            debugPrint('解析Excel交易数据行失败: $e');
+            // 跳过无效行，继续处理其他行
           }
         }
       }
