@@ -88,9 +88,9 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // ✅ 动态计算：根据实际容器宽度计算滑块位置，避免硬编码
+        // ✅ 修复：滑块宽度 = 容器宽度 / 3，确保只覆盖当前选项
         final containerWidth = constraints.maxWidth;
-        const sliderWidth = 72.0; // 滑块宽度
+        final sliderWidth = containerWidth / 3; // 滑块宽度为容器的1/3
         const margin = 2.0; // 左右margin
         
         // 可移动距离 = 容器宽度 - 滑块宽度 - 左右margin
@@ -98,7 +98,6 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
         
         return Container(
           height: 36,
-          width: 240, 
           decoration: BoxDecoration(
             color: CupertinoColors.systemGrey5,
             borderRadius: BorderRadius.circular(18),

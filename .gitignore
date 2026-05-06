@@ -48,3 +48,4 @@
 # Backend
 /nas_backend/
 env
+*.sh

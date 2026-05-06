@@ -558,17 +558,23 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               ],
             ),
           ),
-          SizedBox(
-            width: 160,
-            height: 28,
-            child: FittedBox(
-              fit: BoxFit.fill,
-              child: ThemeSwitch(
-                initialMode: _dataManager.themeMode,
-                onChanged: (mode) {
-                  _dataManager.setThemeMode(mode);
-                  setState(() {});
-                },
+          const SizedBox(width: 12),
+          Flexible(
+            flex: 2,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minWidth: 180, // 最小宽度，保证文字可读性
+                maxWidth: 240, // 最大宽度，避免过大
+              ),
+              child: SizedBox(
+                height: 36,
+                child: ThemeSwitch(
+                  initialMode: _dataManager.themeMode,
+                  onChanged: (mode) {
+                    _dataManager.setThemeMode(mode);
+                    setState(() {});
+                  },
+                ),
               ),
             ),
           ),

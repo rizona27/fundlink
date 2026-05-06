@@ -861,6 +861,11 @@ class StockCandleChartState extends State<StockCandleChart> {
             height: 45,
             child: LayoutBuilder(
               builder: (context, constraints) {
+                // ✅ 修复：使用与蜡烛图完全相同的 offset 计算逻辑
+                final totalCandles = _candleDataList.length;
+                final int maxOffset = totalCandles > _actualVisibleCount ? totalCandles - _actualVisibleCount : 0;
+                final int actualOffset = _displayOffset.clamp(0, maxOffset);
+                
                 final volumeBarWidth = constraints.maxWidth / _actualVisibleCount;
                 
                 return ClipRect(  
@@ -871,7 +876,7 @@ class StockCandleChartState extends State<StockCandleChart> {
                       selectedIndex: _selectedIndex,
                       isDark: widget.isDark,
                       barWidth: volumeBarWidth,
-                      displayOffset: _displayOffset,
+                      displayOffset: actualOffset,  // ✅ 使用 actualOffset 而不是 _displayOffset
                       visibleCount: _actualVisibleCount,  
                     ),
                     size: Size(constraints.maxWidth, 45),

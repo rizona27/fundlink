@@ -65,53 +65,26 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     final now = DateTime.now();
     final weekday = now.weekday;
     
+    // ✅ 修复：周末不交易
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return true;
     }
     
-    final holdings = _dataManager.holdings;
-    if (holdings.isEmpty) return false;
+    // ✅ 修复：检查当前时间是否在交易时间内，而不是检查估值时间
+    final hour = now.hour;
+    final minute = now.minute;
+    final currentTime = hour * 60 + minute;
     
-    DateTime? latestValuationTime;
-    for (final holding in holdings) {
-      final cache = _dataManager.getValuation(holding.fundCode);
-      if (cache != null && cache['gztime'] != null) {
-        final gztimeStr = cache['gztime'] as String;
-        if (gztimeStr.isNotEmpty) {
-          try {
-            final parts = gztimeStr.split(' ');
-            final datePart = parts[0];
-            final timePart = parts.length > 1 ? parts[1] : '15:00';
-            
-            final dateTime = DateTime.parse('$datePart $timePart');
-            if (latestValuationTime == null || dateTime.isAfter(latestValuationTime!)) {
-              latestValuationTime = dateTime;
-            }
-          } catch (e) {
-            // 跳过无效的估值时间格式
-          }
-        }
-      }
-    }
+    // 交易时间：9:15-11:30, 13:00-15:00
+    final morningStart = 9 * 60 + 15;
+    final morningEnd = 11 * 60 + 30;
+    final afternoonStart = 13 * 60;
+    final afternoonEnd = 15 * 60;
     
-    if (latestValuationTime == null) return false;
+    final isTradingTime = (currentTime >= morningStart && currentTime <= morningEnd) ||
+                         (currentTime >= afternoonStart && currentTime <= afternoonEnd);
     
-    final today = DateTime(now.year, now.month, now.day);
-    final valuationDay = DateTime(latestValuationTime!.year, latestValuationTime!.month, latestValuationTime!.day);
-    
-    if (!valuationDay.isAtSameMomentAs(today)) {
-      return true;
-    }
-    
-    final valuationHour = latestValuationTime!.hour;
-    final valuationMinute = latestValuationTime!.minute;
-    final valuationTime = valuationHour * 60 + valuationMinute;
-    
-    if (valuationTime >= 15 * 60) {
-      return true;
-    }
-    
-    return false;
+    return !isTradingTime;  // 非交易时间应该暂停
   }
 
   double _scrollOffset = 0;
@@ -257,6 +230,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void _startValuationTimer() {
     _stopValuationTimer();
     
+    // ✅ 修复：在非交易时间或周末时，不启动定时器
     if (_shouldPauseAutoRefresh()) {
       return;
     }
@@ -268,6 +242,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
+        // ✅ 修复：每次触发时再次检查是否为交易时间
         if (_shouldPauseAutoRefresh()) {
           _stopValuationTimer();
           return;
