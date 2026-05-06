@@ -559,23 +559,17 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 12),
-          Flexible(
-            flex: 2,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: 180, // 最小宽度，保证文字可读性
-                maxWidth: 240, // 最大宽度，避免过大
-              ),
-              child: SizedBox(
-                height: 36,
-                child: ThemeSwitch(
-                  initialMode: _dataManager.themeMode,
-                  onChanged: (mode) {
-                    _dataManager.setThemeMode(mode);
-                    setState(() {});
-                  },
-                ),
-              ),
+          // ✅ 修复：使用 ConstrainedBox 限制最大宽度，避免无限宽度错误
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.4, // 最多占据屏幕宽度的40%
+            ),
+            child: ThemeSwitch(
+              initialMode: _dataManager.themeMode,
+              onChanged: (mode) {
+                _dataManager.setThemeMode(mode);
+                setState(() {});
+              },
             ),
           ),
         ],

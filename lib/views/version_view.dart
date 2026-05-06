@@ -9,9 +9,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.5';
+const String APP_VERSION = 'v1.2.6';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.6 - 修复数据持久化问题，新增应用生命周期管理',
   'v1.2.5 - 新增跨平台内存监控、修复Web端编译问题',
   'v1.2.4 - 数据访问层封装，SQLite 存储，优化TTL 过期和容量限制',
   'v1.2.3 - 安全加固：新增文件大小限制、客户姓名长度限制、错误消息脱敏',

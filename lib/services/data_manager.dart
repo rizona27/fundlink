@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
@@ -154,6 +155,15 @@ class DataManager extends ChangeNotifier {
   DataManager() {
     loadData();
     _startCacheCleanup();
+    _setupLifecycleObserver();
+  }
+  
+  /// 设置应用生命周期监听
+  void _setupLifecycleObserver() {
+    if (_disposed) return;
+    
+    // 监听应用生命周期事件
+    WidgetsBinding.instance.addObserver(_AppLifecycleObserver(this));
   }
   
   /// 启动定期缓存清理
@@ -223,6 +233,9 @@ class DataManager extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     
+    // 移除生命周期观察者
+    WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(this));
+    
     // 取消定时器
     _cacheCleanupTimer?.cancel();
     _cacheCleanupTimer = null;
@@ -232,6 +245,31 @@ class DataManager extends ChangeNotifier {
     _transactionHistoryCache.clear();
     
     super.dispose();
+  }
+  
+  /// 应用进入后台时保存数据
+  Future<void> saveOnBackground() async {
+    if (_disposed) return;
+    
+    debugPrint('应用进入后台，保存数据...');
+    try {
+      await saveData();
+      await addLog('应用进入后台，数据已保存', type: LogType.info);
+    } catch (e) {
+      debugPrint('后台保存数据失败: $e');
+    }
+  }
+  
+  /// 应用恢复时重新加载数据
+  Future<void> reloadOnResume() async {
+    if (_disposed) return;
+    
+    debugPrint('应用恢复，重新加载数据...');
+    try {
+      await loadData();
+    } catch (e) {
+      debugPrint('恢复加载数据失败: $e');
+    }
   }
 
   Future<void> loadData() async {
@@ -333,10 +371,25 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> saveData() async {
-    if (kIsWeb) {
-      await _saveDataToPrefs();
+    try {
+      if (kIsWeb) {
+        await _saveDataToPrefs();
+      } else {
+        // 非 Web 平台也需要保存设置到 SharedPreferences
+        await _saveSettingsToPrefs();
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存数据失败: $e');
     }
-    notifyListeners();
+  }
+  
+  /// 保存设置到 SharedPreferences（跨平台通用）
+  Future<void> _saveSettingsToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
+    await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
+    await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
   }
   
   Future<void> _saveDataToPrefs() async {
@@ -689,6 +742,7 @@ class DataManager extends ChangeNotifier {
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
 
     await addLog('删除交易记录: ${transaction.fundCode} - ${transaction.type.displayName}', type: LogType.info);
+    await saveData();
     notifyListeners();
   }
 
@@ -724,6 +778,7 @@ class DataManager extends ChangeNotifier {
     _holdings = newHoldings;
 
     await addLog('更新持仓: ${updatedHolding.fundCode} - ${updatedHolding.clientName}', type: LogType.success);
+    await saveData();
     notifyListeners();
   }
 
@@ -803,6 +858,7 @@ class DataManager extends ChangeNotifier {
     
     _holdings = List.from(_holdings)..removeAt(index);
     await addLog('删除持仓: ${removed.fundCode} - ${removed.clientName}', type: LogType.info);
+    await saveData();
     notifyListeners();
   }
 
@@ -938,6 +994,7 @@ class DataManager extends ChangeNotifier {
 
       _holdings = newHoldings;
       await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
+      await saveData();
       notifyListeners();
     }
   }
@@ -1350,5 +1407,35 @@ class DataManagerProvider extends InheritedWidget {
   @override
   bool updateShouldNotify(DataManagerProvider oldWidget) {
     return dataManager != oldWidget.dataManager;
+  }
+}
+
+/// 应用生命周期观察者
+class _AppLifecycleObserver with WidgetsBindingObserver {
+  final DataManager _dataManager;
+  
+  _AppLifecycleObserver(this._dataManager);
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+        // 应用进入后台
+        debugPrint('应用状态: paused (进入后台)');
+        _dataManager.saveOnBackground();
+        break;
+      case AppLifecycleState.resumed:
+        // 应用恢复前台
+        debugPrint('应用状态: resumed (恢复前台)');
+        _dataManager.reloadOnResume();
+        break;
+      case AppLifecycleState.detached:
+        // 应用被销毁
+        debugPrint('应用状态: detached (被销毁)');
+        _dataManager.saveOnBackground();
+        break;
+      default:
+        break;
+    }
   }
 }

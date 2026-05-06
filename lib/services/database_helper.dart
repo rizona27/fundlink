@@ -48,6 +48,8 @@ class DatabaseHelper {
       version: 1,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
+      // 确保数据立即写入磁盘
+      singleInstance: true,
     );
   }
 
@@ -72,6 +74,8 @@ class DatabaseHelper {
       version: 1,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
+      // 确保数据立即写入磁盘
+      singleInstance: true,
     );
   }
 
