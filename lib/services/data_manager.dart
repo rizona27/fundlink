@@ -128,19 +128,53 @@ class DataManager extends ChangeNotifier {
 
   FundInfoCache? getFundInfoCache(String fundCode) {
     final cached = _fundInfoCache[fundCode];
-    if (cached == null) return null;
+    if (cached == null) {
+      debugPrint('[DataManager] ❌ 基金 $fundCode 无缓存数据');
+      return null;
+    }
     
     final now = DateTime.now();
-    if (now.difference(cached.cacheTime).inDays > AppConstants.fundInfoCacheValidDays) {
+    
+    // ✅ 关键修复：检查缓存是否过期（7天）
+    final cacheAgeDays = now.difference(cached.cacheTime).inDays;
+    if (cacheAgeDays > AppConstants.fundInfoCacheValidDays) {
+      debugPrint('[DataManager] ❌ 基金 $fundCode 缓存已过期 (缓存时间: ${cached.cacheTime}, 距今${cacheAgeDays}天)');
       _fundInfoCache.remove(fundCode);
       return null;
     }
     
+    // ✅ 关键修复：检查净值日期是否是最近的有效数据
+    // 不再要求必须是"今天"，因为周末/节假日/闭市后净值不会更新
+    // 只要净值日期不早于7天前，就认为是有效缓存（与缓存有效期一致）
+    final navDateOnly = DateTime(cached.navDate.year, cached.navDate.month, cached.navDate.day);
+    final todayOnly = DateTime(now.year, now.month, now.day);
+    final daysDiff = todayOnly.difference(navDateOnly).inDays;
+    
+    if (daysDiff < 0) {
+      // 净值日期在未来（异常情况），缓存失效
+      debugPrint('[DataManager] ❌ 基金 $fundCode 净值日期异常（未来日期），缓存失效');
+      _fundInfoCache.remove(fundCode);
+      return null;
+    }
+    
+    if (daysDiff > 7) {
+      // 净值日期超过7天，数据过旧，需要更新
+      final navDateStr = '${cached.navDate.year}-${cached.navDate.month.toString().padLeft(2, '0')}-${cached.navDate.day.toString().padLeft(2, '0')}';
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      debugPrint('[DataManager] ⚠️ 基金 $fundCode 净值日期($navDateStr)距今${daysDiff}天，缓存过旧，需要更新');
+      _fundInfoCache.remove(fundCode);
+      return null;
+    }
+    
+    final navDateStr = '${cached.navDate.year}-${cached.navDate.month.toString().padLeft(2, '0')}-${cached.navDate.day.toString().padLeft(2, '0')}';
+    debugPrint('[DataManager] ✅ 基金 $fundCode 使用缓存净值: ${cached.currentNav} ($navDateStr, ${daysDiff}天前, 缓存${cacheAgeDays}天前)');
     return cached;
   }
 
   void saveFundInfoCache(FundInfoCache fundInfo) {
     _fundInfoCache[fundInfo.fundCode] = fundInfo;
+    final navDateStr = '${fundInfo.navDate.year}-${fundInfo.navDate.month.toString().padLeft(2, '0')}-${fundInfo.navDate.day.toString().padLeft(2, '0')}';
+    debugPrint('[DataManager] 💾 saveFundInfoCache被调用: ${fundInfo.fundCode} - ${fundInfo.fundName} | 净值: ${fundInfo.currentNav} ($navDateStr)');
     saveFundInfoCacheToPrefs();
   }
 
@@ -153,9 +187,11 @@ class DataManager extends ChangeNotifier {
   }
 
   DataManager() {
+    debugPrint('[DataManager] 🏗️ DataManager构造函数被调用');
     loadData();
     _startCacheCleanup();
     _setupLifecycleObserver();
+    debugPrint('[DataManager] ✅ DataManager构造函数执行完成');
   }
   
   /// 设置应用生命周期监听
@@ -254,6 +290,10 @@ class DataManager extends ChangeNotifier {
     debugPrint('应用进入后台，保存数据...');
     try {
       await saveData();
+      // ✅ 关键修复：同时保存所有缓存到数据库
+      await saveFundInfoCacheToPrefs();
+      await saveValuationCache();
+      await saveVersionInfoToPrefs();
       await addLog('应用进入后台，数据已保存', type: LogType.info);
     } catch (e) {
       debugPrint('后台保存数据失败: $e');
@@ -271,18 +311,30 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
+    debugPrint('[DataManager] 🚀 loadData被调用，开始加载数据...');
     try {
       if (kIsWeb) {
+        debugPrint('[DataManager] 🔍 Web平台，从SharedPreferences加载');
         await _loadDataFromPrefs();
       } else {
+        debugPrint('[DataManager] 🔍 非Web平台，从SQLite加载');
         await _loadDataFromSQLite();
       }
 
+      debugPrint('[DataManager] 🔍 开始加载估值缓存...');
       await loadValuationCache();
+      
+      debugPrint('[DataManager] 🔍 开始加载基金信息缓存...');
       await loadFundInfoCache();
-
+      
+      debugPrint('[DataManager] 🔍 开始加载版本信息缓存...');
+      await loadVersionInfo(); // ✅ 加载版本信息缓存
+      
+      debugPrint('[DataManager] ✅ 所有数据加载完成，通知监听器');
       notifyListeners();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[DataManager] ❌ 数据加载异常: $e');
+      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
       await addLog('数据加载异常: $e', type: LogType.error);
     }
   }
@@ -435,21 +487,128 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> loadValuationCache() async {
-    // 估值缓存使用内存存储，无需加载
-    _valuationCache = {};
+    if (kIsWeb) {
+      // Web 平台使用内存存储
+      _valuationCache = {};
+      return;
+    }
+    
+    // ✅ 关键修复：从 SQLite 加载估值缓存
+    try {
+      final cacheStr = await _repository!.getSetting('valuation_cache');
+      if (cacheStr != null && cacheStr.isNotEmpty) {
+        final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
+        _valuationCache = cacheMap.map((key, value) => MapEntry(key, value as Map<String, dynamic>));
+        debugPrint('[DataManager] 从数据库加载估值缓存: ${_valuationCache.length}条');
+      } else {
+        _valuationCache = {};
+      }
+    } catch (e) {
+      debugPrint('[DataManager] 加载估值缓存失败: $e');
+      _valuationCache = {};
+    }
   }
 
   Future<void> saveValuationCache() async {
-    // 估值缓存使用内存存储，无需保存
+    if (kIsWeb) {
+      // Web 平台使用内存存储，无需保存
+      return;
+    }
+    
+    // ✅ 关键修复：保存估值缓存到 SQLite
+    try {
+      final cacheStr = jsonEncode(_valuationCache);
+      await _repository!.saveSetting('valuation_cache', cacheStr);
+      debugPrint('[DataManager] 估值缓存已保存到数据库: ${_valuationCache.length}条');
+    } catch (e) {
+      debugPrint('[DataManager] 保存估值缓存失败: $e');
+    }
   }
 
   Future<void> loadFundInfoCache() async {
-    // 基金信息缓存使用内存存储，无需加载
-    _fundInfoCache = {};
+    debugPrint('[DataManager] 🔍 loadFundInfoCache被调用');
+    
+    if (kIsWeb) {
+      // Web 平台使用内存存储
+      _fundInfoCache = {};
+      debugPrint('[DataManager] Web平台，基金缓存为空');
+      return;
+    }
+    
+    // ✅ 关键修复：从 SQLite 加载基金信息缓存
+    try {
+      debugPrint('[DataManager] 🔍 开始从数据库读取fund_info_cache...');
+      final cacheStr = await _repository!.getSetting('fund_info_cache');
+      
+      if (cacheStr == null) {
+        debugPrint('[DataManager] ⚠️ 数据库中fund_info_cache为null');
+        _fundInfoCache = {};
+        return;
+      }
+      
+      if (cacheStr.isEmpty) {
+        debugPrint('[DataManager] ⚠️ 数据库中fund_info_cache为空字符串');
+        _fundInfoCache = {};
+        return;
+      }
+      
+      debugPrint('[DataManager] 🔍 读取到缓存数据，长度: ${cacheStr.length}字符');
+      final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
+      debugPrint('[DataManager] 🔍 解析JSON成功，共有 ${cacheMap.length} 条记录');
+      
+      _fundInfoCache = cacheMap.map((key, value) {
+        return MapEntry(key, FundInfoCache.fromJson(value));
+      });
+      
+      debugPrint('[DataManager] ✅ 从数据库加载基金缓存: ${_fundInfoCache.length}条');
+      // 输出每个基金的缓存信息
+      for (final entry in _fundInfoCache.entries) {
+        final navDateStr = '${entry.value.navDate.year}-${entry.value.navDate.month.toString().padLeft(2, '0')}-${entry.value.navDate.day.toString().padLeft(2, '0')}';
+        final hasReturns = entry.value.navReturn1m != null || entry.value.navReturn3m != null || 
+                          entry.value.navReturn6m != null || entry.value.navReturn1y != null;
+        debugPrint('[DataManager]   - ${entry.key}: ${entry.value.fundName} | 净值: ${entry.value.currentNav} ($navDateStr) | 收益率: ${hasReturns ? "有" : "无"}');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('[DataManager] ❌ 加载基金缓存失败: $e');
+      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+      _fundInfoCache = {};
+    }
   }
 
   Future<void> saveFundInfoCacheToPrefs() async {
-    // 基金信息缓存使用内存存储，无需保存
+    if (kIsWeb) {
+      // Web 平台使用内存存储，无需保存
+      debugPrint('[DataManager] Web平台，跳过保存基金缓存');
+      return;
+    }
+    
+    // ✅ 关键修复：保存基金信息缓存到 SQLite
+    try {
+      if (_fundInfoCache.isEmpty) {
+        debugPrint('[DataManager] ⚠️ 基金缓存为空，跳过保存');
+        return;
+      }
+      
+      final cacheMap = _fundInfoCache.map((key, value) {
+        return MapEntry(key, value.toJson());
+      });
+      final cacheStr = jsonEncode(cacheMap);
+      debugPrint('[DataManager] 💾 开始保存基金缓存到数据库: ${_fundInfoCache.length}条');
+      await _repository!.saveSetting('fund_info_cache', cacheStr);
+      debugPrint('[DataManager] ✅ 基金缓存已保存到数据库: ${_fundInfoCache.length}条');
+      
+      // 验证保存是否成功
+      final verifyStr = await _repository!.getSetting('fund_info_cache');
+      if (verifyStr != null && verifyStr.isNotEmpty) {
+        final verifyMap = jsonDecode(verifyStr);
+        debugPrint('[DataManager] 🔍 验证成功: 数据库中有 ${verifyMap.length} 条基金缓存');
+      } else {
+        debugPrint('[DataManager] ❌ 验证失败: 数据库中无基金缓存数据!');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('[DataManager] ❌ 保存基金缓存失败: $e');
+      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+    }
   }
 
   Map<String, dynamic>? getValuation(String fundCode) {
@@ -457,9 +616,35 @@ class DataManager extends ChangeNotifier {
     if (cached == null) return null;
     final cacheTime = DateTime.tryParse(cached['cacheTime'] ?? '');
     if (cacheTime == null) return null;
-    if (DateTime.now().difference(cacheTime).inSeconds > AppConstants.valuationCacheValidSeconds) {
+    
+    // ✅ 关键修复：检查是否超过1小时
+    final now = DateTime.now();
+    if (now.difference(cacheTime).inSeconds > AppConstants.valuationCacheValidSeconds) {
       return null;
     }
+    
+    // ✅ 关键修复：检查是否闭市，闭市后不再更新
+    final hour = now.hour;
+    final minute = now.minute;
+    final currentTime = hour * 60 + minute;
+    final isTradingTime = (currentTime >= 9 * 60 + 30 && currentTime <= 11 * 60 + 30) ||
+                          (currentTime >= 13 * 60 && currentTime <= 15 * 60);
+    
+    // 如果是闭市时间且缓存数据是今天的，继续使用
+    if (!isTradingTime) {
+      final cachedDate = DateTime.parse(cached['cacheTime']);
+      final todayOnly = DateTime(now.year, now.month, now.day);
+      final cachedDateOnly = DateTime(cachedDate.year, cachedDate.month, cachedDate.day);
+      if (cachedDateOnly.isAtSameMomentAs(todayOnly)) {
+        debugPrint('[DataManager] 基金 $fundCode 使用闭市缓存: ${cached['gsz']}');
+        return {
+          'gsz': cached['gsz'],
+          'gszzl': cached['gszzl'],
+          'gztime': cached['gztime'],
+        };
+      }
+    }
+    
     return {
       'gsz': cached['gsz'],
       'gszzl': cached['gszzl'],
@@ -508,7 +693,57 @@ class DataManager extends ChangeNotifier {
   /// 设置最新版本信息
   void setLatestVersionInfo(VersionInfo? versionInfo) {
     _latestVersionInfo = versionInfo;
+    // ✅ 关键修复：保存版本信息到数据库
+    saveVersionInfoToPrefs();
     notifyListeners();
+  }
+  
+  /// 加载版本信息缓存
+  Future<void> loadVersionInfo() async {
+    if (kIsWeb) {
+      return;
+    }
+    
+    try {
+      final cacheStr = await _repository!.getSetting('version_info_cache');
+      if (cacheStr != null && cacheStr.isNotEmpty) {
+        final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
+        final cachedTime = DateTime.tryParse(cacheMap['cachedTime'] ?? '');
+        
+        if (cachedTime != null) {
+          final now = DateTime.now();
+          // 缓存有效期24小时
+          if (now.difference(cachedTime).inHours < 24) {
+            _latestVersionInfo = VersionInfo.fromJson(cacheMap['versionInfo']);
+            debugPrint('[DataManager] 从数据库加载版本信息: ${_latestVersionInfo?.version}');
+          } else {
+            debugPrint('[DataManager] 版本信息缓存已过期');
+            _latestVersionInfo = null;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DataManager] 加载版本信息失败: $e');
+    }
+  }
+  
+  /// 保存版本信息到数据库
+  Future<void> saveVersionInfoToPrefs() async {
+    if (kIsWeb || _latestVersionInfo == null) {
+      return;
+    }
+    
+    try {
+      final cacheMap = {
+        'versionInfo': _latestVersionInfo!.toJson(),
+        'cachedTime': DateTime.now().toIso8601String(),
+      };
+      final cacheStr = jsonEncode(cacheMap);
+      await _repository!.saveSetting('version_info_cache', cacheStr);
+      debugPrint('[DataManager] 版本信息已保存到数据库');
+    } catch (e) {
+      debugPrint('[DataManager] 保存版本信息失败: $e');
+    }
   }
 
   String _formatGzTime(String gztime) {
@@ -1460,6 +1695,7 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       case AppLifecycleState.paused:
         // 应用进入后台 - 必须同步等待保存完成
         debugPrint('应用状态: paused (进入后台)');
+        // ✅ 关键修复：使用await确保保存完成
         _dataManager.saveOnBackground();
         break;
       case AppLifecycleState.resumed:
@@ -1470,6 +1706,7 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       case AppLifecycleState.detached:
         // 应用被销毁 - 必须同步等待保存完成
         debugPrint('应用状态: detached (被销毁)');
+        // ✅ 关键修复：强制刷新数据库，确保数据写入磁盘
         _dataManager.saveOnBackground();
         break;
       default:

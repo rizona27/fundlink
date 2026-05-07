@@ -37,17 +37,23 @@ class FundService {
   }
 
   Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false}) async {
-    if (forceRefresh) clearCache(code);
+    if (forceRefresh) {
+      debugPrint('[FundService] 🔄 基金 $code - 强制刷新，清除缓存');
+      clearCache(code);
+    }
 
-    _dataManager?.addLog('开始查询基金代码: $code', type: LogType.network);
-
+    // ✅ 关键修复：检查持久化缓存（数据库）
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
         final cacheAge = DateTime.now().difference(cachedInfo.cacheTime).inHours;
+        final navDateStr = '${cachedInfo.navDate.year}-${cachedInfo.navDate.month.toString().padLeft(2, '0')}-${cachedInfo.navDate.day.toString().padLeft(2, '0')}';
+        final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null || 
+                          cachedInfo.navReturn6m != null || cachedInfo.navReturn1y != null;
         _dataManager?.addLog(
-          '基金 $code 使用持久化缓存: ${cachedInfo.fundName} '
-          '(缓存于${cacheAge}小时前)',
+          '✅ [数据库缓存] 基金 $code | ${cachedInfo.fundName} | '
+          '净值: ${cachedInfo.currentNav} ($navDateStr) | '
+          '收益率: ${hasReturns ? "有" : "无"}',
           type: LogType.cache,
         );
         return {
@@ -63,20 +69,22 @@ class FundService {
       }
     }
 
+    // 检查内存缓存
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
       _dataManager?.addLog(
-        '基金 $code 使用内存缓存: ${cached['fundName']}',
+        '⚡ [内存缓存] 基金 $code',
         type: LogType.cache,
       );
       return cached;
     }
 
     if (_activeRequests.containsKey(code)) {
-      _dataManager?.addLog('基金 $code 复用进行中请求', type: LogType.cache);
       return await _activeRequests[code]!;
     }
 
+    // 从 API 获取
+    _dataManager?.addLog('🌐 [API请求] 基金 $code', type: LogType.network);
     final future = _fetchFromPingzhongdata(code);
     _activeRequests[code] = future;
 
@@ -101,7 +109,7 @@ class FundService {
       if (!forceRefresh) _cache[code] = result;
       return result;
     } catch (e) {
-      _dataManager?.addLog('基金代码 $code: API请求失败 - $e', type: LogType.error);
+      _dataManager?.addLog('❌ [API失败] 基金代码 $code: $e', type: LogType.error);
       return {
         'fundName': '加载失败',
         'currentNav': 0.0,

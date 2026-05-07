@@ -33,10 +33,19 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   double _overlayOpacity = 0.0;
 
   bool _hasNoReturnData(FundHolding holding) {
-    return holding.navReturn1m == null &&
+    // 如果所有收益率字段都为null，则认为需要刷新
+    final needsRefresh = holding.navReturn1m == null &&
         holding.navReturn3m == null &&
         holding.navReturn6m == null &&
         holding.navReturn1y == null;
+    
+    if (needsRefresh) {
+      debugPrint('[RefreshButton] 基金 ${holding.fundCode} 缺少收益率数据，需要刷新');
+    } else {
+      debugPrint('[RefreshButton] 基金 ${holding.fundCode} 已有收益率数据');
+    }
+    
+    return needsRefresh;
   }
 
   Future<(String, FundHolding?)> _fetchHoldingWithRetry(FundHolding holding, {bool forceRefresh = false}) async {

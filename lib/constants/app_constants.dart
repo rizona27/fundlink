@@ -44,8 +44,9 @@ class AppConstants {
   ];
 
   // --- Cache Configuration ---
-  static const int valuationCacheValidSeconds = 180;
+  static const int valuationCacheValidSeconds = 3600; // ✅ 修改为1小时(3600秒)
   static const int fundInfoCacheValidDays = 7;
+  static const int versionInfoCacheValidHours = 24; // ✅ 版本信息缓存24小时
   static const int maxCacheSize = 500;
   static const int maxLogEntries = 200;
 

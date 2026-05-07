@@ -90,9 +90,13 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[Main] 🚀 MyApp initState开始');
+    debugPrint('[Main] 🔧 创建DataManager实例...');
     _dataManager = DataManager();
+    debugPrint('[Main] ✅ DataManager实例创建完成');
     _currentBrightness = _getBrightness();
     _dataManager.addListener(_onThemeChanged);
+    debugPrint('[Main] 📋 DataManager监听器已添加');
     
     // 等待网络权限授权后再检查版本（延迟执行，不阻塞启动）
     WidgetsBinding.instance.addPostFrameCallback((_) {
