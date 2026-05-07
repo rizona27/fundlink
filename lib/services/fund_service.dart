@@ -42,7 +42,7 @@ class FundService {
       clearCache(code);
     }
 
-    // ✅ 关键修复：检查持久化缓存（数据库）
+    // ✅ 优化：检查持久化缓存（数据库）
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
@@ -50,10 +50,21 @@ class FundService {
         final navDateStr = '${cachedInfo.navDate.year}-${cachedInfo.navDate.month.toString().padLeft(2, '0')}-${cachedInfo.navDate.day.toString().padLeft(2, '0')}';
         final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null || 
                           cachedInfo.navReturn6m != null || cachedInfo.navReturn1y != null;
+        
+        // ✅ 新增：检查收益率是否需要更新
+        final returnCacheAge = DateTime.now().difference(cachedInfo.cacheTime).inDays;
+        final returnsNeedRefresh = hasReturns && returnCacheAge >= AppConstants.fundReturnCacheValidDays;
+        
+        if (returnsNeedRefresh) {
+          // 收益率已过期，后台静默更新
+          debugPrint('[FundService] 🔄 基金 $code 收益率数据过期，后台更新...');
+          _fetchAndUpdateReturnsInBackground(code, cachedInfo);
+        }
+        
         _dataManager?.addLog(
-          '✅ [数据库缓存] 基金 $code | ${cachedInfo.fundName} | '
+          '📦 [缓存命中-数据库] 基金 $code | ${cachedInfo.fundName} | '
           '净值: ${cachedInfo.currentNav} ($navDateStr) | '
-          '收益率: ${hasReturns ? "有" : "无"}',
+          '收益率: ${hasReturns ? "有" : "无"}${returnsNeedRefresh ? "(需更新)" : ""}',
           type: LogType.cache,
         );
         return {
@@ -73,7 +84,7 @@ class FundService {
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
       _dataManager?.addLog(
-        '⚡ [内存缓存] 基金 $code',
+        '⚡ [缓存命中-内存] 基金 $code',
         type: LogType.cache,
       );
       return cached;
@@ -119,6 +130,33 @@ class FundService {
       };
     } finally {
       _activeRequests.remove(code);
+    }
+  }
+  
+  /// ✅ 新增：后台更新收益率数据（不阻塞UI）
+  void _fetchAndUpdateReturnsInBackground(String code, FundInfoCache cachedInfo) async {
+    try {
+      debugPrint('[FundService] 🔄 开始后台更新基金 $code 的收益率数据...');
+      final result = await _fetchFromPingzhongdata(code);
+      
+      if (result['isValid'] == true && _dataManager != null) {
+        final updatedInfo = FundInfoCache(
+          fundCode: code,
+          fundName: result['fundName'] as String? ?? cachedInfo.fundName,
+          currentNav: result['currentNav'] as double? ?? cachedInfo.currentNav,
+          navDate: result['navDate'] as DateTime? ?? cachedInfo.navDate,
+          navReturn1m: result['navReturn1m'] as double?,
+          navReturn3m: result['navReturn3m'] as double?,
+          navReturn6m: result['navReturn6m'] as double?,
+          navReturn1y: result['navReturn1y'] as double?,
+          cacheTime: DateTime.now(), // ✅ 重置缓存时间
+        );
+        _dataManager!.saveFundInfoCache(updatedInfo);
+        debugPrint('[FundService] ✅ 基金 $code 收益率数据已更新');
+      }
+    } catch (e) {
+      debugPrint('[FundService] ❌ 后台更新基金 $code 收益率失败: $e');
+      // 静默失败，不影响用户使用旧数据
     }
   }
 
@@ -370,7 +408,7 @@ class FundService {
       final firstDate = result.first.date;
       final lastDate = result.last.date;
       _dataManager?.addLog(
-        '基金 $code 已缓存净值: ${result.length}条 '
+        '📦 [缓存保存] 基金 $code | 已保存 ${result.length} 条净值到本地缓存 '
         '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
         type: LogType.cache,
       );

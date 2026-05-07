@@ -533,6 +533,12 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;
       
+      // ✅ 新增：提取收益率数据
+      final navReturn1m = fundInfo['navReturn1m'] as double?;
+      final navReturn3m = fundInfo['navReturn3m'] as double?;
+      final navReturn6m = fundInfo['navReturn6m'] as double?;
+      final navReturn1y = fundInfo['navReturn1y'] as double?;
+      
       final isPending = DataManager.isTransactionPending(_purchaseDate, _isAfter1500);
       double? confirmedNav;
       double transactionShares = shares;
@@ -562,6 +568,31 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       );
 
       await _dataManager.addTransaction(transaction);
+      
+      // ✅ 新增：立即更新持仓的净值和收益率数据到UI
+      if (currentNav > 0 || navReturn1m != null || navReturn3m != null || navReturn6m != null || navReturn1y != null) {
+        try {
+          final holdingIndex = _dataManager.holdings.indexWhere(
+            (h) => h.clientId == clientId && h.fundCode == fundCode,
+          );
+          if (holdingIndex != -1) {
+            final existingHolding = _dataManager.holdings[holdingIndex];
+            final updatedHolding = existingHolding.copyWith(
+              currentNav: currentNav > 0 ? currentNav : existingHolding.currentNav,
+              navDate: navDate,
+              isValid: isValid || existingHolding.isValid,
+              navReturn1m: navReturn1m ?? existingHolding.navReturn1m,
+              navReturn3m: navReturn3m ?? existingHolding.navReturn3m,
+              navReturn6m: navReturn6m ?? existingHolding.navReturn6m,
+              navReturn1y: navReturn1y ?? existingHolding.navReturn1y,
+            );
+            await _dataManager.updateHolding(updatedHolding);
+            debugPrint('[AddHolding] ✅ 已更新持仓 $fundCode 的净值和收益率数据');
+          }
+        } catch (e) {
+          debugPrint('[AddHolding] ⚠️ 更新持仓数据失败: $e');
+        }
+      }
       
       if (mounted) {
         if (isPending) {

@@ -135,7 +135,7 @@ class DataManager extends ChangeNotifier {
     
     final now = DateTime.now();
     
-    // ✅ 关键修复：检查缓存是否过期（7天）
+    // ✅ 优化：检查缓存是否过期（100年，近似永久）
     final cacheAgeDays = now.difference(cached.cacheTime).inDays;
     if (cacheAgeDays > AppConstants.fundInfoCacheValidDays) {
       debugPrint('[DataManager] ❌ 基金 $fundCode 缓存已过期 (缓存时间: ${cached.cacheTime}, 距今${cacheAgeDays}天)');
@@ -143,9 +143,9 @@ class DataManager extends ChangeNotifier {
       return null;
     }
     
-    // ✅ 关键修复：检查净值日期是否是最近的有效数据
+    // ✅ 优化：检查净值日期是否是最近的有效数据
     // 不再要求必须是"今天"，因为周末/节假日/闭市后净值不会更新
-    // 只要净值日期不早于7天前，就认为是有效缓存（与缓存有效期一致）
+    // 只要净值日期不早于7天前，就认为是有效缓存
     final navDateOnly = DateTime(cached.navDate.year, cached.navDate.month, cached.navDate.day);
     final todayOnly = DateTime(now.year, now.month, now.day);
     final daysDiff = todayOnly.difference(navDateOnly).inDays;
@@ -166,8 +166,23 @@ class DataManager extends ChangeNotifier {
       return null;
     }
     
+    // ✅ 新增：检查收益率是否需要更新（1天过期）
+    final hasReturns = cached.navReturn1m != null || cached.navReturn3m != null || 
+                      cached.navReturn6m != null || cached.navReturn1y != null;
+    final returnCacheAge = now.difference(cached.cacheTime).inDays;
+    final returnsNeedRefresh = hasReturns && returnCacheAge >= AppConstants.fundReturnCacheValidDays;
+    
+    if (returnsNeedRefresh) {
+      debugPrint('[DataManager] 🔄 基金 $fundCode 收益率数据已过期(${returnCacheAge}天)，将重新获取');
+      // 注意：这里不移除缓存，而是返回部分数据，让调用方决定是否刷新
+      // 保留基本信息（名称、代码、净值），但标记收益率需要更新
+    }
+    
     final navDateStr = '${cached.navDate.year}-${cached.navDate.month.toString().padLeft(2, '0')}-${cached.navDate.day.toString().padLeft(2, '0')}';
-    debugPrint('[DataManager] ✅ 基金 $fundCode 使用缓存净值: ${cached.currentNav} ($navDateStr, ${daysDiff}天前, 缓存${cacheAgeDays}天前)');
+    debugPrint('[DataManager] 📦 [缓存命中] 基金 $fundCode | 从本地缓存读取净值: ${cached.currentNav} (净值日期: $navDateStr, ${daysDiff}天前)');
+    if (returnsNeedRefresh) {
+      debugPrint('[DataManager] ⚠️ 收益率数据需要更新');
+    }
     return cached;
   }
 
@@ -330,7 +345,14 @@ class DataManager extends ChangeNotifier {
       debugPrint('[DataManager] 🔍 开始加载版本信息缓存...');
       await loadVersionInfo(); // ✅ 加载版本信息缓存
       
-      debugPrint('[DataManager] ✅ 所有数据加载完成，通知监听器');
+      // ✅ 新增：输出缓存加载统计
+      debugPrint('[DataManager] ✅ 所有数据加载完成:');
+      debugPrint('[DataManager]   - 持仓数: ${_holdings.length}');
+      debugPrint('[DataManager]   - 交易数: ${_transactions.length}');
+      debugPrint('[DataManager]   - 日志数: ${_logs.length}');
+      debugPrint('[DataManager]   - 基金信息缓存: ${_fundInfoCache.length} 个');
+      debugPrint('[DataManager]   - 估值缓存: ${_valuationCache.length} 个');
+      
       notifyListeners();
     } catch (e, stackTrace) {
       debugPrint('[DataManager] ❌ 数据加载异常: $e');
@@ -499,7 +521,7 @@ class DataManager extends ChangeNotifier {
       if (cacheStr != null && cacheStr.isNotEmpty) {
         final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
         _valuationCache = cacheMap.map((key, value) => MapEntry(key, value as Map<String, dynamic>));
-        debugPrint('[DataManager] 从数据库加载估值缓存: ${_valuationCache.length}条');
+        debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取 ${_valuationCache.length} 条估值数据');
       } else {
         _valuationCache = {};
       }
@@ -519,7 +541,7 @@ class DataManager extends ChangeNotifier {
     try {
       final cacheStr = jsonEncode(_valuationCache);
       await _repository!.saveSetting('valuation_cache', cacheStr);
-      debugPrint('[DataManager] 估值缓存已保存到数据库: ${_valuationCache.length}条');
+      debugPrint('[DataManager] 💾 [缓存保存] 已保存 ${_valuationCache.length} 条估值数据到数据库');
     } catch (e) {
       debugPrint('[DataManager] 保存估值缓存失败: $e');
     }
@@ -560,7 +582,7 @@ class DataManager extends ChangeNotifier {
         return MapEntry(key, FundInfoCache.fromJson(value));
       });
       
-      debugPrint('[DataManager] ✅ 从数据库加载基金缓存: ${_fundInfoCache.length}条');
+      debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取 ${_fundInfoCache.length} 条基金信息');
       // 输出每个基金的缓存信息
       for (final entry in _fundInfoCache.entries) {
         final navDateStr = '${entry.value.navDate.year}-${entry.value.navDate.month.toString().padLeft(2, '0')}-${entry.value.navDate.day.toString().padLeft(2, '0')}';
@@ -593,9 +615,9 @@ class DataManager extends ChangeNotifier {
         return MapEntry(key, value.toJson());
       });
       final cacheStr = jsonEncode(cacheMap);
-      debugPrint('[DataManager] 💾 开始保存基金缓存到数据库: ${_fundInfoCache.length}条');
+      debugPrint('[DataManager] 💾 [缓存保存] 开始保存 ${_fundInfoCache.length} 条基金信息到数据库...');
       await _repository!.saveSetting('fund_info_cache', cacheStr);
-      debugPrint('[DataManager] ✅ 基金缓存已保存到数据库: ${_fundInfoCache.length}条');
+      debugPrint('[DataManager] ✅ [缓存保存] 成功保存 ${_fundInfoCache.length} 条基金信息到数据库');
       
       // 验证保存是否成功
       final verifyStr = await _repository!.getSetting('fund_info_cache');
@@ -636,7 +658,7 @@ class DataManager extends ChangeNotifier {
       final todayOnly = DateTime(now.year, now.month, now.day);
       final cachedDateOnly = DateTime(cachedDate.year, cachedDate.month, cachedDate.day);
       if (cachedDateOnly.isAtSameMomentAs(todayOnly)) {
-        debugPrint('[DataManager] 基金 $fundCode 使用闭市缓存: ${cached['gsz']}');
+        debugPrint('[DataManager] 📦 [缓存命中] 基金 $fundCode | 使用闭市缓存估值: ${cached['gsz']}');
         return {
           'gsz': cached['gsz'],
           'gszzl': cached['gszzl'],
@@ -715,9 +737,9 @@ class DataManager extends ChangeNotifier {
           // 缓存有效期24小时
           if (now.difference(cachedTime).inHours < 24) {
             _latestVersionInfo = VersionInfo.fromJson(cacheMap['versionInfo']);
-            debugPrint('[DataManager] 从数据库加载版本信息: ${_latestVersionInfo?.version}');
+            debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取版本信息: ${_latestVersionInfo?.version}');
           } else {
-            debugPrint('[DataManager] 版本信息缓存已过期');
+            debugPrint('[DataManager] ⚠️ 版本信息缓存已过期');
             _latestVersionInfo = null;
           }
         }
@@ -740,7 +762,7 @@ class DataManager extends ChangeNotifier {
       };
       final cacheStr = jsonEncode(cacheMap);
       await _repository!.saveSetting('version_info_cache', cacheStr);
-      debugPrint('[DataManager] 版本信息已保存到数据库');
+      debugPrint('[DataManager] 💾 [缓存保存] 版本信息已保存到数据库');
     } catch (e) {
       debugPrint('[DataManager] 保存版本信息失败: $e');
     }
@@ -873,6 +895,32 @@ class DataManager extends ChangeNotifier {
     _holdings = [..._holdings, holding];
     
     await addLog('新增持仓: ${holding.fundCode} - ${holding.clientName}', type: LogType.success);
+    await saveData();
+    notifyListeners();
+  }
+
+  /// ✅ 新增：批量添加持仓（用于导入场景）
+  /// 与addHolding不同，此方法不会逐个保存和通知，性能更高
+  Future<void> batchAddHoldings(List<FundHolding> holdings) async {
+    if (holdings.isEmpty) return;
+    
+    // 验证所有持仓
+    for (final holding in holdings) {
+      if (!holding.isValidHolding) {
+        await addLog('批量添加持仓失败: 持仓 ${holding.fundCode} 数据无效', type: LogType.error);
+        throw Exception('无效的持仓数据: ${holding.fundCode}');
+      }
+    }
+    
+    // 批量插入数据库
+    if (!kIsWeb) {
+      await _repository!.batchInsertHoldings(holdings);
+    }
+    
+    // 添加到内存
+    _holdings = [..._holdings, ...holdings];
+    
+    await addLog('批量添加 ${holdings.length} 个持仓', type: LogType.success);
     await saveData();
     notifyListeners();
   }
@@ -1070,6 +1118,15 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> commitBatchUpdates() async {
+    // ✅ 修复：批量保存更新后的持仓到数据库
+    if (!kIsWeb && _repository != null) {
+      try {
+        await _repository!.batchInsertHoldings(_holdings);
+        debugPrint('[DataManager] 批量保存 ${_holdings.length} 条持仓到数据库');
+      } catch (e) {
+        debugPrint('[DataManager] 批量保存持仓失败: $e');
+      }
+    }
     notifyListeners();
   }
 

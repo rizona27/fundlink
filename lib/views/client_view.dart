@@ -102,27 +102,63 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
   
-    bool hasGarbled = false;
+    // ✅ 详细诊断：检查每个基金的名称
+    debugPrint('[ClientView] 🔍 开始检查基金名称...');
+    final garbledHoldings = <FundHolding>[];
     for (final holding in _dataManager.holdings) {
       final name = holding.fundName;
-      if (name.contains('') || name.contains('\ufffd')) {
-        hasGarbled = true;
-        break;
+      final hasReplacementChar = name.contains('\ufffd');
+      // ✅ 修复：移除错误的空字符串检测（''.contains('') 永远为true）
+      // 只检测替换字符�（Unicode replacement character）
+      
+      if (hasReplacementChar) {
+        garbledHoldings.add(holding);
+        debugPrint('[ClientView] ⚠️ 发现乱码基金: ${holding.fundCode} - "${holding.fundName}"');
+        debugPrint('[ClientView]    - 包含替换字符(): true');
+        debugPrint('[ClientView]    - 名称长度: ${name.length}');
+        debugPrint('[ClientView]    - 名称字节: ${name.codeUnits}');
       }
     }
-      
-    if (hasGarbled && mounted) {
+    
+    if (garbledHoldings.isNotEmpty && mounted) {
       _autoFixTriggered = true;
       _lastAutoFixTime = DateTime.now();
       try {
-        await _dataManager.refreshAllHoldingsForce(_fundService, null);
+        debugPrint('[ClientView] 🛠️ 发现 ${garbledHoldings.length} 个基金名称乱码，开始修复...');
+        
+        for (final holding in garbledHoldings) {
+          if (!mounted) break;
+          try {
+            debugPrint('[ClientView] 🔄 正在修复基金 ${holding.fundCode}...');
+            final fundInfo = await _fundService.fetchFundInfo(holding.fundCode);
+            if (fundInfo['isValid'] == true && mounted) {
+              final index = _dataManager.holdings.indexWhere((h) => h.id == holding.id);
+              if (index != -1) {
+                final updated = _dataManager.holdings[index].copyWith(
+                  fundName: fundInfo['fundName'] as String? ?? holding.fundName,
+                  isValid: true,
+                );
+                _dataManager.updateHolding(updated);
+                debugPrint('[ClientView] ✅ 修复成功: ${holding.fundCode} - ${updated.fundName}');
+              }
+            } else {
+              debugPrint('[ClientView] ❌ 修复失败: ${holding.fundCode} - ${fundInfo['error']}');
+            }
+          } catch (e) {
+            debugPrint('[ClientView] ❌ 修复基金 ${holding.fundCode} 异常: $e');
+          }
+        }
+        
         if (mounted) {
           setState(() {});
+          context.showToast('已修复 ${garbledHoldings.length} 个基金名称');
         }
       } catch (e) {
-        debugPrint('自动修复基金名称失败: $e');
-        // 静默失败，不影响用户使用
+        debugPrint('[ClientView] ❌ 自动修复基金名称失败: $e');
       }
+    } else if (mounted) {
+      // ✅ 没有乱码，记录日志但不刷新
+      debugPrint('[ClientView] ✅ 所有基金名称正常，无需修复（共${_dataManager.holdings.length}个基金）');
     }
   }
 

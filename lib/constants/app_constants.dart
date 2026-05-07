@@ -44,9 +44,12 @@ class AppConstants {
   ];
 
   // --- Cache Configuration ---
-  static const int valuationCacheValidSeconds = 3600; // ✅ 修改为1小时(3600秒)
-  static const int fundInfoCacheValidDays = 7;
-  static const int versionInfoCacheValidHours = 24; // ✅ 版本信息缓存24小时
+  // --- Cache TTL Constants ---
+  /// 缓存过期时间配置
+  static const int valuationCacheValidSeconds = 3600; // 估值缓存：1小时
+  static const int fundInfoCacheValidDays = 36500; // 基金基本信息缓存：100年（近似永久）
+  static const int fundReturnCacheValidDays = 1; // 基金收益率缓存：1天（每天更新）
+  static const int versionInfoCacheValidHours = 24; // 版本信息缓存：24小时
   static const int maxCacheSize = 500;
   static const int maxLogEntries = 200;
 
