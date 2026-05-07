@@ -38,10 +38,12 @@ class DatabaseHelper {
     return _database!;
   }
 
-  /// 移动端初始化（iOS/Android）
+  /// 移动端初始化(iOS/Android)
   Future<Database> _initMobileDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'fundlink.db');
+    
+    debugPrint('[Database] iOS数据库路径: $path');
 
     return await openDatabase(
       path,
@@ -53,7 +55,7 @@ class DatabaseHelper {
     );
   }
 
-  /// 桌面端初始化（Windows/macOS/Linux）
+  /// 桌面端初始化(Windows/macOS/Linux)
   Future<Database> _initDesktopDatabase() async {
     // 初始化 FFI
     sqfliteFfiInit();
@@ -251,7 +253,10 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
 
   Future<int> insertTransaction(Map<String, dynamic> transaction) async {
     final db = await database;
-    return await db.insert('transactions', transaction, conflictAlgorithm: ConflictAlgorithm.replace);
+    debugPrint('[Database] 插入交易记录: id=${transaction['id']}, client=${transaction['client_name']}, fund=${transaction['fund_code']}');
+    final result = await db.insert('transactions', transaction, conflictAlgorithm: ConflictAlgorithm.replace);
+    debugPrint('[Database] 插入结果: $result');
+    return result;
   }
 
   Future<List<Map<String, dynamic>>> queryAllTransactions({
@@ -259,12 +264,14 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     int? offset,
   }) async {
     final db = await database;
-    return await db.query(
+    final result = await db.query(
       'transactions',
       orderBy: 'trade_date DESC',
       limit: limit,
       offset: offset,
     );
+    debugPrint('[Database] 查询交易记录: 共${result.length}条');
+    return result;
   }
 
   Future<List<Map<String, dynamic>>> queryTransactionsByHoldingId(String holdingId) async {

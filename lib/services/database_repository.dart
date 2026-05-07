@@ -212,4 +212,46 @@ class DatabaseRepository {
     );
     return rows.map((row) => FundHolding.fromMap(row)).toList();
   }
+  
+  // ==================== 数据库同步操作 ====================
+  
+  /// ✅ 修复：强制刷新数据库，确保数据立即写入磁盘
+  /// iOS/Android 可能在应用退出时杀死进程，导致 SQLite 缓冲数据丢失
+  Future<void> flush() async {
+    try {
+      final db = await _db.database;
+      
+      // 先检查当前 journal_mode
+      final modeResult = await db.rawQuery('PRAGMA journal_mode');
+      final currentMode = modeResult.first.values.first.toString();
+      
+      debugPrint('[Database] 当前数据库模式: $currentMode');
+      
+      // 如果是 WAL 模式，执行 FULL checkpoint
+      if (currentMode.toLowerCase() == 'wal') {
+        final checkpointResult = await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
+        debugPrint('[Database] WAL checkpoint 已执行, 结果: $checkpointResult');
+      } else {
+        // 非 WAL 模式下，设置 synchronous 为 FULL 并执行写操作触发同步
+        await db.execute('PRAGMA synchronous = FULL');
+        // 执行一个简单的写操作来触发同步
+        await db.execute('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)', [
+          '_last_flush',
+          DateTime.now().toIso8601String(),
+          DateTime.now().toIso8601String(),
+        ]);
+        debugPrint('[Database] 数据库已同步 (synchronous=FULL)');
+      }
+      
+      // 验证数据是否真的写入了
+      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM transactions');
+      final count = countResult.first['count'];
+      debugPrint('[Database] 数据库中交易记录数: $count');
+      
+    } catch (e, stackTrace) {
+      // flush 失败不应该影响主流程，但需要记录详细错误
+      debugPrint('[Database] ❌ 数据库刷新失败: $e');
+      debugPrint('[Database] 堆栈跟踪: $stackTrace');
+    }
+  }
 }

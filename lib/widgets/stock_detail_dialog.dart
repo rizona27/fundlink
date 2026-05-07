@@ -32,6 +32,9 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   double _previousChangePercent = 0;
   
   final GlobalKey<StockCandleChartState> _candleChartKey = GlobalKey();
+  
+  // ✅ 关键修复：提前标记K线图是否已初始化
+  bool _candleChartInitialized = false;
 
   @override
   void initState() {
@@ -44,6 +47,15 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+    
+    // ✅ 关键修复：延迟一帧初始化K线图，避免与对话框动画冲突
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _candleChartInitialized = true;
+        });
+      }
+    });
   }
 
   @override
@@ -318,28 +330,30 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                                 children: [
                                   _buildPriceCard(isDark, textColor, secondaryTextColor),
                                   const SizedBox(height: 10),
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? CupertinoColors.white.withOpacity(0.1)
-                                            : CupertinoColors.systemGrey.withOpacity(0.2),
+                                  // ✅ 关键修复：只有当K线图初始化后才显示，避免加载动画
+                                  if (_candleChartInitialized)
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isDark
+                                              ? CupertinoColors.white.withOpacity(0.1)
+                                              : CupertinoColors.systemGrey.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          StockCandleChart(
+                                            key: _candleChartKey,
+                                            stockCode: widget.stockCode,
+                                            isDark: isDark,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        StockCandleChart(
-                                          key: _candleChartKey,
-                                          stockCode: widget.stockCode,
-                                          isDark: isDark,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),

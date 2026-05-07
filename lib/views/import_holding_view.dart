@@ -10,6 +10,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:universal_html/html.dart' as html;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/file_import_service.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
@@ -1281,6 +1282,16 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       }
       final extension = file.extension?.toLowerCase();
 
+      // ✅ 新增：检测是否为完整备份文件
+      final isFullBackup = await _detectFullBackup(bytes, extension);
+      
+      if (isFullBackup) {
+        // 处理完整备份文件
+        await _processFullBackup(bytes, extension);
+        return;
+      }
+
+      // 处理普通CSV/Excel文件
       final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
       final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
       final isCsvFile = extension == 'csv' && !isZipFile;
@@ -1358,6 +1369,125 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+  
+  /// 检测是否为完整备份文件
+  Future<bool> _detectFullBackup(Uint8List bytes, String? extension) async {
+    try {
+      extension = extension?.toLowerCase();
+      
+      // 如果是 xlsx 或 xls，尝试作为 Excel 解析
+      if (extension == 'xlsx' || extension == 'xls') {
+        final excelFile = excel.Excel.decodeBytes(bytes);
+        // 检查是否有 Holdings 和 Transactions 工作表
+        return excelFile.tables.containsKey('Holdings') && 
+               excelFile.tables.containsKey('Transactions');
+      }
+      
+      // 如果是 csv，检查是否包含备份标记
+      if (extension == 'csv') {
+        final csvString = utf8.decode(bytes, allowMalformed: true);
+        return csvString.contains('# FundLink Full Backup') ||
+               csvString.contains('=== HOLDINGS DATA ===');
+      }
+      
+      // 其他情况，尝试两种方式
+      try {
+        final csvString = utf8.decode(bytes, allowMalformed: true);
+        if (csvString.contains('# FundLink Full Backup') ||
+            csvString.contains('=== HOLDINGS DATA ===')) {
+          return true;
+        }
+      } catch (_) {}
+      
+      try {
+        final excelFile = excel.Excel.decodeBytes(bytes);
+        return excelFile.tables.containsKey('Holdings') && 
+               excelFile.tables.containsKey('Transactions');
+      } catch (_) {}
+      
+      return false;
+    } catch (e) {
+      debugPrint('检测备份文件失败: $e');
+      return false;
+    }
+  }
+  
+  /// 处理完整备份文件
+  Future<void> _processFullBackup(Uint8List bytes, String? extension) async {
+    final dataManager = DataManagerProvider.of(context);
+    
+    try {
+      debugPrint('[Import] 检测到完整备份文件，开始解析...');
+      
+      final result = await FileImportService.parseFullBackup(
+        bytes: bytes,
+        extension: extension ?? 'csv',
+      );
+      
+      debugPrint('[Import] 解析完成: 持仓${result.holdings.length}条, 交易${result.transactions.length}条');
+      
+      if (result.holdings.isEmpty && result.transactions.isEmpty) {
+        throw Exception('备份文件中没有数据');
+      }
+      
+      // 直接导入所有交易记录（会自动重建持仓）
+      int success = 0;
+      int fail = 0;
+      int skip = 0;
+      
+      for (final transaction in result.transactions) {
+        try {
+          // 检查是否已存在
+          final exists = dataManager.transactions.any(
+            (tx) => tx.id == transaction.id || 
+                    (tx.clientId == transaction.clientId && 
+                     tx.fundCode == transaction.fundCode &&
+                     tx.tradeDate == transaction.tradeDate &&
+                     tx.amount == transaction.amount)
+          );
+          
+          if (exists) {
+            skip++;
+            continue;
+          }
+          
+          await dataManager.addTransaction(transaction);
+          success++;
+        } catch (e) {
+          fail++;
+          debugPrint('[Import] 导入交易失败: $e');
+        }
+      }
+      
+      debugPrint('[Import] 导入结果: 成功$success, 跳过$skip, 失败$fail');
+      
+      // 强制保存数据
+      if (!kIsWeb && success > 0) {
+        await dataManager.saveData();
+        debugPrint('[Import] 数据已保存到数据库');
+      }
+      
+      // 显示结果
+      if (mounted) {
+        String message = '备份恢复完成';
+        if (success > 0) message += '\n成功恢复 $success 条交易';
+        if (skip > 0) message += '\n跳过 $skip 条重复记录';
+        if (fail > 0) message += '\n失败 $fail 条';
+        
+        context.showToast(message);
+        
+        // 返回上一页
+        Navigator.pop(context);
+      }
+      
+    } catch (e) {
+      debugPrint('[Import] 完整备份导入失败: $e');
+      if (mounted) {
+        context.showToast('备份恢复失败: $e');
+      }
+      rethrow;
     }
   }
 
@@ -1518,6 +1648,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     if (skip > 0) message += '，跳过$skip条';
     if (fail > 0) message += '，失败$fail条';
     context.showToast(message);
+    
+    // ✅ 关键修复：导入完成后强制刷新数据库，确保所有数据立即写入磁盘
+    // 即使立即退出程序，数据也不会丢失
+    if (!kIsWeb && success > 0) {
+      debugPrint('[Import] 导入完成，开始强制保存数据...');
+      await dataManager.saveData();
+      debugPrint('[Import] 数据保存完成，当前持仓数: ${dataManager.holdings.length}, 交易数: ${dataManager.transactions.length}');
+    }
     
     if (fail > 0) {
       dataManager.addLog('批量导入完成: 成功$success, 跳过$skip, 失败$fail', type: LogType.warning);

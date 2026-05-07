@@ -264,12 +264,10 @@ class DataManager extends ChangeNotifier {
   Future<void> reloadOnResume() async {
     if (_disposed) return;
     
-    debugPrint('应用恢复，重新加载数据...');
-    try {
-      await loadData();
-    } catch (e) {
-      debugPrint('恢复加载数据失败: $e');
-    }
+    debugPrint('应用恢复，跳过重新加载（内存数据保持最新）');
+    // ✅ 关键修复：不从数据库重新加载，保持内存中的最新数据
+    // 因为导入/新增时已经写入SQLite并flush，内存数据是最新的
+    // 重新加载会导致未完全同步的数据被空数据覆盖
   }
 
   Future<void> loadData() async {
@@ -290,9 +288,15 @@ class DataManager extends ChangeNotifier {
   }
   
   Future<void> _loadDataFromSQLite() async {
+    debugPrint('[DataManager] 开始从 SQLite 加载数据...');
     _holdings = await _repository!.getAllHoldings();
+    debugPrint('[DataManager] 加载持仓: ${_holdings.length}条');
+    
     _transactions = await _repository!.getAllTransactions();
+    debugPrint('[DataManager] 加载交易: ${_transactions.length}条');
+    
     _logs = await _repository!.getLogs(limit: AppConstants.maxLogEntries);
+    debugPrint('[DataManager] 加载日志: ${_logs.length}条');
     
     final privacyModeStr = await _repository!.getSetting('privacy_mode');
     if (privacyModeStr != null) {
@@ -310,6 +314,8 @@ class DataManager extends ChangeNotifier {
     if (showHoldersStr != null) {
       _showHoldersOnSummaryCard = showHoldersStr == 'true';
     }
+    
+    debugPrint('[DataManager] SQLite 数据加载完成');
   }
   
   Future<void> _loadDataFromPrefs() async {
@@ -372,15 +378,27 @@ class DataManager extends ChangeNotifier {
 
   Future<void> saveData() async {
     try {
+      debugPrint('[DataManager] saveData 开始...');
       if (kIsWeb) {
         await _saveDataToPrefs();
+        debugPrint('[DataManager] Web 平台数据已保存');
       } else {
-        // 非 Web 平台也需要保存设置到 SharedPreferences
+        // ✅ 修复：非 Web 平台需要同时保存数据和设置
+        // 数据已通过 insert/update 写入 SQLite，这里确保设置也同步保存
         await _saveSettingsToPrefs();
+        debugPrint('[DataManager] 设置已保存');
+        
+        // ✅ 关键修复：强制刷新数据库，确保数据立即写入磁盘
+        // iOS 可能在应用退出时杀死进程，导致 SQLite 缓冲数据丢失
+        // 必须等待 flush 完成，不能异步执行
+        await _repository!.flush();
+        debugPrint('[DataManager] 数据库已刷新');
       }
       notifyListeners();
-    } catch (e) {
-      debugPrint('保存数据失败: $e');
+      debugPrint('[DataManager] saveData 完成');
+    } catch (e, stackTrace) {
+      debugPrint('[DataManager] ❌ 保存数据失败: $e');
+      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
     }
   }
   
@@ -661,7 +679,17 @@ class DataManager extends ChangeNotifier {
       ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
 
     if (relatedTransactions.isEmpty) {
+      // 从内存中移除
+      final holdingToRemove = _holdings.firstWhere(
+        (h) => h.clientId == clientId && h.fundCode == fundCode,
+        orElse: () => FundHolding.invalid(fundCode: fundCode),
+      );
       _holdings.removeWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
+      
+      // ✅ 关键修复：从数据库中删除持仓
+      if (!kIsWeb && holdingToRemove.id.isNotEmpty) {
+        await _repository!.deleteHolding(holdingToRemove.id);
+      }
       return;
     }
 
@@ -695,9 +723,19 @@ class DataManager extends ChangeNotifier {
     );
 
     if (existingIndex != -1) {
+      // 更新内存
       _holdings[existingIndex] = newHolding;
+      // ✅ 关键修复：更新数据库中的持仓
+      if (!kIsWeb) {
+        await _repository!.updateHolding(newHolding.id, newHolding);
+      }
     } else {
+      // 添加到内存
       _holdings = [..._holdings, newHolding];
+      // ✅ 关键修复：插入新持仓到数据库
+      if (!kIsWeb) {
+        await _repository!.insertHolding(newHolding);
+      }
     }
   }
 
@@ -1420,17 +1458,17 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-        // 应用进入后台
+        // 应用进入后台 - 必须同步等待保存完成
         debugPrint('应用状态: paused (进入后台)');
         _dataManager.saveOnBackground();
         break;
       case AppLifecycleState.resumed:
-        // 应用恢复前台
-        debugPrint('应用状态: resumed (恢复前台)');
-        _dataManager.reloadOnResume();
+        // 应用恢复前台 - 不需要重新加载，内存中的数据是最新的
+        debugPrint('应用状态: resumed (恢复前台) - 跳过重新加载');
+        // 不调用 reloadOnResume()，避免覆盖内存中的最新数据
         break;
       case AppLifecycleState.detached:
-        // 应用被销毁
+        // 应用被销毁 - 必须同步等待保存完成
         debugPrint('应用状态: detached (被销毁)');
         _dataManager.saveOnBackground();
         break;

@@ -629,7 +629,8 @@ class StockCandleChartState extends State<StockCandleChart> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading && _candleDataList.isEmpty && _earliestDate == null) {
+    // ✅ 关键修复：加载中显示固定高度的占位符，避免布局跳动
+    if (_isLoading && _candleDataList.isEmpty) {
       return const SizedBox(
         height: 200,
         child: Center(child: CupertinoActivityIndicator()),
