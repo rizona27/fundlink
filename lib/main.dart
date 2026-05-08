@@ -1,3 +1,4 @@
+import 'dart:math' show cos, pi;
 import 'package:flutter/cupertino.dart';
 import 'utils/animation_config.dart';
 import 'package:flutter/material.dart' show Colors;
@@ -83,9 +84,10 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   late DataManager _dataManager;
-  Brightness _currentBrightness = Brightness.light;
+  late AnimationController _themeController;
+  late Animation<double> _themeAnimation;
 
   @override
   void initState() {
@@ -94,7 +96,23 @@ class _MyAppState extends State<MyApp> {
     debugPrint('[Main] 🔧 创建DataManager实例...');
     _dataManager = DataManager();
     debugPrint('[Main] ✅ DataManager实例创建完成');
-    _currentBrightness = _getBrightness();
+    
+    // 初始化 AnimationController
+    _themeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    // 定义缓动曲线 (EaseOutQuart - 快速启动，缓慢收尾，更有物理分量感)
+    _themeAnimation = CurvedAnimation(
+      parent: _themeController,
+      curve: Curves.easeOutQuart,
+    );
+
+    // 根据初始亮度设置初始值
+    final initialBrightness = _getBrightness();
+    _themeController.value = initialBrightness == Brightness.dark ? 1.0 : 0.0;
+    
     _dataManager.addListener(_onThemeChanged);
     debugPrint('[Main] 📋 DataManager监听器已添加');
     
@@ -107,10 +125,9 @@ class _MyAppState extends State<MyApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final newBrightness = _getBrightness();
-        if (newBrightness != _currentBrightness) {
-          setState(() {
-            _currentBrightness = newBrightness;
-          });
+        final targetValue = newBrightness == Brightness.dark ? 1.0 : 0.0;
+        if (_themeController.value != targetValue) {
+          _themeController.animateTo(targetValue);
         }
       }
     });
@@ -199,11 +216,15 @@ class _MyAppState extends State<MyApp> {
 
   void _onThemeChanged() {
     final newBrightness = _getBrightness();
-    if (newBrightness != _currentBrightness) {
-      setState(() {
-        _currentBrightness = newBrightness;
-      });
-    }
+    final targetValue = newBrightness == Brightness.dark ? 1.0 : 0.0;
+    
+    // 使用弹性动画（Spring Simulation）
+    // 这种动画比 Sine 曲线更有动态反馈感，像物理实体在变化
+    _themeController.animateTo(
+      targetValue,
+      curve: Curves.easeOutQuart, // 快速启动，缓慢收尾，非常高级
+      duration: const Duration(milliseconds: 1000),
+    );
   }
 
   Brightness _getBrightness() {
@@ -219,6 +240,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    _themeController.dispose(); // 记得释放资源
     _dataManager.removeListener(_onThemeChanged);
     _dataManager.dispose();  // ✅ 释放 DataManager 资源，防止内存泄漏
     super.dispose();
@@ -226,35 +248,63 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = _currentBrightness == Brightness.dark;
-    final backgroundColor = isDarkMode
-        ? const Color(0xFF1C1C1E)
-        : const Color(0xFFF2F2F7);
+    // 使用 AnimatedBuilder 局部更新，不再频繁触发 build 全局重绘
+    return AnimatedBuilder(
+      animation: _themeAnimation,
+      builder: (context, child) {
+        final t = _themeAnimation.value;
+        
+        // 插值计算颜色
+        final backgroundColor = Color.lerp(
+          const Color(0xFFF2F2F7), // 浅色背景
+          const Color(0xFF1C1C1E), // 深色背景
+          t,
+        )!;
 
-    return DataManagerProvider(
-      dataManager: _dataManager,
-      child: CupertinoApp(
-        title: '基金持仓管理',
-        theme: CupertinoThemeData(
-          brightness: _currentBrightness,
-          primaryColor: const Color(0xFF007AFF),
-          primaryContrastingColor: CupertinoColors.white,
-          scaffoldBackgroundColor: backgroundColor,
-          textTheme: CupertinoTextThemeData(
-            navTitleTextStyle: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
-            ),
-            textStyle: TextStyle(
-              fontSize: 17,
-              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+        final textColor = Color.lerp(
+          const Color(0xFF1C1C1E), 
+          CupertinoColors.white,   
+          t,
+        )!;
+
+        // 阈值判断，用于改变状态栏和图标的显示逻辑
+        final isDarkMode = t > 0.5;
+        
+        // 轻微的缩放回弹感：增加物理空间感
+        // 从 0.99 -> 1.0，让界面仿佛在深色模式下"下沉"或"呼吸"
+        final scale = 1.0 - (0.01 * (1.0 - t).abs());
+
+        return Transform.scale(
+          scale: scale,
+          child: DataManagerProvider(
+            dataManager: _dataManager,
+            child: CupertinoApp(
+              title: '基金持仓管理',
+              theme: CupertinoThemeData(
+                // 关键：亮度随阈值切换，背景和文字随插值切换
+                brightness: isDarkMode ? Brightness.dark : Brightness.light,
+                primaryColor: const Color(0xFF007AFF),
+                primaryContrastingColor: CupertinoColors.white,
+                scaffoldBackgroundColor: backgroundColor,
+                textTheme: CupertinoTextThemeData(
+                  navTitleTextStyle: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                  textStyle: TextStyle(
+                    fontSize: 17,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              home: child, // 保持子组件不重复构建
+              debugShowCheckedModeBanner: false,
             ),
           ),
-        ),
-        home: const SplashView(),
-        debugShowCheckedModeBanner: false,
-      ),
+        );
+      },
+      child: const SplashView(), // 性能优化：子页面不会随动画重新构建
     );
   }
 }
