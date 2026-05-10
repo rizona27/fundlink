@@ -51,7 +51,8 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
       // 检查是否为交易时间，非交易时间时暂停倒计时
       final isTradingTime = widget.isTradingTime ?? _checkIsTradingTime();
       if (!isTradingTime) {
-        // 非交易时间，不更新倒计时，但保持圆圈显示
+        // 非交易时间，不更新倒计时，也不自动触发刷新
+        // 保持显示剩余秒数或图标，但不进行倒计时
         return;
       }
 

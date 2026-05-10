@@ -350,19 +350,25 @@ class _FundDetailPageState extends State<FundDetailPage> {
                           const SizedBox(height: 24),
                           _buildChartSection(isDark),
                           const SizedBox(height: 24),
-                          TopHoldingsWidget(
-                            topHoldings: _topHoldings,
-                            stockQuotes: _stockQuotes,
-                            isDark: isDark,
-                            onStockTap: (stockCode, stockName) {
-                              showCupertinoModalPopup(
-                                context: context,
-                                builder: (context) => StockDetailDialog(
-                                  stockCode: stockCode,
-                                  stockName: stockName,
-                                ),
-                              );
-                            },
+                          // ✅ 修复：使用ErrorBoundary包裹十大持仓，启用自动重试
+                          ErrorBoundary(
+                            errorMessage: '重仓股加载失败',
+                            autoRetry: true,
+                            retryDelay: const Duration(seconds: 3),
+                            child: TopHoldingsWidget(
+                              topHoldings: _topHoldings,
+                              stockQuotes: _stockQuotes,
+                              isDark: isDark,
+                              onStockTap: (stockCode, stockName) {
+                                showCupertinoModalPopup(
+                                  context: context,
+                                  builder: (context) => StockDetailDialog(
+                                    stockCode: stockCode,
+                                    stockName: stockName,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                           const SizedBox(height: 24),
                           _buildHistoryEntry(isDark),

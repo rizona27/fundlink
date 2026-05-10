@@ -36,6 +36,12 @@ class ErrorBoundary extends StatefulWidget {
   /// 是否自动记录错误到日志系统
   final bool autoLogError;
   
+  /// 是否自动重试（不显示重试按钮）
+  final bool autoRetry;
+  
+  /// 自动重试前的延迟时间
+  final Duration retryDelay;
+  
   const ErrorBoundary({
     super.key,
     required this.child,
@@ -43,6 +49,8 @@ class ErrorBoundary extends StatefulWidget {
     this.errorMessage,
     this.onError,
     this.autoLogError = true,
+    this.autoRetry = false,
+    this.retryDelay = const Duration(seconds: 2),
   });
 
   @override
@@ -96,6 +104,15 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       _logError(error, stackTrace);
     }
 
+    // ✅ 新增：如果启用自动重试，则延迟后自动重试
+    if (widget.autoRetry) {
+      Future.delayed(widget.retryDelay, () {
+        if (mounted) {
+          _handleRetry();
+        }
+      });
+    }
+
     // Debug 模式下打印详细错误
     if (kDebugMode) {
       debugPrint('❌ ErrorBoundary 捕获错误:');
@@ -106,6 +123,28 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
   }
 
   Widget _buildErrorWidget() {
+    // ✅ 如果启用自动重试，不显示错误界面，而是显示加载指示器
+    if (widget.autoRetry) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              widget.errorMessage ?? '加载中...',
+              style: TextStyle(
+                fontSize: 14,
+                color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                    ? CupertinoColors.white.withOpacity(0.6)
+                    : CupertinoColors.systemGrey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     // 使用自定义错误构建器
     if (widget.errorBuilder != null && _error != null && _stackTrace != null) {
       return widget.errorBuilder!(_error!, _stackTrace!);

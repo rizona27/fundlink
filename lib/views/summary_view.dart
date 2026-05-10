@@ -381,6 +381,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   Future<void> _checkAndRefreshStaleValuation() async {
     if (!_showValuationRefresh || _dataManager.isValuationRefreshInProgress) return;
+    
+    // ✅ 修复：非交易时间不进行自动检查和刷新
+    if (_shouldPauseAutoRefresh()) {
+      debugPrint('[SummaryView] 非交易时间，跳过估值缓存检查');
+      return;
+    }
+    
     if (_lastValuationRefreshTime != null &&
         DateTime.now().difference(_lastValuationRefreshTime!).inSeconds < 5) {
       return;
