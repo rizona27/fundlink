@@ -26,7 +26,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   Brightness? _lastBrightness;
   Timer? _animationTimer;
   double _backgroundOpacity = 1.0; // 背景透明度
-  double _textOpacity = 1.0; // 文字透明度
 
   @override
   bool get wantKeepAlive => true;
@@ -51,19 +50,17 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     if (_lastBrightness != null && currentBrightness != _lastBrightness) {
       _lastBrightness = currentBrightness;
       
-      // 第1步：背景和文字同步淡出（0-600ms）
+      // 背景淡出再淡入，文字颜色自动跟随主题变化
       setState(() {
         _backgroundOpacity = 0.0;
-        _textOpacity = 0.0;
       });
       
-      // 第2步：背景和文字同步淡入（600-1200ms），无延迟
+      // 主题动画完成后立即淡入背景
       _animationTimer?.cancel();
-      _animationTimer = Timer(const Duration(milliseconds: 600), () {
+      _animationTimer = Timer(const Duration(milliseconds: 400), () {
         if (mounted) {
           setState(() {
             _backgroundOpacity = 1.0;
-            _textOpacity = 1.0; // 文字和背景同时淡入
           });
         }
       });
@@ -85,7 +82,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     return Container(
       color: backgroundColor, // 底层：固定主题色，避免闪烁
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 600),
+        duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOutCubic,
         color: backgroundColor.withOpacity(_backgroundOpacity), // 上层：透明度控制淡入淡出
         child: SafeArea(
@@ -337,17 +334,12 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                   ),
                 ),
                 const SizedBox(width: 12),
-                AnimatedOpacity(
-                  opacity: _textOpacity,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOutCubic,
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                    ),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
                   ),
                 ),
               ],
@@ -428,43 +420,28 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedOpacity(
-                  opacity: _textOpacity,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOutCubic,
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: isDestructive
-                          ? CupertinoColors.systemRed
-                          : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
-                    ),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: isDestructive
+                        ? CupertinoColors.systemRed
+                        : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
                   ),
                 ),
                 if (customSubtitle != null) ...[
                   const SizedBox(height: 2),
-                  AnimatedOpacity(
-                    opacity: _textOpacity,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOutCubic,
-                    child: customSubtitle,
-                  ),
+                  customSubtitle,
                 ] else if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  AnimatedOpacity(
-                    opacity: _textOpacity,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOutCubic,
-                    child: Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.6)
-                            : CupertinoColors.systemGrey,
-                      ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode
+                          ? CupertinoColors.white.withOpacity(0.6)
+                          : CupertinoColors.systemGrey,
                     ),
                   ),
                 ],
@@ -515,33 +492,23 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedOpacity(
-                  opacity: _textOpacity,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOutCubic,
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                    ),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
                   ),
                 ),
                 if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  AnimatedOpacity(
-                    opacity: _textOpacity,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOutCubic,
-                    child: Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.6)
-                            : CupertinoColors.systemGrey,
-                      ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode
+                          ? CupertinoColors.white.withOpacity(0.6)
+                          : CupertinoColors.systemGrey,
                     ),
                   ),
                 ],
@@ -597,32 +564,22 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedOpacity(
-                  opacity: _textOpacity,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOutCubic,
-                  child: Text(
-                    '主题模式',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                    ),
+                Text(
+                  '主题模式',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
                   ),
                 ),
                 const SizedBox(height: 2),
-                AnimatedOpacity(
-                  opacity: _textOpacity,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOutCubic,
-                  child: Text(
-                    '明暗适配',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDarkMode
-                          ? CupertinoColors.white.withOpacity(0.6)
-                          : CupertinoColors.systemGrey,
-                    ),
+                Text(
+                  '明暗适配',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.6)
+                        : CupertinoColors.systemGrey,
                   ),
                 ),
               ],
@@ -659,19 +616,14 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                 : CupertinoColors.systemGrey.withOpacity(0.4),
           ),
           const SizedBox(height: 8),
-          AnimatedOpacity(
-            opacity: _textOpacity,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeInOutCubic,
-            child: Text(
-              'Happiness around the corner.',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDarkMode
-                    ? CupertinoColors.white.withOpacity(0.4)
-                    : CupertinoColors.systemGrey.withOpacity(0.5),
-                fontStyle: FontStyle.italic,
-              ),
+          Text(
+            'Happiness around the corner.',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.4)
+                  : CupertinoColors.systemGrey.withOpacity(0.5),
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -714,18 +666,13 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AnimatedOpacity(
-          opacity: _textOpacity,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOutCubic,
-          child: Text(
-            APP_VERSION,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.6)
-                  : CupertinoColors.systemGrey,
-            ),
+        Text(
+          APP_VERSION,
+          style: TextStyle(
+            fontSize: 12,
+            color: isDarkMode
+                ? CupertinoColors.white.withOpacity(0.6)
+                : CupertinoColors.systemGrey,
           ),
         ),
         if (versionInfo != null) ...[

@@ -45,7 +45,7 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
     super.initState();
     _selectedMode = widget.initialMode;
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
     _textFadeController = AnimationController(
@@ -59,8 +59,8 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
     final targetValue = _getAnimationValue();
     _animationController.animateTo(
       targetValue,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
     );
   }
 
@@ -82,9 +82,9 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
       });
       _updateAnimation();
       
-      // 背景色变化后，延迟文字颜色的淡入
+      // 背景色变化完成后，立即开始文字淡入（无延迟）
       _textFadeTimer?.cancel();
-      _textFadeTimer = Timer(const Duration(milliseconds: 200), () {
+      _textFadeTimer = Timer(const Duration(milliseconds: 400), () {
         if (mounted) {
           _textFadeController.forward(from: 0.0);
         }
@@ -172,7 +172,7 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
           animation: _textFadeController,
           builder: (context, child) {
             return AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 400),
               opacity: isSelected ? 1.0 : 0.6,
               child: Center(
                 child: Text(

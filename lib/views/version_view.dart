@@ -9,9 +9,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.7';
+const String APP_VERSION = 'v1.2.8';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.8 - 优化主题切换',
   'v1.2.7 - 优化估值查询逻辑，修复图表显示',
   'v1.2.6 - 修复数据持久化问题，新增应用生命周期管理',
   'v1.2.5 - 新增跨平台内存监控、修复Web端编译问题',
