@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'dart:async';
 
 enum ThemeMode {
   light,
@@ -36,6 +37,8 @@ class ThemeSwitch extends StatefulWidget {
 class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStateMixin {
   late ThemeMode _selectedMode;
   late AnimationController _animationController;
+  late AnimationController _textFadeController;
+  Timer? _textFadeTimer;
 
   @override
   void initState() {
@@ -43,6 +46,10 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
     _selectedMode = widget.initialMode;
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _textFadeController = AnimationController(
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
     _updateAnimation();
@@ -74,12 +81,23 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
         _selectedMode = mode;
       });
       _updateAnimation();
+      
+      // 背景色变化后，延迟文字颜色的淡入
+      _textFadeTimer?.cancel();
+      _textFadeTimer = Timer(const Duration(milliseconds: 200), () {
+        if (mounted) {
+          _textFadeController.forward(from: 0.0);
+        }
+      });
+      
       widget.onChanged(mode);
     }
   }
 
   @override
   void dispose() {
+    _textFadeTimer?.cancel();
+    _textFadeController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -150,19 +168,24 @@ class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStat
     return Expanded(
       child: GestureDetector(
         onTap: () => _selectMode(mode),
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 200),
-          opacity: isSelected ? 1.0 : 0.6,
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12, 
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
+        child: AnimatedBuilder(
+          animation: _textFadeController,
+          builder: (context, child) {
+            return AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: isSelected ? 1.0 : 0.6,
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12, 
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

@@ -12,6 +12,7 @@ import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
 import 'pending_transactions_view.dart';
+import 'dart:async';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -20,9 +21,12 @@ class ConfigView extends StatefulWidget {
   State<ConfigView> createState() => _ConfigViewState();
 }
 
-class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMixin {
   late DataManager _dataManager;
-  late AnimationController _fadeController;
+  Brightness? _lastBrightness;
+  Timer? _animationTimer;
+  double _backgroundOpacity = 1.0; // 背景透明度
+  double _textOpacity = 1.0; // 文字透明度
 
   @override
   bool get wantKeepAlive => true;
@@ -30,21 +34,45 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    )..forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _dataManager = DataManagerProvider.of(context);
+        _lastBrightness = CupertinoTheme.brightnessOf(context);
+      }
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
+    
+    final currentBrightness = CupertinoTheme.brightnessOf(context);
+    if (_lastBrightness != null && currentBrightness != _lastBrightness) {
+      _lastBrightness = currentBrightness;
+      
+      // 第1步：背景和文字同步淡出（0-600ms）
+      setState(() {
+        _backgroundOpacity = 0.0;
+        _textOpacity = 0.0;
+      });
+      
+      // 第2步：背景和文字同步淡入（600-1200ms），无延迟
+      _animationTimer?.cancel();
+      _animationTimer = Timer(const Duration(milliseconds: 600), () {
+        if (mounted) {
+          setState(() {
+            _backgroundOpacity = 1.0;
+            _textOpacity = 1.0; // 文字和背景同时淡入
+          });
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
+    _animationTimer?.cancel();
     super.dispose();
   }
 
@@ -55,10 +83,12 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     return Container(
-      color: backgroundColor,
-      child: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeController,
+      color: backgroundColor, // 底层：固定主题色，避免闪烁
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutCubic,
+        color: backgroundColor.withOpacity(_backgroundOpacity), // 上层：透明度控制淡入淡出
+        child: SafeArea(
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -307,12 +337,17 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                AnimatedOpacity(
+                  opacity: _textOpacity,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutCubic,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                    ),
                   ),
                 ),
               ],
@@ -393,28 +428,43 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: isDestructive
-                        ? CupertinoColors.systemRed
-                        : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
+                AnimatedOpacity(
+                  opacity: _textOpacity,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutCubic,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isDestructive
+                          ? CupertinoColors.systemRed
+                          : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
+                    ),
                   ),
                 ),
                 if (customSubtitle != null) ...[
                   const SizedBox(height: 2),
-                  customSubtitle,
+                  AnimatedOpacity(
+                    opacity: _textOpacity,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeInOutCubic,
+                    child: customSubtitle,
+                  ),
                 ] else if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDarkMode
-                          ? CupertinoColors.white.withOpacity(0.6)
-                          : CupertinoColors.systemGrey,
+                  AnimatedOpacity(
+                    opacity: _textOpacity,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeInOutCubic,
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.6)
+                            : CupertinoColors.systemGrey,
+                      ),
                     ),
                   ),
                 ],
@@ -465,23 +515,33 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                AnimatedOpacity(
+                  opacity: _textOpacity,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutCubic,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                    ),
                   ),
                 ),
                 if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDarkMode
-                          ? CupertinoColors.white.withOpacity(0.6)
-                          : CupertinoColors.systemGrey,
+                  AnimatedOpacity(
+                    opacity: _textOpacity,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeInOutCubic,
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.6)
+                            : CupertinoColors.systemGrey,
+                      ),
                     ),
                   ),
                 ],
@@ -537,22 +597,32 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '主题模式',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                AnimatedOpacity(
+                  opacity: _textOpacity,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutCubic,
+                  child: Text(
+                    '主题模式',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  '明暗适配',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDarkMode
-                        ? CupertinoColors.white.withOpacity(0.6)
-                        : CupertinoColors.systemGrey,
+                AnimatedOpacity(
+                  opacity: _textOpacity,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutCubic,
+                  child: Text(
+                    '明暗适配',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode
+                          ? CupertinoColors.white.withOpacity(0.6)
+                          : CupertinoColors.systemGrey,
+                    ),
                   ),
                 ),
               ],
@@ -589,14 +659,19 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
                 : CupertinoColors.systemGrey.withOpacity(0.4),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Happiness around the corner.',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.4)
-                  : CupertinoColors.systemGrey.withOpacity(0.5),
-              fontStyle: FontStyle.italic,
+          AnimatedOpacity(
+            opacity: _textOpacity,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOutCubic,
+            child: Text(
+              'Happiness around the corner.',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDarkMode
+                    ? CupertinoColors.white.withOpacity(0.4)
+                    : CupertinoColors.systemGrey.withOpacity(0.5),
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
         ],
@@ -639,13 +714,18 @@ class _ConfigViewState extends State<ConfigView> with SingleTickerProviderStateM
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          APP_VERSION,
-          style: TextStyle(
-            fontSize: 12,
-            color: isDarkMode
-                ? CupertinoColors.white.withOpacity(0.6)
-                : CupertinoColors.systemGrey,
+        AnimatedOpacity(
+          opacity: _textOpacity,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOutCubic,
+          child: Text(
+            APP_VERSION,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.6)
+                  : CupertinoColors.systemGrey,
+            ),
           ),
         ),
         if (versionInfo != null) ...[

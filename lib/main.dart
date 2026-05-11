@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'utils/animation_config.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart' show Colors, AnimatedTheme;
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, kReleaseMode;
 import 'package:permission_handler/permission_handler.dart';
@@ -85,6 +85,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late DataManager _dataManager;
+  Brightness? _targetBrightness;
 
   @override
   void initState() {
@@ -93,6 +94,8 @@ class _MyAppState extends State<MyApp> {
     debugPrint('[Main] 🔧 创建DataManager实例...');
     _dataManager = DataManager();
     debugPrint('[Main] ✅ DataManager实例创建完成');
+    
+    _targetBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     
     _dataManager.addListener(_onThemeChanged);
     debugPrint('[Main] 📋 DataManager监听器已添加');
@@ -185,9 +188,13 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _onThemeChanged() {
-    // 主题变化时触发全局重建
+    // 主题变化时触发重建
     if (mounted) {
-      setState(() {});
+      final newBrightness = _getBrightness();
+      if (newBrightness != _targetBrightness) {
+        _targetBrightness = newBrightness;
+        setState(() {}); // 触发 rebuild
+      }
     }
   }
 
@@ -213,27 +220,29 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     final brightness = _getBrightness();
     final isDarkMode = brightness == Brightness.dark;
+    final currentBrightness = _targetBrightness ?? brightness;
+    final currentIsDarkMode = currentBrightness == Brightness.dark;
     
     return DataManagerProvider(
       dataManager: _dataManager,
       child: CupertinoApp(
         title: '基金持仓管理',
         theme: CupertinoThemeData(
-          brightness: isDarkMode ? Brightness.dark : Brightness.light,
+          brightness: currentIsDarkMode ? Brightness.dark : Brightness.light,
           primaryColor: const Color(0xFF007AFF),
           primaryContrastingColor: CupertinoColors.white,
-          scaffoldBackgroundColor: isDarkMode 
+          scaffoldBackgroundColor: currentIsDarkMode 
               ? const Color(0xFF1C1C1E) 
               : const Color(0xFFF2F2F7),
           textTheme: CupertinoTextThemeData(
             navTitleTextStyle: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+              color: currentIsDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
             ),
             textStyle: TextStyle(
               fontSize: 17,
-              color: isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+              color: currentIsDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
             ),
           ),
         ),
