@@ -495,13 +495,22 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
     final allHoldings = _dataManager.holdings;
     if (_searchText.isEmpty) {
+      debugPrint('[SummaryView] 📊 No search text, returning all ${allHoldings.length} holdings');
       return _groupByFundCode(allHoldings);
     }
+    
+    debugPrint('[SummaryView] 🔎 Filtering with searchText: "$_searchText"');
     final filtered = allHoldings.where((holding) {
-      return holding.fundCode.contains(_searchText) ||
+      final match = holding.fundCode.contains(_searchText) ||
           holding.fundName.contains(_searchText) ||
           holding.clientName.contains(_searchText);
+      if (match) {
+        debugPrint('[SummaryView]    ✅ Matched: ${holding.fundCode} - ${holding.fundName}');
+      }
+      return match;
     }).toList();
+    
+    debugPrint('[SummaryView] 📊 Filtered result: ${filtered.length} holdings');
     return _groupByFundCode(filtered);
   }
 
@@ -854,10 +863,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               valuationRefreshProgress: _dataManager.valuationRefreshProgress,
               onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
               onSearchChanged: enableButtons
-                  ? (text) { if (mounted) setState(() => _searchText = text); }  // ✅ 添加 mounted 检查
+                  ? (text) { 
+                      debugPrint('[SummaryView] 🔍 onSearchChanged called: "$text"');
+                      debugPrint('[SummaryView]    - Text length: ${text.length}');
+                      debugPrint('[SummaryView]    - Is empty: ${text.isEmpty}');
+                      if (mounted) {
+                        setState(() => _searchText = text);
+                        debugPrint('[SummaryView]    - _searchText updated to: "$_searchText"');
+                      }
+                    }  // ✅ 添加 mounted 检查
                   : null,
               onSearchClear: enableButtons
-                  ? () { if (mounted) setState(() => _searchText = ''); }  // ✅ 添加 mounted 检查
+                  ? () { 
+                      debugPrint('[SummaryView] 🗑️ onSearchClear called');
+                      if (mounted) {
+                        setState(() => _searchText = '');
+                        debugPrint('[SummaryView]    - _searchText cleared');
+                      }
+                    }  // ✅ 添加 mounted 检查
                   : null,
               backgroundColor: Colors.transparent,
               iconColor: CupertinoTheme.of(context).primaryColor,

@@ -34,7 +34,7 @@ class ThemeSwitch extends StatefulWidget {
   State<ThemeSwitch> createState() => _ThemeSwitchState();
 }
 
-class _ThemeSwitchState extends State<ThemeSwitch> with SingleTickerProviderStateMixin {
+class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin {
   late ThemeMode _selectedMode;
   late AnimationController _animationController;
   late AnimationController _textFadeController;

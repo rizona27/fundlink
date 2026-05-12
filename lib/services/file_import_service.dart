@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';  // ✅ 添加 debugPrint
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
+import 'package:fast_gbk/fast_gbk.dart';  // ✅ 添加 GBK 编码支持
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import 'package:uuid/uuid.dart';
@@ -85,13 +86,24 @@ class FileImportService {
   static Future<({List<String> headers, List<List<dynamic>> rows})> _parseCsv(Uint8List bytes) async {
     try {
       String csvString;
+      // ✅ 修复：尝试多种编码格式
       try {
         csvString = utf8.decode(bytes);
+        debugPrint('[FileImport] 使用 UTF-8 编码成功');
       } catch (e) {
+        debugPrint('[FileImport] UTF-8 解码失败，尝试 GBK...');
         try {
-          csvString = latin1.decode(bytes); 
+          // 尝试 GBK 编码（中文 Windows 常用）
+          csvString = gbk.decode(bytes);
+          debugPrint('[FileImport] 使用 GBK 编码成功');
         } catch (e2) {
-          throw Exception('文件编码无法识别，请确保文件是有效的 CSV 格式');
+          debugPrint('[FileImport] GBK 解码失败，尝试 Latin1...');
+          try {
+            csvString = latin1.decode(bytes);
+            debugPrint('[FileImport] 使用 Latin1 编码成功');
+          } catch (e3) {
+            throw Exception('文件编码无法识别，请确保文件是有效的 CSV 格式\n\n支持的编码：UTF-8, GBK, Latin1');
+          }
         }
       }
       

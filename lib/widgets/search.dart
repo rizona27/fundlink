@@ -69,9 +69,17 @@ class Search extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               onChanged: onChanged,
+              // ✅ 添加 onSubmitted 处理，确保拼音输入完成后正确提交
+              onSubmitted: (value) {
+                // 拼音输入完成时，确保触发最终搜索
+                if (controller.text != value) {
+                  onChanged(value);
+                }
+              },
               onSuffixTap: () {
                 controller.clear();
                 focusNode.requestFocus();
+                // ✅ 使用微任务确保清空操作完成
                 Future.microtask(() {
                   onClear();
                   onChanged('');

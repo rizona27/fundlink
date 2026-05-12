@@ -307,8 +307,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
   Timer? _autoCloseTimer; 
+  Timer? _searchDebounceTimer; // ✅ 添加搜索防抖定时器
   bool _isRefreshing = false;
-  final GlobalKey _sortButtonKey = GlobalKey(); 
+  final GlobalKey _sortButtonKey = GlobalKey();
+  String _lastCommittedSearchText = ''; // ✅ 记录最后一次提交的搜索文本 
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
@@ -339,8 +341,20 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   void didUpdateWidget(AdaptiveTopBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     _updateHideProgress();
-    if (_externallyControlSearchText && widget.searchText != _internalSearchController.text) {
+    // ✅ 修复：只在焦点不在输入框时才同步外部搜索文本，避免破坏拼音输入法状态
+    if (_externallyControlSearchText && 
+        widget.searchText != _internalSearchController.text &&
+        !_internalFocusNode.hasFocus) {  // ✅ 添加焦点检查
+      debugPrint('[AdaptiveTopBar] 🔄 didUpdateWidget: Syncing search text from "${_internalSearchController.text}" to "${widget.searchText}"');
       _internalSearchController.text = widget.searchText ?? '';
+      // ✅ 如果文本被清空，也清空选择区域
+      if ((widget.searchText ?? '').isEmpty) {
+        _internalSearchController.selection = TextSelection.collapsed(offset: 0);
+      }
+    } else if (_externallyControlSearchText && widget.searchText != _internalSearchController.text) {
+      debugPrint('[AdaptiveTopBar] ⚠️ didUpdateWidget: Skipping sync because focus is in input field');
+      debugPrint('[AdaptiveTopBar]    - widget.searchText: "${widget.searchText}"');
+      debugPrint('[AdaptiveTopBar]    - controller.text: "${_internalSearchController.text}"');
     }
   }
 
@@ -396,7 +410,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   void _startAutoCloseTimer() {
     _cancelAutoCloseTimer();
-    _autoCloseTimer = Timer(const Duration(seconds: 5), () {
+    _autoCloseTimer = Timer(const Duration(seconds: 10), () { // ✅ 延长到10秒
       if (mounted && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
         _setSearchVisible(false);
       }
@@ -415,36 +429,62 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   void _onSearchChanged(String value) {
-    // Implement debounce logic
-    if (_externallyControlSearchText) {
-      widget.onSearchChanged?.call(value);
-    } else {
-      setState(() => _internalSearchText = value);
-    }
+    debugPrint('[AdaptiveTopBar] 📝 _onSearchChanged called: "$value"');
     
-    // Reset timer
-    _autoCloseTimer?.cancel();
-    _autoCloseTimer = Timer(AppConstants.searchDebounceDuration, () {
-      widget.onSearchChanged?.call(_currentSearchText);
+    // ✅ 取消之前的防抖定时器
+    _searchDebounceTimer?.cancel();
+    debugPrint('[AdaptiveTopBar]    - Previous debounce timer cancelled');
+    
+    // ✅ 设置新的防抖定时器，延迟 300ms 处理搜索
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      debugPrint('[AdaptiveTopBar] ⏰ Debounce timer triggered after 300ms');
+      debugPrint('[AdaptiveTopBar]    - Current value: "$value"');
+      debugPrint('[AdaptiveTopBar]    - Last committed: "$_lastCommittedSearchText"');
+      
+      // ✅ 确保只在文本真正变化且不是拼音输入中间状态时触发
+      if (_lastCommittedSearchText != value) {
+        debugPrint('[AdaptiveTopBar]    - Value changed, proceeding...');
+        _lastCommittedSearchText = value;
+        
+        if (_externallyControlSearchText) {
+          debugPrint('[AdaptiveTopBar]    - Calling external onSearchChanged callback');
+          widget.onSearchChanged?.call(value);
+        } else {
+          debugPrint('[AdaptiveTopBar]    - Updating internal search text');
+          setState(() => _internalSearchText = value);
+        }
+      } else {
+        debugPrint('[AdaptiveTopBar]    - Value unchanged, skipping');
+      }
     });
     
+    // ✅ 重置自动关闭计时器
     _resetAutoCloseTimer();
   }
 
   void _onSearchClear() {
+    // ✅ 取消防抖定时器
+    _searchDebounceTimer?.cancel();
+    
+    // ✅ 清空文本
+    _internalSearchController.clear();
+    _lastCommittedSearchText = '';
+    
     if (_externallyControlSearchText) {
-      _internalSearchController.clear();
       widget.onSearchClear?.call();
       widget.onSearchChanged?.call('');
     } else {
       setState(() {
         _internalSearchText = '';
-        _internalSearchController.clear();
       });
       widget.onSearchClear?.call();
       widget.onSearchChanged?.call('');
     }
-    if (!_internalFocusNode.hasFocus) _setSearchVisible(false);
+    
+    // ✅ 清空后保持焦点，继续输入
+    if (!_internalFocusNode.hasFocus) {
+      _internalFocusNode.requestFocus();
+    }
   }
 
   void _onReset() {
@@ -1205,7 +1245,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   @override
   void dispose() {
     _scrollTimer?.cancel();
-    _autoCloseTimer?.cancel(); 
+    _autoCloseTimer?.cancel();
+    _searchDebounceTimer?.cancel(); // ✅ 释放防抖定时器
     _hideController.dispose();
     _internalSearchController.dispose();
     _internalFocusNode.dispose();

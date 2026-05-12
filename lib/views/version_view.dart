@@ -9,9 +9,10 @@ import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.2.8';
+const String APP_VERSION = 'v1.2.9';
 
 const List<String> UPDATE_LOGS = [
+  'v1.2.9 - 修复搜索栏异常输入问题，导入文件GBK编码和离线支持',
   'v1.2.8 - 优化主题切换',
   'v1.2.7 - 优化估值查询逻辑，修复图表显示',
   'v1.2.6 - 修复数据持久化问题，新增应用生命周期管理',

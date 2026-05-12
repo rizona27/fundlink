@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart' show Colors, Divider;
 import '../services/data_manager.dart';
+import '../services/ui_state_service.dart';  // ✅ 使用 SQLite 存储 UI 状态
 import '../models/log_entry.dart';
 import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
@@ -12,6 +13,7 @@ import 'license_view.dart';
 import 'import_holding_view.dart';
 import 'export_holding_view.dart';
 import 'pending_transactions_view.dart';
+import 'mapping_dictionary_view.dart';
 import 'dart:async';
 
 class ConfigView extends StatefulWidget {
@@ -26,6 +28,11 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   Brightness? _lastBrightness;
   Timer? _animationTimer;
   double _backgroundOpacity = 1.0; // 背景透明度
+  
+  // ✅ 修复：添加 section 展开/折叠状态
+  bool _isHoldingsExpanded = true;  // 数据管理默认展开
+  bool _isGeneralExpanded = true;   // 基础配置默认展开
+  bool _isAboutExpanded = false;    // 关于默认折叠
 
   @override
   bool get wantKeepAlive => true;
@@ -33,12 +40,36 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         _dataManager = DataManagerProvider.of(context);
         _lastBrightness = CupertinoTheme.brightnessOf(context);
+        
+        // ✅ 修复：加载 section 展开/折叠状态
+        await _loadSectionStates();
       }
     });
+  }
+  
+  // ✅ 修复：加载 section 状态（使用 SQLite）
+  Future<void> _loadSectionStates() async {
+    final uiState = UIStateService();
+    if (mounted) {
+      final holdingsExpanded = await uiState.getBool('section_holdings_expanded');
+      final generalExpanded = await uiState.getBool('section_general_expanded');
+      final aboutExpanded = await uiState.getBool('section_about_expanded');
+      
+      setState(() {
+        _isHoldingsExpanded = holdingsExpanded ?? true;
+        _isGeneralExpanded = generalExpanded ?? true;
+        _isAboutExpanded = aboutExpanded ?? false;
+      });
+    }
+  }
+  
+  // ✅ 修复：保存 section 状态（使用 SQLite）
+  void _saveSectionState(String key, bool value) {
+    UIStateService().saveBool(key, value);
   }
 
   @override
@@ -93,8 +124,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               const SizedBox(height: 16),
               _buildGeneralSection(isDarkMode),
               const SizedBox(height: 16),
-              _buildImportExportSection(isDarkMode),
-              const SizedBox(height: 16),
               _buildAboutSection(isDarkMode),
               const SizedBox(height: 32),
               _buildFooter(isDarkMode),
@@ -114,6 +143,13 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       title: '基础配置',
       icon: '通用',
       isDarkMode: isDarkMode,
+      isExpanded: _isGeneralExpanded,
+      onToggle: () {
+        setState(() {
+          _isGeneralExpanded = !_isGeneralExpanded;
+        });
+        _saveSectionState('section_general_expanded', _isGeneralExpanded);
+      },
       children: [
         _buildSwitchItem(
           icon: CupertinoIcons.lock_fill,
@@ -146,9 +182,16 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildHoldingsManagementSection(bool isDarkMode) {
     return _buildSection(
-      title: '持仓管理',
+      title: '数据管理',
       icon: '数据',
       isDarkMode: isDarkMode,
+      isExpanded: _isHoldingsExpanded,
+      onToggle: () {
+        setState(() {
+          _isHoldingsExpanded = !_isHoldingsExpanded;
+        });
+        _saveSectionState('section_holdings_expanded', _isHoldingsExpanded);
+      },
       children: [
         _buildMenuItem(
           icon: CupertinoIcons.plus_circle_fill,
@@ -189,24 +232,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           },
         ),
         _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.trash,
-          title: '清空持仓',
-          subtitle: '删除所有数据（不可恢复）',
-          isDarkMode: isDarkMode,
-          isDestructive: true,
-          onTap: () => _showClearAllConfirmDialog(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildImportExportSection(bool isDarkMode) {
-    return _buildSection(
-      title: '数据迁移',
-      icon: '通用',
-      isDarkMode: isDarkMode,
-      children: [
+        // ✅ 修复：添加数据迁移子菜单
         _buildMenuItem(
           icon: CupertinoIcons.cloud_download,
           title: '导入数据',
@@ -232,17 +258,45 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             );
           },
         ),
+        _buildDivider(isDarkMode),
+        // ✅ 修复：添加映射词典菜单
+        _buildMenuItem(
+          icon: CupertinoIcons.book,
+          title: '映射词典',
+          subtitle: '映射客户号与客户名',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const MappingDictionaryView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.trash,
+          title: '清空持仓',
+          subtitle: '删除所有数据（不可恢复）',
+          isDarkMode: isDarkMode,
+          isDestructive: true,
+          onTap: () => _showClearAllConfirmDialog(),
+        ),
       ],
     );
   }
-
-
 
   Widget _buildAboutSection(bool isDarkMode) {
     return _buildSection(
       title: '关于',
       icon: '关于',
       isDarkMode: isDarkMode,
+      isExpanded: _isAboutExpanded,
+      onToggle: () {
+        setState(() {
+          _isAboutExpanded = !_isAboutExpanded;
+        });
+        _saveSectionState('section_about_expanded', _isAboutExpanded);
+      },
       children: [
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
@@ -293,6 +347,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     required String icon,
     required bool isDarkMode,
     required List<Widget> children,
+    required bool isExpanded,
+    required VoidCallback onToggle,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -312,8 +368,10 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       ),
       child: Column(
         children: [
-          Padding(
+          // ✅ 修复：添加点击区域和三角图标
+          CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            onPressed: onToggle,
             child: Row(
               children: [
                 Container(
@@ -334,26 +392,43 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                    ),
+                  ),
+                ),
+                // ✅ 修复：添加三角图标
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOutCubic,
+                  child: Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 16,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.6)
+                        : CupertinoColors.systemGrey.withOpacity(0.6),
                   ),
                 ),
               ],
             ),
           ),
-          Divider(
-            height: 0,
-            indent: 60,
-            endIndent: 16,
-            color: isDarkMode
-                ? CupertinoColors.white.withOpacity(0.1)
-                : CupertinoColors.systemGrey4,
-          ),
-          ...children,
+          if (isExpanded) ...[
+            Divider(
+              height: 0,
+              indent: 60,
+              endIndent: 16,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.1)
+                  : CupertinoColors.systemGrey4,
+            ),
+            ...children,
+          ],
         ],
       ),
     );

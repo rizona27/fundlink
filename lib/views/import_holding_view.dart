@@ -1573,6 +1573,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           continue;
         }
 
+        // ✅ 修复：允许离线导入，网络失败时使用默认值
         Map<String, dynamic> fundInfo = {  
           'fundName': '',
           'currentNav': 0.0,
@@ -1586,6 +1587,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         var retryCount = 0;
         const maxRetries = 2;
         Exception? lastError;
+        bool networkFailed = false;
         
         while (retryCount <= maxRetries) {
           try {
@@ -1601,7 +1603,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         }
         
         if (retryCount > maxRetries) {
-          dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.error);
+          networkFailed = true;
+          dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.warning);
+          // ✅ 关键修复：网络失败时不抛出异常，继续使用默认值
         }
 
         final fundName = fundInfo['fundName'] as String? ?? '';

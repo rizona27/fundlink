@@ -207,22 +207,36 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   }
 
   List<FundHolding> get _filteredHoldings {
-    if (_searchText.isEmpty) return _dataManager.holdings;
-    final lower = _searchText.toLowerCase();
-    return _dataManager.holdings.where((h) {
-      return h.clientName.toLowerCase().contains(lower) ||
-          h.clientId.toLowerCase().contains(lower) ||
-          h.fundCode.toLowerCase().contains(lower) ||
-          h.fundName.toLowerCase().contains(lower);
+    if (_searchText.isEmpty) {
+      debugPrint('[ClientView] 📊 No search text, returning all ${_dataManager.holdings.length} holdings');
+      return _dataManager.holdings;
+    }
+    
+    debugPrint('[ClientView] 🔎 Filtering with searchText: "$_searchText"');
+    final filtered = _dataManager.holdings.where((h) {
+      final match = h.clientName.contains(_searchText) ||
+          h.clientId.contains(_searchText) ||
+          h.fundCode.contains(_searchText) ||
+          h.fundName.contains(_searchText);
+      if (match) {
+        debugPrint('[ClientView]    ✅ Matched: ${h.fundCode} - ${h.fundName} (${h.clientName})');
+      }
+      return match;
     }).toList();
+    
+    debugPrint('[ClientView] 📊 Filtered result: ${filtered.length} holdings');
+    return filtered;
   }
 
   List<FundHolding> get _filteredPinnedHoldings {
+    // ✅ 修复：搜索时不显示置顶区，只在客户卡片内显示搜索结果
+    if (_searchText.isNotEmpty) return [];
     return _filteredHoldings.where((h) => h.isPinned).toList();
   }
 
   List<_ClientGroup> get _clientGroups {
     final map = <String, _ClientGroup>{};
+    // ✅ 修复：置顶的持仓仍然保留在客户列表中，不跳过
     for (final holding in _filteredHoldings) {
       final key = holding.clientId.isNotEmpty ? holding.clientId : holding.clientName;
 
@@ -239,37 +253,30 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
     var groups = map.values.toList();
     groups.sort((a, b) {
-      final originalNameA = _filteredHoldings.firstWhere(
-        (h) => (h.clientId.isNotEmpty ? h.clientId : h.clientName) == a.key,
-        orElse: () => a.holdings.first,
-      ).clientName;
+      // ✅ 修复：直接从分组的holdings中获取客户名，确保排序稳定
+      final originalNameA = a.holdings.first.clientName;
+      final originalNameB = b.holdings.first.clientName;
       
-      final originalNameB = _filteredHoldings.firstWhere(
-        (h) => (h.clientId.isNotEmpty ? h.clientId : h.clientName) == b.key,
-        orElse: () => b.holdings.first,
-      ).clientName;
-      
-      String pinyinA = '';
+      // ✅ 修复：比较完整拼音而非仅首字母，确保同首字母客户正确排序
+      String fullPinyinA = '';
       if (originalNameA.isNotEmpty) {
         try {
-          final firstCharPinyin = PinyinHelper.getPinyinE(originalNameA[0]);
-          pinyinA = firstCharPinyin.isNotEmpty ? firstCharPinyin[0].toUpperCase() : '';
+          fullPinyinA = PinyinHelper.getPinyinE(originalNameA);
         } catch (e) {
-          pinyinA = originalNameA[0];
+          fullPinyinA = originalNameA;
         }
       }
       
-      String pinyinB = '';
+      String fullPinyinB = '';
       if (originalNameB.isNotEmpty) {
         try {
-          final firstCharPinyin = PinyinHelper.getPinyinE(originalNameB[0]);
-          pinyinB = firstCharPinyin.isNotEmpty ? firstCharPinyin[0].toUpperCase() : '';
+          fullPinyinB = PinyinHelper.getPinyinE(originalNameB);
         } catch (e) {
-          pinyinB = originalNameB[0];
+          fullPinyinB = originalNameB;
         }
       }
       
-      return pinyinA.compareTo(pinyinB);
+      return fullPinyinA.compareTo(fullPinyinB);
     });
     return groups;
   }
@@ -430,20 +437,22 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   });
                 }
                     : null,
-                onSearchChanged: enableButtons
-                    ? (value) {
-                  setState(() {
-                    _searchText = value;
-                  });
-                }
-                    : null,
-                onSearchClear: enableButtons
-                    ? () {
-                  setState(() {
-                    _searchText = '';
-                  });
-                }
-                    : null,
+                onSearchChanged: (text) { 
+                        debugPrint('[ClientView] 🔍 onSearchChanged called: "$text"');
+                        debugPrint('[ClientView]    - Text length: ${text.length}');
+                        debugPrint('[ClientView]    - Is empty: ${text.isEmpty}');
+                        if (mounted) {
+                          setState(() => _searchText = text);
+                          debugPrint('[ClientView]    - _searchText updated to: "$_searchText"');
+                        }
+                      },
+                onSearchClear: () { 
+                        debugPrint('[ClientView] 🗑️ onSearchClear called');
+                        if (mounted) {
+                          setState(() => _searchText = '');
+                          debugPrint('[ClientView]    - _searchText cleared');
+                        }
+                      },
                 backgroundColor: Colors.transparent,
                 iconColor: CupertinoTheme.of(context).primaryColor,
                 iconSize: 24,
@@ -471,87 +480,152 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   ),
                 )
-                    : CustomScrollView(
+                    : ListView.builder(
                   controller: _scrollController,
-                  slivers: [
-                    SliverPadding(
-                      padding: EdgeInsets.only(
-                        left: 12,
-                        right: 12,
-                        top: 8,
-                        bottom: totalBottomPadding,
-                      ),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            if (hasPinned && index == 0) {
-                              return Column(
-                                children: [
-                                  GradientCard(
-                                    title: '置顶',
-                                    gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
-                                    isExpanded: _isPinnedSectionExpanded,
-                                    isDarkMode: isDarkMode,
-                                    onTap: _togglePinnedSection,
-                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '数量: ',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            height: 1.2,
-                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${_filteredPinnedHoldings.length}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            fontStyle: FontStyle.italic,
-                                            height: 1.2,
-                                            color: _colorForHoldingCount(_filteredPinnedHoldings.length),
-                                          ),
-                                        ),
-                                        Text(
-                                          '支',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            height: 1.2,
-                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                  key: ValueKey('list_${_searchText}'),
+                  padding: EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom: totalBottomPadding,
+                  ),
+                  itemCount: (hasPinned ? 1 : 0) + groups.length,
+                  itemBuilder: (context, index) {
+                    // 如果有置顶区域且当前是第一项，渲染置顶区域
+                    if (hasPinned && index == 0) {
+                      return Column(
+                        children: [
+                          GradientCard(
+                            title: '置顶',
+                            gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+                            isExpanded: _isPinnedSectionExpanded,
+                            isDarkMode: isDarkMode,
+                            onTap: _togglePinnedSection,
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '数量: ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.2,
+                                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                                   ),
-                                  AnimationConfig.listExpandTransition(
-                                    isExpanded: _isPinnedSectionExpanded,
-                                    child: Column(
-                                      children: [
-                                        const SizedBox(height: 8),
-                                        ..._buildPinnedCards(),
-                                      ],
-                                    ),
+                                ),
+                                Text(
+                                  '${_filteredPinnedHoldings.length}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.2,
+                                    color: _colorForHoldingCount(_filteredPinnedHoldings.length),
                                   ),
-                                  const SizedBox(height: 16),
-                                ],
-                              );
-                            }
-                            
-                            final groupIndex = hasPinned ? index - 1 : index;
-                            if (groupIndex >= 0 && groupIndex < groups.length) {
-                              return _buildClientGroupWidget(groups[groupIndex], isDarkMode);
-                            }
-                            
-                            return const SizedBox.shrink();
-                          },
-                          childCount: (hasPinned ? 1 : 0) + groups.length,
+                                ),
+                                Text(
+                                  '支',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.2,
+                                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          AnimationConfig.listExpandTransition(
+                            isExpanded: _isPinnedSectionExpanded,
+                            child: Column(
+                              children: [
+                                const SizedBox(height: 8),
+                                ..._buildPinnedCards(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      );
+                    }
+                    
+                    // 否则渲染客户分组
+                    final groupIndex = hasPinned ? index - 1 : index;
+                    if (groupIndex >= 0 && groupIndex < groups.length) {
+                      final isLastGroup = groupIndex == groups.length - 1;
+                      return RepaintBoundary(
+                        key: ValueKey('repaint_${groups[groupIndex].key}'),
+                        child: Container(
+                          key: ValueKey('client_${groups[groupIndex].key}'),
+                          margin: EdgeInsets.only(bottom: isLastGroup ? 0 : 8),
+                          child: Column(
+                            children: [
+                              GradientCard(
+                                title: groups[groupIndex].displayName,
+                                clientId: groups[groupIndex].clientId.isNotEmpty ? groups[groupIndex].clientId : null,
+                                gradient: _getGradientForOriginalName(groups[groupIndex].holdings.first.clientName),
+                                isExpanded: _expandedClients.contains(groups[groupIndex].key),
+                                isDarkMode: isDarkMode,
+                                onTap: () {
+                                  final wasExpanded = _expandedClients.contains(groups[groupIndex].key);
+                                  _toggleClientExpand(groups[groupIndex].key);
+                                  
+                                  if (!wasExpanded) {
+                                    final allGroups = _clientGroups;
+                                    if (allGroups.isNotEmpty && groups[groupIndex].key == allGroups.last.key) {
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        _scrollToBottom();
+                                      });
+                                    }
+                                  }
+                                },
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '持仓数: ',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        height: 1.2,
+                                        color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${groups[groupIndex].holdings.length}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        fontStyle: FontStyle.italic,
+                                        height: 1.2,
+                                        color: _colorForHoldingCount(groups[groupIndex].holdings.length),
+                                      ),
+                                    ),
+                                    Text(
+                                      '支',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        height: 1.2,
+                                        color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxTitleLength: 10,
+                              ),
+                              AnimationConfig.listExpandTransition(
+                                isExpanded: _expandedClients.contains(groups[groupIndex].key),
+                                child: Container(
+                                  margin: const EdgeInsets.only(left: 16, top: 8), 
+                                  child: _buildFundCards(groups[groupIndex].holdings),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
                 ),
               ),
             ],
@@ -561,94 +635,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     );
   }
 
-  List<Widget> _buildClientGroups(List<_ClientGroup> groups) {
-    final result = <Widget>[];
-    for (int i = 0; i < groups.length; i++) {
-      final group = groups[i];
-      final isExpanded = _expandedClients.contains(group.key);
-      final gradient = _getGradientForOriginalName(group.holdings.first.clientName);
-      final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-
-      final trailing = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '持仓数: ',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-            ),
-          ),
-          Text(
-            '${group.holdings.length}',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              fontStyle: FontStyle.italic,
-              height: 1.2,
-              color: _colorForHoldingCount(group.holdings.length),
-            ),
-          ),
-          Text(
-            '支',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-            ),
-          ),
-        ],
-      );
-
-      result.add(
-        RepaintBoundary(
-          key: ValueKey('repaint_${group.key}'),
-          child: Container(
-            key: ValueKey('client_${group.key}'),
-            margin: EdgeInsets.only(bottom: i == groups.length - 1 ? 0 : 8),
-            child: Column(
-              children: [
-                GradientCard(
-                  title: group.displayName,
-                  clientId: group.clientId.isNotEmpty ? group.clientId : null,
-                  gradient: gradient,
-                  isExpanded: isExpanded,
-                  isDarkMode: isDarkMode,
-                  onTap: () {
-                    final wasExpanded = _expandedClients.contains(group.key);
-                    _toggleClientExpand(group.key);
-                    
-                    if (!wasExpanded) {
-                      final groups = _clientGroups;
-                      if (groups.isNotEmpty && group.key == groups.last.key) {
-                        Future.delayed(const Duration(milliseconds: 100), () {
-                          _scrollToBottom();
-                        });
-                      }
-                    }
-                  },
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                  trailing: trailing,
-                  maxTitleLength: 10,
-                ),
-                AnimationConfig.listExpandTransition(
-                  isExpanded: isExpanded,
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 16, top: 8), 
-                    child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return result;
-  }
-
-  Widget _buildClientGroupWidget(_ClientGroup group, bool isDarkMode) {
+  Widget _buildClientGroupContent(_ClientGroup group, bool isDarkMode) {
     final isExpanded = _expandedClients.contains(group.key);
     final gradient = _getGradientForOriginalName(group.holdings.first.clientName);
 
@@ -684,46 +671,39 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       ],
     );
 
-    return RepaintBoundary(
-      key: ValueKey('repaint_${group.key}'),
-      child: Container(
-        key: ValueKey('client_${group.key}'),
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          children: [
-            GradientCard(
-              title: group.displayName,
-              clientId: group.clientId.isNotEmpty ? group.clientId : null,
-              gradient: gradient,
-              isExpanded: isExpanded,
-              isDarkMode: isDarkMode,
-              onTap: () {
-                final wasExpanded = _expandedClients.contains(group.key);
-                _toggleClientExpand(group.key);
-                
-                if (!wasExpanded) {
-                  final groups = _clientGroups;
-                  if (groups.isNotEmpty && group.key == groups.last.key) {
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      _scrollToBottom();
-                    });
-                  }
-                }
-              },
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              trailing: trailing,
-              maxTitleLength: 10,
-            ),
-            AnimationConfig.listExpandTransition(
-              isExpanded: isExpanded,
-              child: Container(
-                margin: const EdgeInsets.only(left: 16, top: 8), 
-                child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
-              ),
-            ),
-          ],
+    return Column(
+      children: [
+        GradientCard(
+          title: group.displayName,
+          clientId: group.clientId.isNotEmpty ? group.clientId : null,
+          gradient: gradient,
+          isExpanded: isExpanded,
+          isDarkMode: isDarkMode,
+          onTap: () {
+            final wasExpanded = _expandedClients.contains(group.key);
+            _toggleClientExpand(group.key);
+            
+            if (!wasExpanded) {
+              final groups = _clientGroups;
+              if (groups.isNotEmpty && group.key == groups.last.key) {
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  _scrollToBottom();
+                });
+              }
+            }
+          },
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          trailing: trailing,
+          maxTitleLength: 10,
         ),
-      ),
+        AnimationConfig.listExpandTransition(
+          isExpanded: isExpanded,
+          child: Container(
+            margin: const EdgeInsets.only(left: 16, top: 8), 
+            child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
+          ),
+        ),
+      ],
     );
   }
 

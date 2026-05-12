@@ -134,6 +134,7 @@ lib/
 │   ├── license_view.dart                  # 开源协议页面（AGPL v3）
 │   ├── log_view.dart                      # 日志页面，以功能性分类展示日志
 │   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量编辑客户信息（姓名+客户号）
+│   ├── mapping_dictionary_view.dart       # 映射词典页，管理客户号与客户名的映射关系
 │   ├── pending_transactions_view.dart     # 待确认交易管理页，展示 T+1/T+2 待确认的交易列表
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
