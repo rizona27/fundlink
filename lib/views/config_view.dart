@@ -5,6 +5,7 @@ import '../services/data_manager.dart';
 import '../services/ui_state_service.dart';  // ✅ 使用 SQLite 存储 UI 状态
 import '../models/log_entry.dart';
 import '../widgets/theme_switch.dart';
+import '../utils/animation_config.dart';  // ✅ 统一动画配置
 import 'add_holding_view.dart';
 import 'manage_holdings_view.dart';
 import 'log_view.dart';
@@ -88,7 +89,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       
       // 主题动画完成后立即淡入背景
       _animationTimer?.cancel();
-      _animationTimer = Timer(const Duration(milliseconds: 400), () {
+      _animationTimer = Timer(AnimationConfig.durationSlow, () {
         if (mounted) {
           setState(() {
             _backgroundOpacity = 1.0;
@@ -113,8 +114,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     return Container(
       color: backgroundColor, // 底层：固定主题色，避免闪烁
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
+        duration: AnimationConfig.durationSlow,
+        curve: AnimationConfig.curveEaseInOutCubic,
         color: backgroundColor.withOpacity(_backgroundOpacity), // 上层：透明度控制淡入淡出
         child: SafeArea(
           child: ListView(
@@ -259,11 +260,11 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           },
         ),
         _buildDivider(isDarkMode),
-        // ✅ 修复：添加映射词典菜单
+        // ✅ 修复：添加映射索引菜单
         _buildMenuItem(
           icon: CupertinoIcons.book,
-          title: '映射词典',
-          subtitle: '映射客户号与客户名',
+          title: '映射索引',
+          subtitle: '客户号姓名匹配',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -405,8 +406,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                 // ✅ 修复：添加三角图标
                 AnimatedRotation(
                   turns: isExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOutCubic,
+                  duration: AnimationConfig.durationMedium,
+                  curve: AnimationConfig.curveEaseInOutCubic,
                   child: Icon(
                     CupertinoIcons.chevron_down,
                     size: 16,
@@ -418,17 +419,26 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               ],
             ),
           ),
-          if (isExpanded) ...[
-            Divider(
-              height: 0,
-              indent: 60,
-              endIndent: 16,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.1)
-                  : CupertinoColors.systemGrey4,
-            ),
-            ...children,
-          ],
+          // ✅ 添加展开/折叠动画
+          AnimatedSize(
+            duration: AnimationConfig.durationMedium,
+            curve: AnimationConfig.curveEaseInOutCubic,
+            child: isExpanded
+                ? Column(
+                    children: [
+                      Divider(
+                        height: 0,
+                        indent: 60,
+                        endIndent: 16,
+                        color: isDarkMode
+                            ? CupertinoColors.white.withOpacity(0.1)
+                            : CupertinoColors.systemGrey4,
+                      ),
+                      ...children,
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );

@@ -17,6 +17,10 @@ class AppConstants {
   static const String keySortOrder = 'summary_sort_order';
   static const String keyExpandedFunds = 'summary_expanded_funds';
   static const String keyValuationRefreshInterval = 'valuationRefreshInterval';
+  
+  // --- Database Settings Keys (UI State) ---
+  /// 映射词典相关
+  static const String keyClientMappings = 'client_mappings';  // 存储在 database settings 表中
 
   // --- API URLs & Sources ---
   // NAS后端地址（通过Cloudflare Tunnel）

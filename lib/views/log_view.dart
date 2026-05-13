@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show Colors, Divider;
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../utils/animation_config.dart';
 
 class LogView extends StatefulWidget {
   const LogView({super.key});
@@ -195,6 +196,8 @@ class _LogViewState extends State<LogView> {
               searchPlaceholder: '搜索日志内容或类型',
               dataManager: _dataManager,
               fundService: null,
+              // ✅ 传递日志的数据状态（根据日志数量判断）
+              hasData: totalCount > 0,
               onToggleExpandAll: null,
               onSearchChanged: (value) {
                 setState(() {
@@ -309,7 +312,7 @@ class _LogViewState extends State<LogView> {
     return GestureDetector(
       onTap: () => _toggleLogType(type),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: AnimationConfig.durationStandard,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected

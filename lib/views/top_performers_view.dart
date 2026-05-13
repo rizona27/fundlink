@@ -12,6 +12,7 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 import '../utils/input_formatters.dart';
+import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 
 class TopPerformersView extends StatefulWidget {
@@ -69,8 +70,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   
   Timer? _filterAutoCollapseTimer; 
 
-  static const Duration _debounceDelay = Duration(milliseconds: 500);
-  static const Duration _animationDuration = Duration(milliseconds: 400);
+  static const Duration _debounceDelay = AnimationConfig.durationVerySlow;
+  static const Duration _animationDuration = AnimationConfig.durationSlow;
   static const Curve _animationCurve = Curves.easeOutCubic;
   static const double _filterAutoCollapseThreshold = 20.0;
 
@@ -161,7 +162,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
             _showFilter = false;
           });
           _autoCollapseEnabled = false;
-          Future.delayed(const Duration(milliseconds: 500), () {
+          Future.delayed(AnimationConfig.durationVerySlow, () {
             if (mounted) _autoCollapseEnabled = true;
           });
         }

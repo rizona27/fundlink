@@ -104,6 +104,7 @@ lib/
 │
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略
+│   ├── client_mapping_service.dart        # 客户映射词典服务，管理客户号与客户名的映射关系，支持增删改查和双向查询
 │   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算
 │   ├── database_helper.dart               # SQLite 数据库帮助类，跨平台数据库支持，提供 CRUD 操作和 Schema 管理
 │   ├── database_repository.dart           # 数据访问层封装，统一管理所有数据库操作，支持批量插入和高级查询
@@ -114,6 +115,7 @@ lib/
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
 │
 ├── models/
+│   ├── client_mapping.dart                  # 客户映射模型，存储客户号与客户名的映射关系（ID、客户号、客户名、创建/更新时间）
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益
 │   ├── fund_info_cache.dart               # 基金信息缓存模型，存储基金代码、名称、当前净值等数据的本地缓存
 │   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型、时间戳

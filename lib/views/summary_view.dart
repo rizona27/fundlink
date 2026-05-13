@@ -613,11 +613,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(AnimationConfig.durationSlow, () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: AnimationConfig.durationMedium,
           curve: Curves.easeOutCubic,
         );
       }

@@ -99,7 +99,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       return;
     }
       
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(AnimationConfig.durationVerySlow);
     if (!mounted) return;
   
     // ✅ 详细诊断：检查每个基金的名称
@@ -315,11 +315,11 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(AnimationConfig.durationSlow, () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: AnimationConfig.durationMedium,
           curve: Curves.easeOutCubic,
         );
       }

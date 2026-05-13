@@ -11,6 +11,7 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/empty_state.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
+import '../utils/animation_config.dart';
 
 class ManageHoldingsView extends StatefulWidget {
   const ManageHoldingsView({super.key});
@@ -109,11 +110,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(AnimationConfig.durationSlow, () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: AnimationConfig.durationMedium,
           curve: Curves.easeOutCubic,
         );
       }
@@ -409,8 +410,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                                         : null,
                                   ),
                                   AnimatedSize(
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutCubic,
+                                    duration: AnimationConfig.durationSlow,
+                                    curve: AnimationConfig.curveEaseOutCubic,
                                     child: isExpanded
                                         ? Container(
                                       margin: const EdgeInsets.only(left: 16, top: 8),

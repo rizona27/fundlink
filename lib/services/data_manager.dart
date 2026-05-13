@@ -476,12 +476,20 @@ class DataManager extends ChangeNotifier {
     }
   }
   
-  /// 保存设置到 SharedPreferences（跨平台通用）
+  /// 保存设置到 SQLite（非 Web 平台）
   Future<void> _saveSettingsToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
-    await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
-    await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
+    if (kIsWeb) {
+      // Web 平台继续使用 SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
+      await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
+      await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
+    } else {
+      // ✅ 修复：非 Web 平台使用 SQLite 存储设置
+      await _repository!.saveSetting('privacy_mode', _isPrivacyMode.toString());
+      await _repository!.saveSetting('theme_mode', _themeModeToString(_themeMode));
+      await _repository!.saveSetting('show_holders_on_summary_card', _showHoldersOnSummaryCard.toString());
+    }
   }
   
   Future<void> _saveDataToPrefs() async {

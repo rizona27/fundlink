@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/client_mapping_service.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
+import '../models/client_mapping.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
@@ -22,6 +25,7 @@ class AddHoldingView extends StatefulWidget {
 class _AddHoldingViewState extends State<AddHoldingView> {
   late DataManager _dataManager;
   late FundService _fundService;
+  final ClientMappingService _mappingService = ClientMappingService();
 
   final TextEditingController _clientNameController = TextEditingController();
   final TextEditingController _clientIdController = TextEditingController();
@@ -31,6 +35,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   final TextEditingController _feeRateController = TextEditingController();
   final TextEditingController _confirmNavController = TextEditingController();
   final TextEditingController _remarksController = TextEditingController();
+
+  Timer? _mappingCheckTimer;
 
   bool _clientNameError = false;
   bool _fundCodeError = false;
@@ -134,6 +140,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     _feeRateController.dispose();
     _confirmNavController.dispose();
     _remarksController.dispose();
+    _mappingCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -197,6 +204,138 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       error = true;
     }
     setState(() => _sharesError = error);
+  }
+
+  /// 检查客户号是否在映射词典中，并提示用户选择
+  Future<void> _checkClientMapping(String clientId) async {
+    if (clientId.isEmpty) return;
+    
+    try {
+      final mappedName = await _mappingService.getClientNameByClientId(clientId);
+      
+      if (mappedName != null && mounted) {
+        final currentName = _clientNameController.text.trim();
+        
+        // 如果当前输入的客户名与映射词典不一致，提示用户选择
+        if (currentName.isNotEmpty && currentName != mappedName) {
+          final choice = await showCupertinoDialog<int>(
+            context: context,
+            barrierDismissible: true,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('检测到客户号映射'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('客户号 "$clientId" 在映射词典中有记录：'),
+                  const SizedBox(height: 8),
+                  Text(
+                    '词典姓名：$mappedName',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '当前输入：$currentName',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('请选择使用哪个姓名：'),
+                ],
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  child: Text('使用词典 [$mappedName]'),
+                  onPressed: () => Navigator.pop(context, 1),
+                ),
+                CupertinoDialogAction(
+                  child: Text('使用输入 [$currentName]'),
+                  onPressed: () => Navigator.pop(context, 2),
+                ),
+              ],
+            ),
+          );
+          
+          if (choice == 1 && mounted) {
+            // 使用词典姓名
+            _clientNameController.text = mappedName;
+            context.showToast('已自动填充词典姓名');
+          }
+        } else if (currentName.isEmpty) {
+          // 如果客户名为空，自动填充
+          _clientNameController.text = mappedName;
+          if (mounted) {
+            context.showToast('已自动填充词典姓名');
+          }
+        }
+      }
+    } catch (e) {
+      // 未找到映射，忽略
+      debugPrint('查询映射词典失败: $e');
+    }
+  }
+
+  /// 根据客户名查询映射词典，提示用户选择客户号
+  Future<void> _checkClientMappingByName(String clientName) async {
+    if (clientName.isEmpty) return;
+    
+    try {
+      final mappings = await _mappingService.getMappingsByClientName(clientName);
+      
+      if (mappings.isNotEmpty && mounted) {
+        final currentClientId = _clientIdController.text.trim();
+        
+        // 如果有多个匹配，让用户选择
+        if (mappings.length > 1) {
+          final selectedMapping = await showCupertinoDialog<ClientMapping>(
+            context: context,
+            barrierDismissible: true,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('检测到同名客户'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('客户名 "$clientName" 在映射词典中有 ${mappings.length} 条记录：'),
+                  const SizedBox(height: 12),
+                  ...mappings.map((m) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• 客户号：${m.clientId}'),
+                  )),
+                  const SizedBox(height: 12),
+                  const Text('请选择对应的客户号：'),
+                ],
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('取消'),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                ...mappings.map((m) => CupertinoDialogAction(
+                  child: Text(m.clientId),
+                  onPressed: () => Navigator.pop(context, m),
+                )),
+              ],
+            ),
+          );
+          
+          if (selectedMapping != null && mounted) {
+            _clientIdController.text = selectedMapping.clientId;
+            context.showToast('已自动填充客户号');
+          }
+        } else if (mappings.length == 1) {
+          // 只有一个匹配，自动填充
+          final mapping = mappings.first;
+          if (currentClientId.isEmpty || currentClientId != mapping.clientId) {
+            _clientIdController.text = mapping.clientId;
+            if (mounted) {
+              context.showToast('已自动填充客户号');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // 未找到映射，忽略
+      debugPrint('查询映射词典失败: $e');
+    }
   }
 
   void _onFundCodeChanged(String value) {
@@ -775,7 +914,17 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       controller: _clientNameController,
                       hint: '请输入客户姓名',
                       error: _clientNameError,
-                      onChanged: _validateClientName,
+                      onChanged: (value) {
+                        _validateClientName(value);
+                        // 防抖：延迟 500ms 后检查映射词典
+                        _mappingCheckTimer?.cancel();
+                        _mappingCheckTimer = Timer(const Duration(milliseconds: 500), () {
+                          final trimmedName = value.trim();
+                          if (trimmedName.isNotEmpty) {
+                            _checkClientMappingByName(trimmedName);
+                          }
+                        });
+                      },
                       inputBgColor: inputBgColor,
                       textColor: textColor,
                       placeholderColor: placeholderColor,
@@ -976,7 +1125,16 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                     child: _buildTextField(
                       controller: _clientIdController,
                       hint: '选填，最多12位数字',
-                      onChanged: (_) {},
+                      onChanged: (value) {
+                        // 防抖：延迟 500ms 后检查映射词典
+                        _mappingCheckTimer?.cancel();
+                        _mappingCheckTimer = Timer(const Duration(milliseconds: 500), () {
+                          final trimmed = value.trim();
+                          if (trimmed.isNotEmpty && RegExp(r'^\d{1,12}$').hasMatch(trimmed)) {
+                            _checkClientMapping(trimmed);
+                          }
+                        });
+                      },
                       inputBgColor: inputBgColor,
                       textColor: textColor,
                       placeholderColor: placeholderColor,

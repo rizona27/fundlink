@@ -245,6 +245,10 @@ class AdaptiveTopBar extends StatefulWidget {
   final Curve animationCurve;
 
   final bool useMenuStyle;
+  
+  // ✅ 新增：允许调用者自定义数据状态检查
+  // 如果不提供，则默认使用 dataManager?.holdings.isNotEmpty
+  final bool? hasData;
 
   const AdaptiveTopBar({
     super.key,
@@ -292,6 +296,7 @@ class AdaptiveTopBar extends StatefulWidget {
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOutCubic,
     this.useMenuStyle = false,
+    this.hasData,
   });
 
   @override
@@ -317,7 +322,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   String get _currentSearchText => _externallyControlSearchText ? widget.searchText! : _internalSearchText;
   bool get _currentSearchVisible => _externallyControlSearchVisible ? widget.isSearchVisible! : _internalSearchVisible;
 
-  bool get _hasData => widget.dataManager?.holdings.isNotEmpty ?? false;
+  // ✅ 修复：优先使用自定义 hasData，否则检查 dataManager.holdings
+  bool get _hasData {
+    if (widget.hasData != null) {
+      return widget.hasData!;
+    }
+    return widget.dataManager?.holdings.isNotEmpty ?? false;
+  }
 
   @override
   void initState() {
@@ -929,10 +940,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Widget _buildSearchButton() {
-    final hasData = _hasData;
+    // ✅ 修复：搜索按钮始终可用，不受 _hasData 限制
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return GestureDetector(
-      onTap: hasData ? () => _setSearchVisible(!_currentSearchVisible) : null,
+      onTap: () => _setSearchVisible(!_currentSearchVisible),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -949,7 +960,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         child: Icon(
           _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
           size: widget.iconSize,
-          color: hasData ? widget.iconColor : CupertinoColors.systemGrey3,
+          color: widget.iconColor,  // ✅ 始终使用主题色
         ),
       ),
     );

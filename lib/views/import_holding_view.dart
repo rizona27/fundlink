@@ -11,6 +11,7 @@ import 'package:universal_html/html.dart' as html;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/file_import_service.dart';
+import '../services/client_mapping_service.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
@@ -32,6 +33,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   List<String> _headers = [];
   List<List<dynamic>> _rawData = [];
   bool _isProcessing = false;
+  final ClientMappingService _mappingService = ClientMappingService();
 
   final List<FieldConfig> _fieldConfigs = [
     FieldConfig(id: 'clientName', label: '客户姓名', required: true, mappedIndex: -1, hint: '客户姓名/客户名/姓名'),
@@ -1538,11 +1540,25 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     for (int i = 0; i < _validData.length; i++) {
       final row = _validData[i];
       try {
-        final clientName = row['clientName']?.toString() ?? '';
+        String clientName = row['clientName']?.toString() ?? '';
         if (clientName.isEmpty) throw Exception('客户姓名为空');
 
         final clientId = row['clientId']?.toString() ?? '';
         if (clientId.isEmpty) throw Exception('客户号为空');
+        
+        // ✅ 新增：查询映射词典，如果客户号存在且客户名是客户号本身，则替换为映射的客户名
+        if (clientName == clientId) {
+          try {
+            final mappedName = await _mappingService.getClientNameByClientId(clientId);
+            if (mappedName != null && mappedName.isNotEmpty) {
+              clientName = mappedName;
+              debugPrint('[Import] ✅ 第${i+1}行: 客户号 $clientId 映射为客户名 $mappedName');
+            }
+          } catch (e) {
+            // 未找到映射，使用原客户名（即客户号）
+            debugPrint('[Import] ⚠️ 第${i+1}行: 客户号 $clientId 未在映射词典中找到');
+          }
+        }
 
         final rawFundCode = row['fundCode']?.toString() ?? '';
         if (rawFundCode.isEmpty) throw Exception('基金代码为空');
