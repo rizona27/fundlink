@@ -5,6 +5,16 @@ enum TransactionType {
   sell,
 }
 
+/// 交易申请状态枚举
+enum TransactionStatus {
+  pendingSubmit,   // 待提交：用户已下单，尚未到达合法交易时间（如节假日前置申请）
+  submitted,       // 已提交：交易指令已到达交易系统，等待未知价净值
+  pendingConfirm,  // 待确认：T日净值已出，已成交易成本，正等待份额到账
+  confirmed,       // 已确认：份额已到账
+  confirmFailed,   // 确认失败：重试5次后仍无法获取份额，转为人工处理
+  cancelled,       // 已撤销：在规定时间内撤单
+}
+
 extension TransactionTypeExtension on TransactionType {
   String get displayName {
     switch (this) {
@@ -53,6 +63,11 @@ class TransactionRecord {
   final bool isAfter1500;
   final bool isPending;
   final double? confirmedNav;
+  final TransactionStatus status;           // 交易状态
+  final int retryCount;                     // 净值获取重试次数
+  final DateTime? applicationDate;          // 交易申请日(T日_申请)
+  final DateTime? confirmDate;              // 确认日期(份额到账日)
+  final double? frozenShares;               // 冻结份额(用于赎回)
 
   TransactionRecord({
     String? id,
@@ -71,6 +86,11 @@ class TransactionRecord {
     this.isAfter1500 = false,
     this.isPending = false,
     this.confirmedNav,
+    this.status = TransactionStatus.submitted,
+    this.retryCount = 0,
+    this.applicationDate,
+    this.confirmDate,
+    this.frozenShares,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -97,6 +117,11 @@ class TransactionRecord {
     bool? isAfter1500,
     bool? isPending,
     double? confirmedNav,
+    TransactionStatus? status,
+    int? retryCount,
+    DateTime? applicationDate,
+    DateTime? confirmDate,
+    double? frozenShares,
   }) {
     return TransactionRecord(
       id: id ?? this.id,
@@ -115,6 +140,11 @@ class TransactionRecord {
       isAfter1500: isAfter1500 ?? this.isAfter1500,
       isPending: isPending ?? this.isPending,
       confirmedNav: confirmedNav ?? this.confirmedNav,
+      status: status ?? this.status,
+      retryCount: retryCount ?? this.retryCount,
+      applicationDate: applicationDate ?? this.applicationDate,
+      confirmDate: confirmDate ?? this.confirmDate,
+      frozenShares: frozenShares ?? this.frozenShares,
     );
   }
 
@@ -136,6 +166,11 @@ class TransactionRecord {
       'isAfter1500': isAfter1500,
       'isPending': isPending,
       'confirmedNav': confirmedNav,
+      'status': status.name,
+      'retryCount': retryCount,
+      'applicationDate': applicationDate?.toIso8601String(),
+      'confirmDate': confirmDate?.toIso8601String(),
+      'frozenShares': frozenShares,
     };
   }
 
@@ -157,6 +192,13 @@ class TransactionRecord {
       isAfter1500: json['isAfter1500'] as bool? ?? false,
       isPending: json['isPending'] as bool? ?? false,
       confirmedNav: json['confirmedNav'] != null ? (json['confirmedNav'] as num).toDouble() : null,
+      status: json['status'] != null 
+          ? TransactionStatus.values.firstWhere((e) => e.name == json['status'], orElse: () => TransactionStatus.submitted)
+          : TransactionStatus.submitted,
+      retryCount: json['retryCount'] as int? ?? 0,
+      applicationDate: json['applicationDate'] != null ? DateTime.parse(json['applicationDate'] as String) : null,
+      confirmDate: json['confirmDate'] != null ? DateTime.parse(json['confirmDate'] as String) : null,
+      frozenShares: json['frozenShares'] != null ? (json['frozenShares'] as num).toDouble() : null,
     );
   }
 

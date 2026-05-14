@@ -504,6 +504,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Future<void> _onRefresh() async {
+    // ✅ 关键修复：如果有自定义的 onRefresh 回调，优先调用它
+    if (widget.onRefresh != null) {
+      widget.onRefresh!();
+      return;
+    }
+    
+    // 否则执行默认的刷新逻辑
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 

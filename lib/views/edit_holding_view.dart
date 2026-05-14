@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
@@ -10,6 +11,7 @@ import '../widgets/add_transaction_dialog.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
+import '../utils/desktop_focus_manager.dart';
 import 'add_holding_view.dart';
 
 class EditHoldingView extends StatefulWidget {
@@ -189,15 +191,27 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             ? CupertinoColors.white.withOpacity(0.6)
             : CupertinoColors.systemGrey;
         
+        // 获取键盘高度，用于回避
+        final mediaQuery = MediaQuery.of(context);
+        
         return StatefulBuilder(
           builder: (context, setState) {
             return GestureDetector(
               onTap: () => FocusScope.of(context).unfocus(),
               child: Center(
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                  margin: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    top: 40,
+                    bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 40, // 键盘弹出时调整底部边距
+                  ),
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: SingleChildScrollView(
+                    // ✅ 添加 padding 以避让键盘
+                    padding: EdgeInsets.only(
+                      bottom: mediaQuery.viewInsets.bottom,
+                    ),
                     child: CupertinoPopupSurface(
                       isSurfacePainted: true,
                       child: Column(
@@ -277,28 +291,41 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                     color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: CupertinoTextField(
-                                    controller: controller,
-                                    placeholder: '请输入备注信息（最多30个字符）',
-                                    placeholderStyle: TextStyle(
-                                      color: secondaryColor,
-                                      fontSize: 14,
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: textColor,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    minLines: 3,
-                                    maxLines: 5,
-                                    autofocus: true,
-                                    clearButtonMode: OverlayVisibilityMode.editing,
-                                    maxLength: 30,
-                                    onChanged: (text) {
-                                      setState(() {
-                                        charCount = text.length;
-                                      });
+                                  child: KeyboardListener(
+                                    focusNode: FocusNode(),
+                                    onKeyEvent: (KeyEvent event) {
+                                      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+                                        final scope = FocusScope.of(context);
+                                        DesktopFocusManager.handleTabKey(
+                                          FocusNode(),
+                                          scope,
+                                          shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+                                        );
+                                      }
                                     },
+                                    child: CupertinoTextField(
+                                      controller: controller,
+                                      placeholder: '请输入备注信息（最多30个字符）',
+                                      placeholderStyle: TextStyle(
+                                        color: secondaryColor,
+                                        fontSize: 14,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: textColor,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      minLines: 3,
+                                      maxLines: 5,
+                                      autofocus: true,
+                                      clearButtonMode: OverlayVisibilityMode.editing,
+                                      maxLength: 30,
+                                      onChanged: (text) {
+                                        setState(() {
+                                          charCount = text.length;
+                                        });
+                                      },
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 14),

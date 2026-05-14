@@ -258,6 +258,9 @@ class FundHolding {
     double totalCost = 0;
     
     for (final tx in transactions) {
+      // ✅ 新增：只计算已确认的交易
+      if (tx.isPending) continue;
+      
       if (tx.isBuy) {
         totalShares += tx.shares;
         totalCost += tx.amount;

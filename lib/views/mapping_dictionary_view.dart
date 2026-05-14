@@ -7,6 +7,8 @@ import '../models/client_mapping.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/toast.dart';
 import '../utils/input_formatters.dart';
+import '../utils/desktop_focus_manager.dart';
+import 'import_holding_view.dart';
 import 'dart:async';
 
 class MappingDictionaryView extends StatefulWidget {
@@ -146,6 +148,10 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     final clientIdController = TextEditingController(text: isEdit ? mapping.clientId : '');
     final clientNameController = TextEditingController(text: isEdit ? mapping.clientName : '');
     
+    // 创建焦点节点
+    final clientIdFocusNode = FocusNode();
+    final clientNameFocusNode = FocusNode();
+    
     final result = await showCupertinoDialog<Map<String, String>>(
       context: context,
       barrierDismissible: true,
@@ -241,55 +247,83 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // 客户号输入
-                        CupertinoTextField(
-                          controller: clientIdController,
-                          placeholder: '请输入客户号',
-                          placeholderStyle: TextStyle(
-                            fontSize: 15,
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.4)
-                                : CupertinoColors.systemGrey,
+                        KeyboardListener(
+                          focusNode: clientIdFocusNode,
+                          onKeyEvent: (KeyEvent event) {
+                            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+                              final scope = FocusScope.of(context);
+                              DesktopFocusManager.handleTabKey(
+                                clientIdFocusNode,
+                                scope,
+                                shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+                              );
+                            }
+                          },
+                          child: CupertinoTextField(
+                            controller: clientIdController,
+                            placeholder: '请输入客户号',
+                            placeholderStyle: TextStyle(
+                              fontSize: 15,
+                              color: isDark
+                                  ? CupertinoColors.white.withOpacity(0.4)
+                                  : CupertinoColors.systemGrey,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(12),
+                            ],
+                            autofocus: !isEdit,
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                          ),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(12),
-                          ],
-                          autofocus: !isEdit,
                         ),
                         const SizedBox(height: 12),
                         
                         // 客户名输入
-                        CupertinoTextField(
-                          controller: clientNameController,
-                          placeholder: '请输入客户名',
-                          placeholderStyle: TextStyle(
-                            fontSize: 15,
-                            color: isDark
-                                ? CupertinoColors.white.withOpacity(0.4)
-                                : CupertinoColors.systemGrey,
+                        KeyboardListener(
+                          focusNode: clientNameFocusNode,
+                          onKeyEvent: (KeyEvent event) {
+                            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+                              final scope = FocusScope.of(context);
+                              DesktopFocusManager.handleTabKey(
+                                clientNameFocusNode,
+                                scope,
+                                shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+                              );
+                            }
+                          },
+                          child: CupertinoTextField(
+                            controller: clientNameController,
+                            placeholder: '请输入客户名',
+                            placeholderStyle: TextStyle(
+                              fontSize: 15,
+                              color: isDark
+                                  ? CupertinoColors.white.withOpacity(0.4)
+                                  : CupertinoColors.systemGrey,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                            ),
+                            textInputAction: TextInputAction.done,
+                            inputFormatters: [
+                              ClientNameInputFormatter(),
+                            ],
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                          ),
-                          inputFormatters: [
-                            ClientNameInputFormatter(),
-                          ],
                         ),
                       ],
                     ),
@@ -303,6 +337,10 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     );
       },
     );
+    
+    // 释放焦点节点
+    clientIdFocusNode.dispose();
+    clientNameFocusNode.dispose();
     
     if (result != null && mounted) {
       try {
@@ -519,6 +557,15 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                         child: Center(
                           child: GestureDetector(
                             onTap: () => _showEditDialog(),
+                            onLongPress: () {
+                              // ✅ 长按跳转到导入页面
+                              Navigator.push(
+                                context,
+                                CupertinoPageRoute(
+                                  builder: (context) => const ImportHoldingView(),
+                                ),
+                              );
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/services.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
@@ -7,6 +8,7 @@ import '../services/file_export_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
+import '../utils/desktop_focus_manager.dart';
 
 class ExportHoldingView extends StatefulWidget {
   const ExportHoldingView({super.key});
@@ -64,15 +66,41 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   String _exportedFileName = '';
 
   List<ExportHistoryItem> _exportHistory = [];
+  
+  // 筛选器焦点节点
+  late FocusNode _fundCodeFocusNode;
+  late FocusNode _minAmountFocusNode;
+  late FocusNode _maxAmountFocusNode;
+  late FocusNode _profitMinFocusNode;
+  late FocusNode _profitMaxFocusNode;
 
   @override
   void initState() {
     super.initState();
+    
+    // 初始化焦点节点
+    _fundCodeFocusNode = FocusNode();
+    _minAmountFocusNode = FocusNode();
+    _maxAmountFocusNode = FocusNode();
+    _profitMinFocusNode = FocusNode();
+    _profitMaxFocusNode = FocusNode();
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dataManager = DataManagerProvider.of(context);
       _updatePreview();
       FileExportService.setDataManager(_dataManager);
     });
+  }
+  
+  @override
+  void dispose() {
+    // 释放焦点节点
+    _fundCodeFocusNode.dispose();
+    _minAmountFocusNode.dispose();
+    _maxAmountFocusNode.dispose();
+    _profitMinFocusNode.dispose();
+    _profitMaxFocusNode.dispose();
+    super.dispose();
   }
 
   bool _validateAmountRange() {
@@ -792,29 +820,68 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
 
   Widget _buildFilterTextField(String label, String key, {bool isNumber = false, bool allowNegative = false}) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    
+    // 根据 key 获取对应的焦点节点
+    FocusNode? focusNode;
+    TextInputAction textInputAction = TextInputAction.next;
+    
+    switch (key) {
+      case 'fundCode':
+        focusNode = _fundCodeFocusNode;
+        break;
+      case 'minAmount':
+        focusNode = _minAmountFocusNode;
+        break;
+      case 'maxAmount':
+        focusNode = _maxAmountFocusNode;
+        textInputAction = TextInputAction.done; // 最后一个金额输入框
+        break;
+      case 'profitMin':
+        focusNode = _profitMinFocusNode;
+        break;
+      case 'profitMax':
+        focusNode = _profitMaxFocusNode;
+        textInputAction = TextInputAction.done; // 最后一个收益率输入框
+        break;
+    }
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      child: CupertinoTextField(
-        placeholder: label,
-        placeholderStyle: TextStyle(color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey),
-        keyboardType: isNumber
-            ? TextInputType.numberWithOptions(decimal: true, signed: allowNegative)
-            : TextInputType.text,
-        inputFormatters: isNumber ? [AmountInputFormatter()] : null,
-        onChanged: (v) {
-          setState(() {
-            _filters[key] = v;
-            if (key == 'minAmount' || key == 'maxAmount') {
-              _validateAmountRange();
-            } else if (key == 'profitMin' || key == 'profitMax') {
-              _validateProfitRange();
-            }
-            _updatePreview();
-          });
+      child: KeyboardListener(
+        focusNode: focusNode ?? FocusNode(),
+        onKeyEvent: (KeyEvent event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+            final scope = FocusScope.of(context);
+            DesktopFocusManager.handleTabKey(
+              focusNode ?? FocusNode(),
+              scope,
+              shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+            );
+          }
         },
-        decoration: BoxDecoration(
-          color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.white,
-          borderRadius: BorderRadius.circular(10),
+        child: CupertinoTextField(
+          placeholder: label,
+          placeholderStyle: TextStyle(color: isDarkMode ? CupertinoColors.white.withOpacity(0.5) : CupertinoColors.systemGrey),
+          keyboardType: isNumber
+              ? TextInputType.numberWithOptions(decimal: true, signed: allowNegative)
+              : TextInputType.text,
+          textInputAction: textInputAction,
+          inputFormatters: isNumber ? [AmountInputFormatter()] : null,
+          onChanged: (v) {
+            setState(() {
+              _filters[key] = v;
+              if (key == 'minAmount' || key == 'maxAmount') {
+                _validateAmountRange();
+              } else if (key == 'profitMin' || key == 'profitMax') {
+                _validateProfitRange();
+              }
+              _updatePreview();
+            });
+          },
+          decoration: BoxDecoration(
+            color: isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       ),
     );

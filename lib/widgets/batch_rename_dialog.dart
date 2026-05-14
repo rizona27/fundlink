@@ -191,6 +191,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           constraints: const BoxConstraints(maxWidth: 400),
           child: SingleChildScrollView(
+            // ✅ 添加键盘避让
+            padding: MediaQuery.of(context).viewInsets,
             child: CupertinoPopupSurface(
               isSurfacePainted: true,
               child: Column(

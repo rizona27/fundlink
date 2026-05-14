@@ -26,7 +26,15 @@ class ImportHoldingView extends StatefulWidget {
   State<ImportHoldingView> createState() => _ImportHoldingViewState();
 }
 
-class _ImportHoldingViewState extends State<ImportHoldingView> {
+// ✅ 文件类型标识枚举（必须在类外部）
+enum ImportFileType {
+  unknown,
+  holding,      // 持仓数据
+  mapping,      // 映射索引
+  fullBackup,   // 完整备份
+}
+
+class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProviderStateMixin {
   int _currentStep = 1;
   FilePickerResult? _fileResult;
   String? _fileName;
@@ -34,6 +42,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   List<List<dynamic>> _rawData = [];
   bool _isProcessing = false;
   final ClientMappingService _mappingService = ClientMappingService();
+  
+  // ✅ 文件类型检测结果
+  ImportFileType _detectedFileType = ImportFileType.unknown;
 
   final List<FieldConfig> _fieldConfigs = [
     FieldConfig(id: 'clientName', label: '客户姓名', required: true, mappedIndex: -1, hint: '客户姓名/客户名/姓名'),
@@ -54,8 +65,15 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   List<String> _invalidReasons = [];
   bool _isImporting = false;
   double _importProgress = 0;
+  late AnimationController _animationController;
+  double _targetProgress = 0;
   ImportResult? _importResult;
   bool _importCompleted = false;
+  
+  // ✅ 导入中断控制
+  bool _shouldAbortImport = false;  // 是否应该中止导入
+  bool _isBackgroundImport = false;  // 是否正在后台导入
+  bool _isPaused = false;  // 是否暂停导入
 
   bool get _allRequiredMapped => _fieldConfigs.where((f) => f.required).every((f) => f.mappedIndex != -1);
   int get _validRowsCount => _validData.length;
@@ -64,11 +82,115 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   int? _tempMappedIndex;
 
   @override
+  void initState() {
+    super.initState();
+    // ✅ 初始化动画控制器，用于平滑进度条
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _animationController.addListener(() {
+      if (mounted) {
+        setState(() => _importProgress = _animationController.value);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  // ✅ 显示导入中止确认对话框
+  Future<bool?> _showAbortImportDialog() async {
+    return await showCupertinoDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('导入进行中'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '当前正在导入数据，进度：${(_importProgress * 100).toInt()}%',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '选择操作：',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '• 继续:继续进行导入操作并返回查看结果\n'
+              '• 中止导入:停止导入(保留已导入数据)',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('中止导入'),
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, false),  // false = 中止
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: const Text('继续'),
+            onPressed: () => Navigator.pop(context, true),  // true = 后台继续
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
-    return CupertinoPageScaffold(
+    return PopScope(
+      canPop: !_isImporting || _isPaused,  // ✅ 导入中且未暂停时不允许直接返回
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;  // 已经返回了
+        
+        if (_isImporting && !_isPaused) {
+          // ✅ 先暂停导入
+          setState(() {
+            _isPaused = true;
+          });
+          
+          // ✅ 显示确认对话框
+          final shouldContinue = await _showAbortImportDialog();
+          if (shouldContinue == true) {
+            // 用户选择继续，恢复导入
+            setState(() {
+              _isPaused = false;
+              _isBackgroundImport = true;
+            });
+          } else if (shouldContinue == false) {
+            // 用户选择中止，设置中止标志
+            setState(() {
+              _shouldAbortImport = true;
+              _isPaused = false;
+            });
+          }
+        } else if (_isImporting && _isPaused) {
+          // 已暂停状态，不应该到达这里，但为了安全
+          setState(() {
+            _isPaused = false;
+          });
+        } else {
+          // 没有导入，直接返回
+          Navigator.pop(context);
+        }
+      },
+      child: CupertinoPageScaffold(
       backgroundColor: backgroundColor,
       child: SafeArea(
         child: Column(
@@ -83,7 +205,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
           ],
         ),
       ),
-    );
+    ),  // CupertinoPageScaffold
+    );  // PopScope
   }
 
   Widget _buildStepIndicator(bool isDarkMode) {
@@ -1107,14 +1230,40 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        '导入中... ${(_importProgress * 100).toInt()}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDarkMode
-                              ? CupertinoColors.white.withOpacity(0.7)
-                              : CupertinoColors.systemGrey,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '导入中... ${(_importProgress * 100).toInt()}%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDarkMode
+                                  ? CupertinoColors.white.withOpacity(0.7)
+                                  : CupertinoColors.systemGrey,
+                            ),
+                          ),
+                          // ✅ 导入过程中显示返回按钮
+                          if (_importProgress < 1.0)
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minSize: 0,
+                              onPressed: () async {
+                                final shouldContinue = await _showAbortImportDialog();
+                                if (shouldContinue == true) {
+                                  _isBackgroundImport = true;
+                                } else if (shouldContinue == false) {
+                                  _shouldAbortImport = true;
+                                }
+                              },
+                              child: Text(
+                                '返回',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: CupertinoColors.activeBlue,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                     if (_importResult == null && !_isImporting)
@@ -1160,6 +1309,107 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
   }
 
   Future<void> _downloadTemplate() async {
+    // ✅ 显示选择对话框，让用户选择下载哪种模板
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) {
+        final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        
+        return CupertinoActionSheet(
+          title: const Text('选择模板类型'),
+          message: const Text('请选择要下载的模板类型'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _downloadHoldingTemplate();
+              },
+              child: Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.chart_bar_fill,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '持仓数据模板',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '包含基金代码、金额、份额等字段',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDarkMode
+                              ? CupertinoColors.white.withOpacity(0.6)
+                              : CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _downloadMappingTemplate();
+              },
+              child: Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.person_2_fill,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '映射索引模板',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '仅包含客户号和客户名',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDarkMode
+                              ? CupertinoColors.white.withOpacity(0.6)
+                              : CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context),
+            isDefaultAction: true,
+            child: const Text('取消'),
+          ),
+        );
+      },
+    );
+  }
+  
+  /// ✅ 新增：下载持仓数据模板
+  Future<void> _downloadHoldingTemplate() async {
     try {
       final headers = [
         '客户姓名', '客户号', '基金代码', '购买金额', '购买份额', '购买日期',
@@ -1179,20 +1429,63 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
         final url = html.Url.createObjectUrlFromBlob(blob);
         final anchor = html.AnchorElement(href: url)
-          ..setAttribute("download", "FundLink-Template.csv")
+          ..setAttribute("download", "FundLink-持仓模板.csv")
           ..click();
         html.Url.revokeObjectUrl(url);
-        if (mounted) context.showToast('模板已下载');
+        if (mounted) context.showToast('持仓模板已下载');
       } else {
         final savedPath = await FileSaver.instance.saveAs(
-          name: 'FundLink-Template',
+          name: 'FundLink-持仓模板',
           bytes: bytes,
           fileExtension: 'csv',
           mimeType: MimeType.other,
         );
         
         if (savedPath != null && savedPath.isNotEmpty) {
-          if (mounted) context.showToast('模板已保存');
+          if (mounted) context.showToast('持仓模板已保存');
+        } else {
+          if (mounted) context.showToast('已取消保存');
+        }
+      }
+    } catch (e) {
+      if (mounted) context.showToast('生成模板失败: $e');
+    }
+  }
+  
+  /// ✅ 新增：下载映射索引模板
+  Future<void> _downloadMappingTemplate() async {
+    try {
+      final headers = ['客户号', '客户姓名'];
+      final sampleData = [
+        ['C001', '张三'],
+        ['C002', '李四'],
+        ['C003', '王五'],
+        ['10001', '赵六'],
+        ['10002', '孙七'],
+      ];
+
+      final csvData = [headers, ...sampleData];
+      final csvString = const ListToCsvConverter().convert(csvData);
+      final bytes = Uint8List.fromList(utf8.encode(csvString));
+
+      if (kIsWeb) {
+        final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute("download", "FundLink-映射索引模板.csv")
+          ..click();
+        html.Url.revokeObjectUrl(url);
+        if (mounted) context.showToast('映射模板已下载');
+      } else {
+        final savedPath = await FileSaver.instance.saveAs(
+          name: 'FundLink-映射索引模板',
+          bytes: bytes,
+          fileExtension: 'csv',
+          mimeType: MimeType.other,
+        );
+        
+        if (savedPath != null && savedPath.isNotEmpty) {
+          if (mounted) context.showToast('映射模板已保存');
         } else {
           if (mounted) context.showToast('已取消保存');
         }
@@ -1345,6 +1638,16 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         throw Exception('文件没有数据行');
       }
 
+      // ✅ 新增：智能检测文件类型
+      _detectedFileType = _detectFileType(_headers);
+      debugPrint('[Import] 检测到文件类型: $_detectedFileType');
+      
+      // 如果是映射索引文件，直接导入
+      if (_detectedFileType == ImportFileType.mapping) {
+        await _processMappingFile();
+        return;
+      }
+
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
     } catch (e, stack) {
@@ -1413,6 +1716,195 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     } catch (e) {
       debugPrint('检测备份文件失败: $e');
       return false;
+    }
+  }
+  
+  /// ✅ 新增：智能检测文件类型（持仓 or 映射索引）
+  ImportFileType _detectFileType(List<String> headers) {
+    final lowerHeaders = headers.map((h) => h.toLowerCase()).toList();
+    
+    // 1. 先检测是否为持仓数据文件（优先级更高）
+    // 特征：包含基金代码、购买金额等字段
+    bool hasFundCode = false;
+    bool hasAmountOrShares = false;
+    
+    for (final header in lowerHeaders) {
+      if (header.contains('基金代码') || 
+          header.contains('产品代码') ||
+          header.contains('fundcode') ||
+          header.contains('fund_code') ||
+          header.contains('fund code')) {
+        hasFundCode = true;
+      }
+      
+      if (header.contains('购买金额') || 
+          header.contains('申购金额') ||
+          header.contains('成本') ||
+          header.contains('份额') ||
+          header.contains('amount') ||
+          header.contains('shares') ||
+          header.contains('purchase')) {
+        hasAmountOrShares = true;
+      }
+    }
+    
+    // 如果有基金代码和金额/份额，一定是持仓数据
+    if (hasFundCode && hasAmountOrShares) {
+      return ImportFileType.holding;
+    }
+    
+    // 2. 再检测是否为映射索引文件
+    // 特征：只有客户号和客户名相关的列，且没有持仓相关字段
+    bool hasClientIdColumn = false;
+    bool hasClientNameColumn = false;
+    int totalColumns = headers.length;
+    
+    for (final header in lowerHeaders) {
+      // 检测客户号相关列
+      if (header.contains('客户号') || 
+          header.contains('核心客户号') || 
+          header.contains('用户号') || 
+          header.contains('核心用户号') || 
+          header.contains('客户代码') ||
+          header.contains('clientid') ||
+          header.contains('client_id') ||
+          header.contains('user_id') ||
+          header.contains('userid')) {
+        hasClientIdColumn = true;
+      }
+      
+      // 检测客户名相关列
+      if (header.contains('客户姓名') || 
+          header.contains('客户名') || 
+          header.contains('姓名') || 
+          header.contains('名字') || 
+          header.contains('核心用户名') ||
+          header.contains('clientname') ||
+          header.contains('client_name') ||
+          header.contains('username') ||
+          header.contains('user_name') ||
+          header == '姓名' ||
+          header == '名字') {
+        hasClientNameColumn = true;
+      }
+    }
+    
+    // 如果同时有客户号和客户名，且总列数较少（<= 5），很可能是映射索引
+    if (hasClientIdColumn && hasClientNameColumn && totalColumns <= 5) {
+      return ImportFileType.mapping;
+    }
+    
+    // 3. 默认认为是持仓数据（保持原有行为）
+    return ImportFileType.holding;
+  }
+  
+  /// ✅ 新增：处理映射索引文件
+  Future<void> _processMappingFile() async {
+    final dataManager = DataManagerProvider.of(context);
+    
+    try {
+      debugPrint('[Import] 开始处理映射索引文件，共${_rawData.length}条记录');
+      
+      int success = 0;
+      int fail = 0;
+      int skip = 0;
+      
+      // 自动识别客户号和客户名列
+      int clientIdIndex = -1;
+      int clientNameIndex = -1;
+      
+      for (int i = 0; i < _headers.length; i++) {
+        final header = _headers[i].toLowerCase();
+        
+        // 识别客户号
+        if (clientIdIndex == -1 && 
+            (header.contains('客户号') || 
+             header.contains('核心客户号') || 
+             header.contains('用户号') || 
+             header.contains('核心用户号') || 
+             header.contains('客户代码') ||
+             header.contains('clientid') ||
+             header.contains('client_id') ||
+             header.contains('user_id') ||
+             header.contains('userid'))) {
+          clientIdIndex = i;
+        }
+        
+        // 识别客户名
+        if (clientNameIndex == -1 && 
+            (header.contains('客户姓名') || 
+             header.contains('客户名') || 
+             header.contains('姓名') || 
+             header.contains('名字') || 
+             header.contains('核心用户名') ||
+             header.contains('clientname') ||
+             header.contains('client_name') ||
+             header.contains('username') ||
+             header.contains('user_name') ||
+             header == '姓名' ||
+             header == '名字')) {
+          clientNameIndex = i;
+        }
+      }
+      
+      if (clientIdIndex == -1 || clientNameIndex == -1) {
+        throw Exception('无法识别客户号或客户名列');
+      }
+      
+      debugPrint('[Import] 客户号列: $_headers[$clientIdIndex], 客户名列: $_headers[$clientNameIndex]');
+      
+      // 逐行导入
+      for (final row in _rawData) {
+        try {
+          if (row.length <= clientIdIndex || row.length <= clientNameIndex) {
+            fail++;
+            continue;
+          }
+          
+          final clientId = row[clientIdIndex]?.toString().trim();
+          final clientName = row[clientNameIndex]?.toString().trim();
+          
+          if (clientId == null || clientId.isEmpty || clientName == null || clientName.isEmpty) {
+            skip++;
+            continue;
+          }
+          
+          // 检查是否已存在
+          final existing = await _mappingService.getAllMappings();
+          final existingMapping = existing.where((m) => m.clientId == clientId).firstOrNull;
+          
+          if (existingMapping != null) {
+            // 如果已存在，更新客户名
+            await _mappingService.updateMapping(
+              existingMapping.id,
+              clientId,
+              clientName,
+            );
+            success++;
+            debugPrint('[Import] 更新映射: $clientId -> $clientName');
+          } else {
+            // 新增映射
+            await _mappingService.addMapping(clientId, clientName);
+            success++;
+            debugPrint('[Import] 新增映射: $clientId -> $clientName');
+          }
+        } catch (e) {
+          fail++;
+          debugPrint('[Import] 导入映射失败: $e');
+        }
+      }
+      
+      debugPrint('[Import] 映射导入结果: 成功$success, 跳过$skip, 失败$fail');
+      
+      if (mounted) {
+        context.showToast('映射索引导入完成\n成功: $success, 跳过: $skip, 失败: $fail');
+        Navigator.pop(context); // 返回上一页
+      }
+    } catch (e) {
+      debugPrint('[Import] 处理映射文件失败: $e');
+      if (mounted) {
+        context.showToast('映射导入失败: $e');
+      }
     }
   }
   
@@ -1523,6 +2015,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
       setState(() {
         _isImporting = true;
         _importProgress = 0;
+        _shouldAbortImport = false;  // ✅ 重置中止标志
+        _isBackgroundImport = false;  // ✅ 重置后台导入标志
+        _isPaused = false;  // ✅ 重置暂停标志
       });
     }
 
@@ -1535,9 +2030,26 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
     List<String> errors = [];
     List<String> skipReasons = [];
 
+    // ✅ 添加统一的暂停检查函数
+    Future<bool> _checkPauseOrAbort() async {
+      if (_shouldAbortImport) return true; // 需要中止
+      if (_isPaused) {
+        debugPrint('[Import] 导入已暂停，等待用户选择...');
+        while (_isPaused && mounted) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        // 用户恢复后，检查是否要中止
+        if (_shouldAbortImport) return true;
+      }
+      return false; // 继续执行
+    }
+
     final existingHoldings = dataManager.holdings;
 
     for (int i = 0; i < _validData.length; i++) {
+      // ✅ 每次循环开始检查
+      if (await _checkPauseOrAbort()) break;
+      
       final row = _validData[i];
       try {
         String clientName = row['clientName']?.toString() ?? '';
@@ -1606,6 +2118,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         bool networkFailed = false;
         
         while (retryCount <= maxRetries) {
+          // ✅ 重试前检查
+          if (await _checkPauseOrAbort()) break;
+          
           try {
             fundInfo = await fundService.fetchFundInfo(fundCode);
             break;
@@ -1616,7 +2131,13 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
               await Future.delayed(Duration(milliseconds: 500 * retryCount));
             }
           }
+          
+          // ✅ 重试后检查
+          if (await _checkPauseOrAbort()) break;
         }
+        
+        // ✅ 如果被中止，退出循环
+        if (_shouldAbortImport) break;
         
         if (retryCount > maxRetries) {
           networkFailed = true;
@@ -1635,6 +2156,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         final navReturn6m = fundInfo['navReturn6m'] as double?;
         final navReturn1y = fundInfo['navReturn1y'] as double?;
 
+        // ✅ 保存前检查
+        if (await _checkPauseOrAbort()) break;
+        
         final transaction = TransactionRecord(
           clientId: clientId,
           clientName: clientName,
@@ -1681,11 +2205,41 @@ class _ImportHoldingViewState extends State<ImportHoldingView> {
         errors.add('第${i+1}行: $e');
         dataManager.addLog('导入第${i+1}行失败: $e', type: LogType.error);
       }
-      setState(() => _importProgress = (i+1) / _validData.length);
+      // ✅ 优化：每条数据都更新进度，实现平滑的0-100%动画
+      final progress = (i+1) / _validData.length;
+      _targetProgress = progress;
+      _animationController.animateTo(
+        progress,
+        duration: const Duration(milliseconds: 200),  // 更短的动画时长，响应更快
+        curve: Curves.easeOut,  // 先快后慢，让用户感觉响应迅速
+      );
+      
+      // ✅ 检查是否应该暂停导入（等待用户选择）
+      if (_isPaused) {
+        debugPrint('[Import] 导入已暂停，等待用户选择...');
+        // 等待直到不再暂停
+        while (_isPaused && mounted) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        // 如果用户选择了中止，退出循环
+        if (_shouldAbortImport) {
+          debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
+          break;
+        }
+      }
+      
+      // ✅ 检查是否应该中止导入
+      if (_shouldAbortImport) {
+        debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
+        break;  // 退出循环
+      }
     }
 
     setState(() {
       _isImporting = false;
+      _isBackgroundImport = false;  // ✅ 重置后台导入标志
+      _shouldAbortImport = false;  // ✅ 重置中止标志
+      _isPaused = false;  // ✅ 重置暂停标志
       _importResult = ImportResult(
         successCount: success,
         failCount: fail,

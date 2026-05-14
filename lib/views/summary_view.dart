@@ -320,13 +320,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   
   Future<void> _autoConfirmPendingTransactions() async {
     try {
-      final pendingCount = _dataManager.getPendingTransactions().length;
-      if (pendingCount == 0) return;
+      final pendingTxs = _dataManager.getPendingTransactions();
+      final pendingCount = pendingTxs.length;
+      
+      if (pendingCount == 0) {
+        debugPrint('[SummaryView] ✅ 无待确认交易，跳过自动确认');
+        return;
+      }
+      
+      debugPrint('[SummaryView] 🔄 开始自动确认 $pendingCount 笔待确认交易');
+      for (final tx in pendingTxs) {
+        debugPrint('[SummaryView]   - ${tx.fundCode} (${tx.fundName}), isPending=${tx.isPending}, status=${tx.status.name}');
+      }
       
       final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);
       
       if (confirmedCount > 0 && mounted) {
         context.showToast('已自动确认 $confirmedCount 笔交易');
+        debugPrint('[SummaryView] ✅ 成功确认 $confirmedCount 笔交易');
       }
     } catch (e) {
       debugPrint('自动确认待确认交易失败: $e');

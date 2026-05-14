@@ -1,9 +1,12 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import '../models/transaction_record.dart';
+import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../utils/desktop_focus_manager.dart';
 
 class PendingTransactionsView extends StatefulWidget {
   const PendingTransactionsView({super.key});
@@ -17,13 +20,30 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   late FundService _fundService;
   List<TransactionRecord> _pendingTransactions = [];
   bool _isLoading = false;
+  late VoidCallback _dataListener;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
+    
+    // ✅ 添加数据监听器，当数据变化时自动刷新列表
+    _dataListener = () {
+      if (mounted) {
+        _loadPendingTransactions();
+      }
+    };
+    _dataManager.addListener(_dataListener);
+    
     _loadPendingTransactions();
+  }
+  
+  @override
+  void dispose() {
+    // ✅ 移除监听器，防止内存泄漏
+    _dataManager.removeListener(_dataListener);
+    super.dispose();
   }
 
   void _loadPendingTransactions() {
@@ -35,19 +55,127 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   }
 
   Future<void> _refreshAndConfirm() async {
-    if (_isLoading) return;
-
-    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
+    // ✅ 显示开始提示
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
-      final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);
+      int confirmedCount = 0;
+      int networkErrorCount = 0;  // 网络错误计数
+      int holdingErrorCount = 0;  // 持仓错误计数
+      int navNotAvailableCount = 0;  // 净值未公布计数
+      final pendingTxs = _dataManager.getPendingTransactions();
       
+      if (pendingTxs.isEmpty && mounted) {
+        context.showToast('暂无待确认交易');
+        setState(() => _isLoading = false);
+        return;
+      }
+      
+      for (final tx in pendingTxs) {
+        try {
+          // ✅ 第1步: 查询数据库中该基金的最新净值
+          final holding = _dataManager.holdings.firstWhere(
+            (h) => h.fundCode == tx.fundCode,
+            orElse: () {
+              holdingErrorCount++;
+              throw Exception('未找到${tx.fundName}的持仓信息');
+            },
+          );
+          
+          final dbNav = holding.currentNav;
+          final dbNavDate = holding.navDate;
+          
+          // ✅ 第2步: 计算交易对应的净值日期
+          final expectedNavDate = await DataManager.calculateNavDateForTradeAsync(
+            tx.tradeDate, 
+            tx.isAfter1500,
+          );
+          
+          bool shouldFetchFromApi = true;
+          double? navToUse;
+          
+          // ✅ 第3步: 如果数据库中有净值且日期匹配,直接使用
+          if (dbNav != null && dbNav > 0 && dbNavDate != null) {
+            final dbNavDay = DateTime(dbNavDate.year, dbNavDate.month, dbNavDate.day);
+            final expectedNavDay = DateTime(expectedNavDate.year, expectedNavDate.month, expectedNavDate.day);
+            
+            if (!dbNavDay.isBefore(expectedNavDay)) {
+              // 数据库中的净值日期 >= 期望的净值日期,可以直接使用
+              navToUse = dbNav;
+              shouldFetchFromApi = false;
+            }
+          }
+          
+          // ✅ 第4步: 如果数据库中没有合适的净值,调用 API 获取
+          if (shouldFetchFromApi) {
+            try {
+              final fundInfo = await _fundService.fetchFundInfo(tx.fundCode, forceRefresh: true);
+              if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+                final apiNavDate = fundInfo['navDate'] as DateTime?;
+                if (apiNavDate != null) {
+                  final apiNavDay = DateTime(apiNavDate.year, apiNavDate.month, apiNavDate.day);
+                  final expectedNavDay = DateTime(expectedNavDate.year, expectedNavDate.month, expectedNavDate.day);
+                  
+                  if (!apiNavDay.isBefore(expectedNavDay)) {
+                    navToUse = fundInfo['currentNav'];
+                  } else {
+                    navNotAvailableCount++;
+                  }
+                } else {
+                  navNotAvailableCount++;
+                }
+              } else {
+                navNotAvailableCount++;
+              }
+            } catch (e) {
+              // API 请求失败，判断是网络问题
+              networkErrorCount++;
+              await _dataManager.addLog(
+                '获取${tx.fundName}净值失败: $e',
+                type: LogType.error,
+              );
+              rethrow;  // 重新抛出，让外层 catch 处理
+            }
+          }
+          
+          // ✅ 第5步: 如果获取到净值,立即确认交易
+          if (navToUse != null && navToUse > 0) {
+            await _dataManager.confirmPendingTransaction(tx.id, navToUse!);
+            confirmedCount++;
+          }
+        } catch (e) {
+          // 已经在上层统计了错误类型，这里只需要记录日志
+          await _dataManager.addLog(
+            '手动确认单笔交易失败 (${tx.fundCode}): $e',
+            type: LogType.error,
+          );
+        }
+      }
+      
+      // ✅ 刷新列表
       if (mounted) {
         _loadPendingTransactions();
+        
+        // ✅ 根据结果显示不同的提示（只显示一次）
         if (confirmedCount > 0) {
-          context.showToast('成功确认 $confirmedCount 笔交易');
+          if (networkErrorCount > 0 || holdingErrorCount > 0) {
+            context.showToast('确认 $confirmedCount 笔，部分失败');
+          } else {
+            context.showToast('成功确认 $confirmedCount 笔交易');
+          }
         } else {
-          context.showToast('暂无可确认的交易');
+          // 全部失败，给出具体原因
+          if (holdingErrorCount > 0) {
+            context.showToast('缺少基金持仓信息，请先添加持仓');
+          } else if (networkErrorCount > 0) {
+            context.showToast('网络连接失败，请检查网络后重试');
+          } else if (navNotAvailableCount > 0) {
+            context.showToast('净值尚未公布，请稍后再试');
+          } else {
+            context.showToast('确认失败，请稍后重试');
+          }
         }
       }
     } catch (e) {
@@ -69,6 +197,260 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
     return DataManager.calculateConfirmDate(tx.tradeDate, tx.isAfter1500);
   }
 
+  Future<void> _showManualConfirmDialog(TransactionRecord tx) async {
+    final TextEditingController navController = TextEditingController();
+    
+    // 使用 MediaQuery 获取键盘高度，避免遮挡
+    final mediaQuery = MediaQuery.of(context);
+    
+    await showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(), // 点击背景关闭键盘
+        child: Center(
+          child: Container(
+            margin: EdgeInsets.only(
+              bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 0, // 键盘弹出时上移
+            ),
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: CupertinoPopupSurface(
+              isSurfacePainted: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 标题栏
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                          ? const Color(0xFF3A3A3C)
+                          : CupertinoColors.systemGrey6,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '手动确认交易',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoTheme.of(context).textTheme.textStyle.color,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemGrey.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              CupertinoIcons.xmark,
+                              size: 14,
+                              color: CupertinoTheme.of(context).textTheme.textStyle.color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 内容区域
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '基金: ${tx.fundName}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: CupertinoTheme.of(context).textTheme.textStyle.color,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '代码: ${tx.fundCode}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '金额: ¥${tx.amount.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoTheme.of(context).textTheme.textStyle.color,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '请输入确认净值:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: CupertinoTheme.of(context).textTheme.textStyle.color,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        KeyboardListener(
+                          focusNode: FocusNode(),
+                          onKeyEvent: (KeyEvent event) {
+                            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+                              final scope = FocusScope.of(context);
+                              DesktopFocusManager.handleTabKey(
+                                FocusNode(),
+                                scope,
+                                shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+                              );
+                            }
+                          },
+                          child: CupertinoTextField(
+                            controller: navController,
+                            placeholder: '例如: 1.2345',
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            textInputAction: TextInputAction.done,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                                  ? const Color(0xFF3A3A3C)
+                                  : CupertinoColors.systemGrey6,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            onChanged: (value) {
+                              // 限制只能输入数字和小数点，最多4位小数
+                              if (value.isNotEmpty && !RegExp(r'^\d*\.?\d{0,4}$').hasMatch(value)) {
+                                navController.text = value.substring(0, value.length - 1);
+                                navController.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: navController.text.length),
+                                );
+                              }
+                            },
+                            onSubmitted: (value) async {
+                              // 按回车键确认
+                              await _confirmManualNav(tx, navController.text);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              CupertinoIcons.info_circle,
+                              size: 12,
+                              color: CupertinoColors.systemGrey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '提示: 最多支持4位小数，按回车键确认',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // 按钮区域
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CupertinoButton(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                                    ? const Color(0xFF3A3A3C)
+                                    : CupertinoColors.systemGrey6,
+                                onPressed: () => Navigator.pop(context),
+                                child: Text(
+                                  '取消',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: CupertinoTheme.of(context).primaryColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: CupertinoButton(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                color: CupertinoColors.activeBlue,
+                                onPressed: () async {
+                                  await _confirmManualNav(tx, navController.text);
+                                },
+                                child: const Text(
+                                  '确认',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: CupertinoColors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    
+    navController.dispose();
+  }
+
+  Future<void> _confirmManualNav(TransactionRecord tx, String navText) async {
+    final trimmedText = navText.trim();
+    
+    if (trimmedText.isEmpty) {
+      context.showToast('请输入净值');
+      return;
+    }
+    
+    final nav = double.tryParse(trimmedText);
+    if (nav == null || nav <= 0) {
+      context.showToast('请输入有效的净值');
+      return;
+    }
+    
+    // 验证小数位数
+    if (trimmedText.contains('.') && trimmedText.split('.')[1].length > 4) {
+      context.showToast('净值最多支持4位小数');
+      return;
+    }
+    
+    Navigator.pop(context);
+    
+    // 执行手动确认
+    try {
+      await _dataManager.manuallyConfirmTransaction(
+        tx.id,
+        nav,
+        null, // 份额自动计算
+        null, // 金额使用原值
+      );
+      
+      if (mounted) {
+        context.showToast('交易确认成功');
+        _loadPendingTransactions();
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showToast('确认失败: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -88,7 +470,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               showBack: true,
               onBack: () => Navigator.of(context).pop(),
               showRefresh: true,
-              onRefresh: _isLoading ? null : _refreshAndConfirm,
+              onRefresh: _refreshAndConfirm, // ✅ 始终可用,不受 loading 状态限制
+              hasData: true, // ✅ 强制刷新按钮始终可用
               showExpandCollapse: false,
               showSearch: false,
               showReset: false,
@@ -104,46 +487,43 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '待确认交易',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: secondaryTextColor,
-                          ),
+                  Row(
+                    children: [
+                      Text(
+                        '待确认交易',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: secondaryTextColor,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_pendingTransactions.length} 笔',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      '净值将在T+1或T+2日自动确认',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: secondaryTextColor,
-                        height: 1.3,
                       ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_pendingTransactions.length} 笔',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '点击刷新按钮手动查询净值并确认',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: secondaryTextColor,
+                      height: 1.2,
                     ),
                   ),
                 ],
@@ -199,8 +579,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
     final canConfirm = !now.isBefore(expectedConfirmDate);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
         borderRadius: BorderRadius.circular(10),
@@ -214,6 +594,28 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
         children: [
           Row(
             children: [
+              // ✅ 客户信息放在最前面，使用相对加重的颜色
+              if (tx.clientId.isNotEmpty)
+                Text(
+                  '${tx.clientName}(${tx.clientId})',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.8) : const Color(0xFF3C3C43),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                )
+              else
+                Text(
+                  tx.clientName,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.8) : const Color(0xFF3C3C43),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
@@ -264,22 +666,34 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             ],
           ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           
-          Text(
-            tx.fundName,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: textColor,
+          // ✅ 基金名称和代码在同一行，代码颜色更浅、字体更细
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: tx.fundName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                TextSpan(
+                  text: ' (${tx.fundCode})',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                    color: secondaryTextColor.withOpacity(0.7),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Text(
-            '${tx.fundCode}',
-            style: TextStyle(fontSize: 11, color: secondaryTextColor),
+            overflow: TextOverflow.ellipsis,
           ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           
           Row(
             children: [
@@ -337,7 +751,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             ],
           ),
           
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -362,8 +776,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                 Expanded(
                   child: Text(
                     canConfirm
-                        ? '已到达确认时间'
-                        : '等待净值公布中...',
+                        ? '已到达确认时间，点击刷新按钮确认'
+                        : '等待净值公布中，可手动刷新检查',
                     style: TextStyle(
                       fontSize: 10,
                       color: canConfirm 
@@ -375,6 +789,76 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               ],
             ),
           ),
+          
+          // 显示重试次数和手动确认按钮
+          if (tx.retryCount > 0 || tx.status == TransactionStatus.confirmFailed)
+            const SizedBox(height: 8),
+          if (tx.retryCount > 0 || tx.status == TransactionStatus.confirmFailed)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: tx.status == TransactionStatus.confirmFailed
+                    ? CupertinoColors.systemRed.withOpacity(0.1)
+                    : CupertinoColors.systemYellow.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: tx.status == TransactionStatus.confirmFailed
+                      ? CupertinoColors.systemRed.withOpacity(0.3)
+                      : CupertinoColors.systemYellow.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        tx.status == TransactionStatus.confirmFailed
+                            ? CupertinoIcons.exclamationmark_triangle_fill
+                            : CupertinoIcons.clock_fill,
+                        size: 12,
+                        color: tx.status == TransactionStatus.confirmFailed
+                            ? CupertinoColors.systemRed
+                            : CupertinoColors.systemYellow,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        tx.status == TransactionStatus.confirmFailed
+                            ? '自动确认失败(已重试${tx.retryCount}次)'
+                            : '正在尝试自动确认(${tx.retryCount}/5次)',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: tx.status == TransactionStatus.confirmFailed
+                              ? CupertinoColors.systemRed
+                              : CupertinoColors.systemYellow,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (tx.status == TransactionStatus.confirmFailed)
+                    const SizedBox(height: 6),
+                  if (tx.status == TransactionStatus.confirmFailed)
+                    SizedBox(
+                      width: double.infinity,
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        color: CupertinoColors.systemRed,
+                        borderRadius: BorderRadius.circular(6),
+                        onPressed: () => _showManualConfirmDialog(tx),
+                        child: const Text(
+                          '手动确认',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );

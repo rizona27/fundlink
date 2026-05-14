@@ -51,6 +51,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   Timer? _scrollThrottleTimer;
   late AnimationController _scrollAnimationController;
   final ScrollController _scrollController = ScrollController();
+  
+  // ✅ 用于控制置顶区的淡入淡出动画
+  bool _showPinnedSection = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -193,6 +196,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
     
+    // ✅ 初始化置顶区显示状态
+    final hasPinned = _filteredPinnedHoldings.isNotEmpty;
+    if (hasPinned) {
+      _showPinnedSection = true;
+    }
+    
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -202,6 +211,20 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   void _onDataManagerChanged() {
     if (mounted) {
+      // ✅ 更新置顶区显示状态
+      final hasPinned = _filteredPinnedHoldings.isNotEmpty;
+      if (hasPinned && !_showPinnedSection) {
+        // 有置顶基金，立即显示（淡入）
+        setState(() => _showPinnedSection = true);
+      } else if (!hasPinned && _showPinnedSection) {
+        // 没有置顶基金，延迟隐藏（淡出）
+        Future.delayed(AnimationConfig.durationFade, () {
+          if (mounted && _filteredPinnedHoldings.isEmpty) {
+            setState(() => _showPinnedSection = false);
+          }
+        });
+      }
+      
       setState(() {});
     }
   }
@@ -489,11 +512,18 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     top: 8,
                     bottom: totalBottomPadding,
                   ),
-                  itemCount: (hasPinned ? 1 : 0) + groups.length,
+                  itemCount: 1 + groups.length,  // ✅ 始终包含置顶区，通过 AnimatedSize 控制高度
                   itemBuilder: (context, index) {
-                    // 如果有置顶区域且当前是第一项，渲染置顶区域
-                    if (hasPinned && index == 0) {
-                      return Column(
+                    // 第一项始终是置顶区域
+                    if (index == 0) {
+                      return AnimatedSize(
+                        duration: const Duration(milliseconds: 500),  // ✅ 更柔和的动画时长
+                        curve: Curves.easeInOutCubic,  // ✅ 更柔和的缓动曲线
+                        alignment: Alignment.topCenter,
+                        child: Opacity(
+                          opacity: _showPinnedSection ? 1.0 : 0.0,
+                          child: _showPinnedSection
+                              ? Column(
                         children: [
                           GradientCard(
                             title: '置顶',
@@ -545,11 +575,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                           ),
                           const SizedBox(height: 16),
                         ],
-                      );
+                      )
+                              : const SizedBox.shrink(),  // ✅ opacity为0时不渲染内容
+                        ),  // Opacity
+                      );  // AnimatedSize
                     }
                     
                     // 否则渲染客户分组
-                    final groupIndex = hasPinned ? index - 1 : index;
+                    final groupIndex = index - 1;  // ✅ 置顶区始终占据第一项
                     if (groupIndex >= 0 && groupIndex < groups.length) {
                       final isLastGroup = groupIndex == groups.length - 1;
                       return RepaintBoundary(
