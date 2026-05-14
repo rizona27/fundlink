@@ -199,12 +199,18 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopValuationTimer();
-    _stopMarketStatusTimer(); 
+    _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
-    _scrollThrottleTimer?.cancel();
     _scrollController.dispose(); 
     super.dispose();
+  }
+
+  /// 统一清理所有 Timer，防止内存泄漏
+  void _cancelAllTimers() {
+    _stopValuationTimer();
+    _stopMarketStatusTimer();
+    _scrollThrottleTimer?.cancel();
+    _scrollThrottleTimer = null;
   }
 
   @override

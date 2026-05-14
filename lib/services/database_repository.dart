@@ -140,39 +140,56 @@ class DatabaseRepository {
     await _db.saveSetting(key, value);
   }
   
-  // ==================== 批量操作 ====================
+  // ==================== 批量操作（带事务支持）====================
   
+  /// 批量插入持仓（使用事务保证原子性）
   Future<void> batchInsertHoldings(List<FundHolding> holdings) async {
+    if (holdings.isEmpty) return;
+    
     final db = await _db.database;
-    final batch = db.batch();
     
-    for (final holding in holdings) {
-      batch.insert('holdings', holding.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-    
-    await batch.commit(noResult: true);
+    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
+    await db.transaction((txn) async {
+      for (final holding in holdings) {
+        await txn.insert(
+          'holdings',
+          holding.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
   
+  /// 批量插入交易记录（使用事务保证原子性）
   Future<void> batchInsertTransactions(List<TransactionRecord> transactions) async {
+    if (transactions.isEmpty) return;
+    
     final db = await _db.database;
-    final batch = db.batch();
     
-    for (final transaction in transactions) {
-      batch.insert('transactions', transaction.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-    
-    await batch.commit(noResult: true);
+    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
+    await db.transaction((txn) async {
+      for (final transaction in transactions) {
+        await txn.insert(
+          'transactions',
+          transaction.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
   
+  /// 批量插入日志（使用事务保证原子性）
   Future<void> batchInsertLogs(List<LogEntry> logs) async {
+    if (logs.isEmpty) return;
+    
     final db = await _db.database;
-    final batch = db.batch();
     
-    for (final log in logs) {
-      batch.insert('logs', log.toMap());
-    }
-    
-    await batch.commit(noResult: true);
+    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
+    await db.transaction((txn) async {
+      for (final log in logs) {
+        await txn.insert('logs', log.toMap());
+      }
+    });
   }
   
   // ==================== 高级查询 ====================

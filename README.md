@@ -96,6 +96,7 @@ lib/
 ├── utils/
 │   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
 │   ├── desktop_focus_manager.dart         # 桌面端焦点管理工具，处理 Tab 键导航和焦点切换逻辑
+│   ├── error_message_mapper.dart          # 错误消息映射工具，将技术性错误转换为用户友好的提示，支持多种错误类型和解决建议
 │   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名、客户号等格式化器
 │   ├── memory_info_native.dart            # 原生平台内存信息实现（iOS/Android/macOS），使用 flutter_memory_info
 │   ├── memory_info_web.dart               # Web平台内存信息实现，使用 Performance API 或估算值
@@ -113,6 +114,7 @@ lib/
 │   ├── file_export_service.dart           # 文件导出服务，支持 CSV/Excel 格式
 │   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配能力
 │   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
+│   ├── http_client_provider.dart          # HTTP Client 提供者，全局共享 HTTP 客户端实例，实现连接池复用，提高网络请求效率
 │   ├── ui_state_service.dart              # UI 状态管理服务，使用 SQLite 存储 UI 状态（如展开/折叠状态）
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
 │

@@ -717,8 +717,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
     }
 
-    final clientNameConfig = _fieldConfigs.firstWhere((c) => c.id == 'clientName');
-    final clientIdConfig = _fieldConfigs.firstWhere((c) => c.id == 'clientId');
+    final clientNameConfig = _fieldConfigs.firstWhere(
+      (c) => c.id == 'clientName',
+      orElse: () => throw Exception('未找到客户姓名字段配置'),
+    );
+    final clientIdConfig = _fieldConfigs.firstWhere(
+      (c) => c.id == 'clientId',
+      orElse: () => throw Exception('未找到客户号字段配置'),
+    );
     if (clientNameConfig.mappedIndex == -1 && clientIdConfig.mappedIndex != -1) {
       clientNameConfig.mappedIndex = clientIdConfig.mappedIndex;
     }

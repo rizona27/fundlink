@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';  // ✅ 添加 debugPrint
-import 'package:http/http.dart' as http;
 import 'package:world_holidays/world_holidays.dart';
+import 'http_client_provider.dart';
 
 class ChinaTradingDayService {
   static final ChinaTradingDayService _instance = ChinaTradingDayService._internal();
@@ -119,7 +119,7 @@ class ChinaTradingDayService {
       final dateString = _formatDate(date);
       final url = 'https://timor.tech/api/holiday/info/$dateString';
       
-      final response = await http.get(
+      final response = await HttpClientProvider.client.get(
         Uri.parse(url),
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 5));

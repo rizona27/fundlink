@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, debugPrint;
-import 'package:http/http.dart' as http;
 import '../constants/app_constants.dart';
+import 'http_client_provider.dart';
 
 /// 版本信息模型
 class VersionInfo {
@@ -112,7 +112,7 @@ class VersionCheckService {
     try {
       debugPrint('正在从 NAS 检查版本更新...');
       
-      final response = await http.get(
+      final response = await HttpClientProvider.client.get(
         Uri.parse('${AppConstants.nasBackendUrl}/api/version'),
         headers: {
           'User-Agent': AppConstants.userAgentApp,
@@ -168,7 +168,7 @@ class VersionCheckService {
     try {
       debugPrint('正在从 GitHub 检查版本更新...');
       
-      final response = await http.get(
+      final response = await HttpClientProvider.client.get(
         Uri.parse(AppConstants.githubReleaseApiUrl),
         headers: {
           'Accept': 'application/vnd.github.v3+json',

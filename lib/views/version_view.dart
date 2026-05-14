@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -1111,63 +1111,222 @@ class _VersionViewState extends State<VersionView> {
   }
 
   Widget _buildUpdateLogMarquee(bool isDarkMode) {
-    final updateLogs = [
-      ACKNOWLEDGMENT_LINE_1,  
-      ACKNOWLEDGMENT_LINE_2,  
-      '',  
-      '──────────────────────',  
-      '',  
-      ...UPDATE_LOGS,  
-    ];
+    // 只显示最近5条更新日志
+    final recentLogs = UPDATE_LOGS.take(5).toList();
+    final hasMoreLogs = UPDATE_LOGS.length > 5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '更新记录',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final estimatedHeight = updateLogs.length * 20.0;
-            final containerHeight = (estimatedHeight.clamp(120.0, 300.0)) * 0.6; 
-            
-            return Container(
-              height: containerHeight,
-              decoration: BoxDecoration(
-                color: isDarkMode 
-                    ? const Color(0xFF2C2C2E).withOpacity(0.6)
-                    : CupertinoColors.white.withOpacity(0.8),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDarkMode
-                      ? CupertinoColors.white.withOpacity(0.1)
-                      : CupertinoColors.systemGrey.withOpacity(0.2),
-                  width: 1,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '更新记录',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+              ),
+            ),
+            if (hasMoreLogs)
+              GestureDetector(
+                onTap: () => _showFullHistoryDialog(context, isDarkMode),
+                child: Text(
+                  '查看更多',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: const Color(0xFF007AFF),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(9),
-                child: _VerticalMarqueeText(
-                  items: updateLogs,
-                  itemTextStyle: TextStyle(
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E).withOpacity(0.6)
+                : CupertinoColors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.1)
+                  : CupertinoColors.systemGrey.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 显示致谢信息
+              Text(
+                ACKNOWLEDGMENT_LINE_1,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.8)
+                      : CupertinoColors.systemGrey.withOpacity(0.9),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                ACKNOWLEDGMENT_LINE_2,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.8)
+                      : CupertinoColors.systemGrey.withOpacity(0.9),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 分隔线
+              Divider(
+                height: 1,
+                color: isDarkMode
+                    ? CupertinoColors.white.withOpacity(0.1)
+                    : CupertinoColors.systemGrey.withOpacity(0.2),
+              ),
+              const SizedBox(height: 8),
+              // 显示最近5条更新日志
+              ...recentLogs.map((log) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  log,
+                  style: TextStyle(
                     fontSize: 12,
                     color: isDarkMode
                         ? CupertinoColors.white.withOpacity(0.8)
                         : CupertinoColors.systemGrey.withOpacity(0.9),
                   ),
-                  velocity: 15.0, 
                 ),
-              ),
-            );
-          },
+              )).toList(),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  /// 显示完整历史记录弹窗
+  void _showFullHistoryDialog(BuildContext context, bool isDarkMode) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭',
+      barrierColor: Colors.black.withOpacity(0.5),
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+              child: GestureDetector(
+                onTap: () {}, // 阻止事件冒泡
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDarkMode 
+                          ? const Color(0xFF1C1C1E)
+                          : CupertinoColors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 标题栏
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isDarkMode
+                                    ? CupertinoColors.white.withOpacity(0.1)
+                                    : CupertinoColors.systemGrey.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '完整更新历史',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode 
+                                      ? CupertinoColors.white 
+                                      : CupertinoColors.label,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.of(context).pop(),
+                                child: Icon(
+                                  CupertinoIcons.xmark_circle_fill,
+                                  size: 24,
+                                  color: isDarkMode
+                                      ? CupertinoColors.white.withOpacity(0.6)
+                                      : CupertinoColors.systemGrey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // 内容区域 - 可滚动
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 所有更新日志
+                                ...UPDATE_LOGS.map((log) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    log,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isDarkMode
+                                          ? CupertinoColors.white.withOpacity(0.8)
+                                          : CupertinoColors.systemGrey.withOpacity(0.9),
+                                    ),
+                                  ),
+                                )).toList(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.9, end: 1.0).animate(animation),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

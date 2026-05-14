@@ -245,15 +245,23 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     );
   }
   
+  /// ✅ 根据交易日期获取净值（核心逻辑重构）
+  /// 
+  /// 业务规则：
+  /// 1. 历史交易（过去日期）：从数据库获取对应净值日期的净值
+  /// 2. 当日/未来交易：标记为待确认，净值留空
+  /// 3. 非工作日：找下一个工作日的净值
+  /// 4. 工作日15:00前：T+1日净值；15:00后：T+2日净值
   Future<void> _fetchNavByDate() async {
     try {
       final fundService = FundService(_dataManager);
       
-      final targetNavDate = await DataManager.calculateNavDateForTradeAsync(_tradeDate, _isAfter1500);
+      // ✅ 判断是否为待确认交易
       final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
       
       if (isPending) {
-        if (_navController.text.isEmpty && mounted) {  // ✅ 添加 mounted 检查
+        // ✅ 待确认交易：清空净值，等待T+1/T+2后自动更新
+        if (mounted) {
           setState(() {
             _navController.clear();
           });
@@ -261,54 +269,92 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         return;
       }
       
-      final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
-      if (trendData.isEmpty) return;
+      // ✅ 历史交易：从数据库获取净值
+      if (mounted) setState(() => _isFetchingNav = true);
       
-      NetWorthPoint? exactPoint;
-      NetWorthPoint? nextPoint;
-      NetWorthPoint? closestPoint;
-      int minDiff = 999999;
+      // 计算该交易对应的净值日期
+      final targetNavDate = await DataManager.calculateNavDateForTradeAsync(_tradeDate, _isAfter1500);
       
-      for (final point in trendData) {
-        final diff = point.date.difference(targetNavDate).inDays;
-        
-        if (diff == 0) {
-          exactPoint = point;
-          break;
-        }
-        
-        if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
-          nextPoint = point;
-        }
-        
-        final absDiff = diff.abs();
-        if (absDiff < minDiff) {
-          minDiff = absDiff;
-          closestPoint = point;
-        }
-      }
-      
+      // ✅ 三级降级策略：数据库查询 → API获取 → 持仓净值 → 留空
       NetWorthPoint? selectedPoint;
-      if (exactPoint != null) {
-        selectedPoint = exactPoint;
-      } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
-        selectedPoint = nextPoint;
-      } else if (closestPoint != null && minDiff <= 3) {
-        selectedPoint = closestPoint;
+      
+      // 第一级：尝试从API获取净值趋势数据
+      final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
+      if (trendData.isNotEmpty) {
+        NetWorthPoint? exactPoint;      // 精确匹配
+        NetWorthPoint? nextPoint;       // 之后的最近点
+        NetWorthPoint? closestPoint;    // 绝对值最近的点
+        int minDiff = 999999;
+        
+        for (final point in trendData) {
+          final diff = point.date.difference(targetNavDate).inDays;
+          
+          // 精确匹配
+          if (diff == 0) {
+            exactPoint = point;
+            break;
+          }
+          
+          // 之后的最近点（用于向前查找）
+          if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
+            nextPoint = point;
+          }
+          
+          // 绝对值最近的点
+          final absDiff = diff.abs();
+          if (absDiff < minDiff) {
+            minDiff = absDiff;
+            closestPoint = point;
+          }
+        }
+        
+        // 选择策略：精确 > 之后3天内 > 最近3天内
+        if (exactPoint != null) {
+          selectedPoint = exactPoint;
+        } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
+          selectedPoint = nextPoint;
+        } else if (closestPoint != null && minDiff <= 3) {
+          selectedPoint = closestPoint;
+        }
       }
       
+      // 第二级：如果API失败，尝试使用持仓中的当前净值
+      if (selectedPoint == null && widget.currentNav != null && widget.currentNav! > 0) {
+        if (mounted) {
+          setState(() {
+            _navController.text = widget.currentNav!.toStringAsFixed(4);
+          });
+          _calculateEstimated();
+        }
+        return;
+      }
+      
+      // 第三级：如果都没有，留空让用户手动输入
+      if (selectedPoint == null) {
+        if (mounted) {
+          setState(() {
+            _navController.clear();
+          });
+        }
+        return;
+      }
+      
+      // ✅ 填充净值并实时计算
       if (selectedPoint != null && mounted) {
         setState(() {
           _navController.text = selectedPoint!.nav.toStringAsFixed(4);
         });
         
-        if (!_isTodayTransaction) {
-          _calculateEstimated();
-        }
+        // ✅ 实时计算预估份额/金额
+        _calculateEstimated();
       }
     } catch (e) {
-      debugPrint('根据日期获取净值失败 (${widget.fundCode}): $e');  // ✅ 修复：使用 widget.fundCode
+      debugPrint('根据日期获取净值失败 (${widget.fundCode}): $e');
       // 静默失败，用户可以手动输入
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingNav = false);
+      }
     }
   }
 
@@ -378,16 +424,22 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       }
     }
 
+    // ✅ 待确认交易允许净值、份额、金额为空
+    final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
+    
     if (widget.type == TransactionType.buy) {
+      // 买入：必须有金额，份额可以为空（待确认时）
       if (shares == null || shares <= 0) {
-        if (_isTodayTransaction && amount != null && amount > 0) {
-          shares = 0; 
+        if (isPending && amount != null && amount > 0) {
+          // 待确认交易：份额可以为0，等待净值确认后计算
+          shares = 0;
         } else {
           context.showToast('无法计算份额，请输入净值或份额');
           return;
         }
       }
     } else {
+      // 卖出：必须有份额
       if (shares == null || shares <= 0) {
         context.showToast('卖出时必须输入份额');
         return;
@@ -395,8 +447,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     }
 
     if (amount == null || amount <= 0) {
-      if (widget.type == TransactionType.sell && _isTodayTransaction) {
-        amount = 0; 
+      if (widget.type == TransactionType.sell && isPending) {
+        // 待确认卖出交易：金额可以为0，等待净值确认后计算
+        amount = 0;
       } else {
         context.showToast('无法计算金额，请输入净值或金额');
         return;
@@ -408,7 +461,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       return;
     }
 
-    final isPending = DataManager.isTransactionPending(_tradeDate, _isAfter1500);
+    // ✅ isPending 已在上文定义，直接使用
     double? confirmedNav;
     
     if (isPending) {

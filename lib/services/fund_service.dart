@@ -14,6 +14,9 @@ import '../constants/app_constants.dart';
 class FundService {
   final DataManager? _dataManager;
 
+  // ✅ 高优先级修复：使用共享 HTTP client，提高连接复用效率
+  static final http.Client _sharedClient = http.Client();
+
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
   
@@ -171,7 +174,7 @@ class FundService {
       
       while (retryCount <= maxRetries) {
         try {
-          response = await http.get(
+          response = await _sharedClient.get(
             url,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -377,7 +380,7 @@ class FundService {
   
   Future<List<NetWorthPoint>> _fetchNetWorthFromAPI(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
-    final response = await http.get(url).timeout(const Duration(seconds: 15));
+    final response = await _sharedClient.get(url).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       _dataManager?.addLog('基金 $code HTTP错误: ${response.statusCode}', type: LogType.error);
       throw Exception('HTTP ${response.statusCode}');
@@ -420,7 +423,7 @@ class FundService {
   Future<void> _incrementalUpdateNav(String code, List<NetWorthPoint> cachedPoints) async {
     try {
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      final response = await _sharedClient.get(url).timeout(const Duration(seconds: 10));
       
       if (response.statusCode != 200) {
         _dataManager?.addLog('增量更新失败: HTTP ${response.statusCode}', type: LogType.error);
@@ -459,7 +462,7 @@ class FundService {
 
   Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {
     final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
-    final response = await http.get(url).timeout(const Duration(seconds: 15));
+    final response = await _sharedClient.get(url).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
     final jsString = utf8.decode(response.bodyBytes);
 
@@ -533,7 +536,7 @@ class FundService {
     
     while (retryCount <= maxRetries) {
       try {
-        response = await http.get(
+        response = await _sharedClient.get(
           url,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -632,7 +635,7 @@ class FundService {
       return code;
     }).join(',');
     final url = Uri.parse(AppConstants.apiGtimgStockQuote.replaceAll('{codes}', codesParam));
-    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    final response = await _sharedClient.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       _dataManager?.addLog('股票行情获取失败: HTTP ${response.statusCode}', type: LogType.error);
       return {};
@@ -685,7 +688,7 @@ class FundService {
             .replaceAll('{code}', code)
             .replaceAll('{timestamp}', DateTime.now().millisecondsSinceEpoch.toString()));
 
-        final response = await http.get(url).timeout(const Duration(seconds: 10));
+        final response = await _sharedClient.get(url).timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) {
           _dataManager?.addLog(
             '基金 $code 估值获取失败($sourceName): HTTP ${response.statusCode}',
@@ -799,7 +802,7 @@ class FundService {
       'lmt=10000',
     );
     
-    final response = await http.get(url).timeout(const Duration(seconds: 15));
+    final response = await _sharedClient.get(url).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}');
     }

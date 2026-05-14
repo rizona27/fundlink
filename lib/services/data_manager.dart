@@ -86,6 +86,9 @@ class DataManager extends ChangeNotifier {
   // 防止已销毁后仍执行操作
   bool _disposed = false;
   
+  // ✅ 高优先级修复：防止 autoConfirmPendingTransactions 并发执行
+  bool _isAutoConfirming = false;
+  
   // 使用智能缓存
   final SmartCache<String, ProfitResult> _profitCache = SmartCache(
     maxSize: 50,
@@ -920,7 +923,7 @@ class DataManager extends ChangeNotifier {
       }
     }
     
-    // 批量插入数据库
+    // 批量插入数据库（已使用事务）
     if (!kIsWeb) {
       await _repository!.batchInsertHoldings(holdings);
     }
@@ -929,6 +932,66 @@ class DataManager extends ChangeNotifier {
     _holdings = [..._holdings, ...holdings];
     
     await addLog('批量添加 ${holdings.length} 个持仓', type: LogType.success);
+    await saveData();
+    notifyListeners();
+  }
+  
+  /// ✅ 新增：批量添加交易记录（用于导入场景，带事务支持）
+  /// 与addTransaction不同，此方法批量处理，性能更高且保证原子性
+  Future<void> batchAddTransactions(List<TransactionRecord> transactions) async {
+    if (transactions.isEmpty) return;
+    
+    // ✅ 验证所有交易记录
+    for (final tx in transactions) {
+      if (tx.amount <= 0) {
+        await addLog('批量添加交易失败: 交易金额必须大于0', type: LogType.error);
+        throw Exception('无效的交易数据: ${tx.fundCode}');
+      }
+    }
+    
+    // ✅ 增强交易记录（设置状态、申请日期等）
+    final enhancedTransactions = <TransactionRecord>[];
+    for (final tx in transactions) {
+      final applicationDate = await getTradeApplicationDate(tx.tradeDate);
+      TransactionStatus initialStatus;
+      double? frozenShares;
+      
+      if (tx.isPending) {
+        initialStatus = TransactionStatus.submitted;
+        if (tx.type == TransactionType.sell) {
+          frozenShares = tx.shares;
+        }
+      } else {
+        initialStatus = TransactionStatus.confirmed;
+        frozenShares = null;
+      }
+      
+      enhancedTransactions.add(tx.copyWith(
+        status: initialStatus,
+        applicationDate: applicationDate,
+        frozenShares: frozenShares,
+      ));
+    }
+    
+    // ✅ 批量插入数据库（使用事务保证原子性）
+    if (!kIsWeb) {
+      await _repository!.batchInsertTransactions(enhancedTransactions);
+    }
+    
+    // 添加到内存
+    _transactions = [..._transactions, ...enhancedTransactions];
+    
+    // ✅ 重建所有相关持仓
+    final uniquePairs = <String>{};
+    for (final tx in enhancedTransactions) {
+      final key = '${tx.clientId}_${tx.fundCode}';
+      if (!uniquePairs.contains(key)) {
+        uniquePairs.add(key);
+        await _rebuildHolding(tx.clientId, tx.fundCode);
+      }
+    }
+    
+    await addLog('批量添加 ${enhancedTransactions.length} 笔交易', type: LogType.success);
     await saveData();
     notifyListeners();
   }
@@ -1901,69 +1964,83 @@ class DataManager extends ChangeNotifier {
   
   /// ✅ 新增：批量自动确认（带重试机制）
   Future<int> autoConfirmPendingTransactionsWithRetry(FundService fundService) async {
-    final pendingTransactions = getPendingTransactions();
-    if (pendingTransactions.isEmpty) return 0;
+    // ✅ 高优先级修复：防止并发执行
+    if (_isAutoConfirming) {
+      debugPrint('⚠️ 自动确认已在进行中，跳过');
+      return 0;
+    }
     
-    int confirmedCount = 0;
-    int failedCount = 0;
-    final now = DateTime.now();
-    
-    for (final tx in pendingTransactions) {
-      try {
-        // ✅ 优化：先尝试获取净值，如果净值已出就立即确认
-        final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
-        if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-          // 检查净值日期是否已经是交易对应的净值日
-          final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
-          final fundNavDate = fundInfo['navDate'] as DateTime?;
+    _isAutoConfirming = true;
+    try {
+      final pendingTransactions = getPendingTransactions();
+      if (pendingTransactions.isEmpty) return 0;
+      
+      int confirmedCount = 0;
+      int failedCount = 0;
+      final now = DateTime.now();
+      
+      for (final tx in pendingTransactions) {
+        try {
+          // ✅ 优化：先尝试获取净值，如果净值已出就立即确认
+          final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
+          if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+            // 检查净值日期是否已经是交易对应的净值日
+            final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
+            final fundNavDate = fundInfo['navDate'] as DateTime?;
+            
+            // 如果基金净值日期 >= 交易净值日期，说明净值已出，可以确认
+            if (fundNavDate != null && !fundNavDate.isBefore(navDate)) {
+              final success = await confirmPendingTransactionWithRetry(tx.id, fundService);
+              if (success) {
+                confirmedCount++;
+                continue;
+              }
+            }
+          }
           
-          // 如果基金净值日期 >= 交易净值日期，说明净值已出，可以确认
-          if (fundNavDate != null && !fundNavDate.isBefore(navDate)) {
+          // 计算申请日
+          final applicationDate = await getTradeApplicationDate(tx.tradeDate);
+          final appDay = DateTime(applicationDate.year, applicationDate.month, applicationDate.day);
+          
+          // 只有到达申请日后才开始尝试确认
+          if (now.isBefore(appDay)) {
+            continue;
+          }
+          
+          // 检查是否可以确认（T+1）
+          final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
+          
+          if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
             final success = await confirmPendingTransactionWithRetry(tx.id, fundService);
             if (success) {
               confirmedCount++;
-              continue;
+            } else {
+              // 检查是否已经是confirmFailed状态
+              final txIndex = _transactions.indexWhere((t) => t.id == tx.id);
+              if (txIndex != -1) {
+                final updatedTx = _transactions[txIndex];
+                if (updatedTx.status == TransactionStatus.confirmFailed) {
+                  failedCount++;
+                }
+              }
             }
           }
+        } catch (e) {
+          await addLog('自动确认交易失败 (${tx.fundCode}): $e', type: LogType.error);
         }
-        
-        // 计算申请日
-        final applicationDate = await getTradeApplicationDate(tx.tradeDate);
-        final appDay = DateTime(applicationDate.year, applicationDate.month, applicationDate.day);
-        
-        // 只有到达申请日后才开始尝试确认
-        if (now.isBefore(appDay)) {
-          continue;
-        }
-        
-        // 检查是否可以确认（T+1）
-        final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
-        
-        if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
-          final success = await confirmPendingTransactionWithRetry(tx.id, fundService);
-          if (success) {
-            confirmedCount++;
-          } else {
-            // 检查是否已经是confirmFailed状态
-            final updatedTx = _transactions.firstWhere((t) => t.id == tx.id);
-            if (updatedTx.status == TransactionStatus.confirmFailed) {
-              failedCount++;
-            }
-          }
-        }
-      } catch (e) {
-        await addLog('自动确认交易失败 (${tx.fundCode}): $e', type: LogType.error);
       }
+      
+      if (confirmedCount > 0) {
+        await addLog('✅ 自动确认 $confirmedCount 笔待确认交易', type: LogType.success);
+      }
+      if (failedCount > 0) {
+        await addLog('❌ $failedCount 笔交易确认失败（需人工处理）', type: LogType.error);
+      }
+      
+      return confirmedCount;
+    } finally {
+      _isAutoConfirming = false;
     }
-    
-    if (confirmedCount > 0) {
-      await addLog('✅ 自动确认 $confirmedCount 笔待确认交易', type: LogType.success);
-    }
-    if (failedCount > 0) {
-      await addLog('❌ $failedCount 笔交易确认失败（需人工处理）', type: LogType.error);
-    }
-    
-    return confirmedCount;
   }
   
   /// ✅ 新增：赎回时冻结份额

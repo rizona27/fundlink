@@ -181,12 +181,19 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
-    _scrollThrottleTimer?.cancel();
-    _debounceTimer?.cancel();
+    _cancelAllTimers();
     _scrollAnimationController.dispose();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
+  }
+
+  /// 统一清理所有 Timer，防止内存泄漏
+  void _cancelAllTimers() {
+    _scrollThrottleTimer?.cancel();
+    _scrollThrottleTimer = null;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
   }
 
   @override
@@ -506,6 +513,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     : ListView.builder(
                   controller: _scrollController,
                   key: ValueKey('list_${_searchText}'),
+                  cacheExtent: 500,  // ✅ 优化滚动性能
                   padding: EdgeInsets.only(
                     left: 12,
                     right: 12,
