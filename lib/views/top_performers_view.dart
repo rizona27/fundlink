@@ -11,6 +11,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../widgets/scroll_to_top_button.dart'; // ✅ 使用Overlay方式
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
@@ -91,6 +92,15 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _updateCachedItems();
       }
     };
+    // ✅ 显示返回顶部按钮
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScrollToTopButton.show(
+        context: context,
+        scrollController: _scrollController,
+        showThreshold: 100.0,
+        rightMargin: 16.0,
+      );
+    });
   }
 
   Future<void> _loadState() async {
@@ -177,6 +187,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel(); 
     _scrollController.dispose();
+    // ✅ 隐藏返回顶部按钮
+    ScrollToTopButton.hide(scrollController: _scrollController);
     _minAmountController.dispose();
     _maxAmountController.dispose();
     _minProfitController.dispose();

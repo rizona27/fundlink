@@ -13,6 +13,7 @@ import '../widgets/gradient_card.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 import '../widgets/fund_performance_dialog.dart';
+import '../widgets/scroll_to_top_button.dart';
 import 'add_holding_view.dart';
 import 'fund_detail_view.dart';
 import '../constants/app_constants.dart';
@@ -117,6 +118,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _loadValuationRefreshInterval();
     _startMarketStatusTimer();
     
+    // ✅ 显示返回顶部按钮
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScrollToTopButton.show(
+        context: context,
+        scrollController: _scrollController,
+        showThreshold: 100.0,
+        rightMargin: 16.0,
+      );
+    });
+    
     Future.microtask(() {
       if (mounted) {
         setState(() {});
@@ -201,7 +212,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     WidgetsBinding.instance.removeObserver(this);
     _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
-    _scrollController.dispose(); 
+    _scrollController.dispose();
+    // ✅ 隐藏返回顶部按钮
+    ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 
@@ -834,11 +847,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
     final enableButtons = hasData;
 
-    return Container(
-      color: backgroundColor,
-      child: SafeArea(
-        child: Column(
-          children: [
+    return Stack(
+      children: [
+        Container(
+          color: backgroundColor,
+          child: SafeArea(
+            child: Column(
+              children: [
             AdaptiveTopBar(
               scrollOffset: _scrollOffset,
               showBack: false,
@@ -1117,6 +1132,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           ],
         ),
       ),
+        ),
+      ],
     );
   }
 }

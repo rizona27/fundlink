@@ -101,7 +101,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     }
     
     if (mounted) setState(() => _isFetchingNav = true);  // ✅ 添加 mounted 检查
-    try {
+    try { 
       final fundService = FundService(_dataManager);
       final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
       if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {

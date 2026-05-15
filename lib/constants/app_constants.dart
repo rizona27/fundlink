@@ -1,8 +1,6 @@
-/// 应用全局常量定义
 class AppConstants {
   AppConstants._();
 
-  // --- SharedPreferences Keys ---
   static const String keyHoldings = 'fund_holdings';
   static const String keyTransactions = 'fund_transactions';
   static const String keyLogs = 'logs';

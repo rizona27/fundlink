@@ -13,6 +13,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
+import '../widgets/scroll_to_top_button.dart'; // ✅ 使用Overlay方式
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import '../constants/app_constants.dart';
@@ -70,6 +71,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _loadState(); 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
+      // ✅ 显示返回顶部按钮
+      ScrollToTopButton.show(
+        context: context,
+        scrollController: _scrollController,
+        showThreshold: 100.0,
+        rightMargin: 16.0,
+      );
     });
   }
 
@@ -185,6 +193,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _scrollAnimationController.dispose();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
+    // ✅ 隐藏返回顶部按钮
+    ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 

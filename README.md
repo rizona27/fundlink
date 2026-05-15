@@ -147,30 +147,31 @@ lib/
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序
 │   └── version_view.dart                  # 版本信息页，显示应用版本和功能说明，始终显示 Update 按钮
 │
-└── widgets/
-    ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
-    ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入
-    ├── batch_rename_dialog.dart           # 批量编辑客户信息弹窗组件，支持姓名和客户号修改，同名客户冲突检测
-    ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值
-    ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，支持基金代码验证
-    ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
-    ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度
-    ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率
-    ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，支持多指标对比
-    ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现
-    ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
-    ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
-    ├── paginated_list_view.dart           # 分页列表组件，支持懒加载和无限滚动
-    ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
-    ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
-    ├── stock_candle_chart.dart            # 股票 K 线蜡烛图组件，支持日 K/周 K/月 K 切换
-    ├── stock_chart_widget.dart            # 股票图表容器组件，封装 K 线图和成交量图
-    ├── stock_detail_dialog.dart           # 股票详情弹窗组件，显示实时行情、价格呼吸动画、K 线图
-    ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关
-    ├── toast.dart                         # Toast 提示组件，全局消息提示
-    ├── top_holdings_widget.dart           # 前十大重仓股展示组件
-    ├── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
-    └── update_dialog.dart                 # 版本更新提示对话框，显示新版本信息和下载选项
+├── widgets/
+│   ├── adaptive_top_bar.dart              # 顶部工具栏组件，包含刷新、搜索、筛选等功能
+│   ├── add_transaction_dialog.dart        # 加仓/减仓对话框，支持交易金额/份额/净值/费率输入
+│   ├── batch_rename_dialog.dart           # 批量编辑客户信息弹窗组件，支持姓名和客户号修改，同名客户冲突检测
+│   ├── countdown_refresh_button.dart      # 倒计时刷新按钮组件，自动更新净值
+│   ├── custom_fund_config_dialog.dart     # 自定义基金配置对话框，支持基金代码验证
+│   ├── empty_state.dart                   # 空状态组件，无数据时显示的占位图标和提示文字
+│   ├── floating_tab_bar.dart              # 底部导航栏组件，滚动时变化透明度
+│   ├── fund_card.dart                     # 基金卡片组件，展示基金名称/代码/净值/收益/收益率
+│   ├── fund_performance_chart.dart        # 基金业绩走势折线图组件，支持多指标对比
+│   ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现
+│   ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
+│   ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
+│   ├── paginated_list_view.dart           # 分页列表组件，支持懒加载和无限滚动
+│   ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
+│   ├── scroll_to_top_button.dart          # 返回顶部按钮组件，使用 Overlay 方式实现，支持淡入淡出动画
+│   ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
+│   ├── stock_candle_chart.dart            # 股票 K 线蜡烛图组件，支持日 K/周 K/月 K 切换
+│   ├── stock_chart_widget.dart            # 股票图表容器组件，封装 K 线图和成交量图
+│   ├── stock_detail_dialog.dart           # 股票详情弹窗组件，显示实时行情、价格呼吸动画、K 线图
+│   ├── theme_switch.dart                  # 主题切换组件，药丸状滑动开关
+│   ├── toast.dart                         # Toast 提示组件，全局消息提示
+│   ├── top_holdings_widget.dart           # 前十大重仓股展示组件
+│   ├── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
+│   └── update_dialog.dart                 # 版本更新提示对话框，显示新版本信息和下载选项
 ```
 
 ## ⚖️ 开源协议
