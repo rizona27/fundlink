@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
@@ -14,13 +12,11 @@ import '../constants/app_constants.dart';
 class FundService {
   final DataManager? _dataManager;
 
-  // ✅ 高优先级修复：使用共享 HTTP client，提高连接复用效率
   static final http.Client _sharedClient = http.Client();
 
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
   
-  // 净值缓存 - 使用内存缓存（替代 SharedPreferences）
   final Map<String, List<NetWorthPoint>> _navCache = {};
 
   FundService([this._dataManager]);
@@ -41,11 +37,9 @@ class FundService {
 
   Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false}) async {
     if (forceRefresh) {
-      debugPrint('[FundService] 🔄 基金 $code - 强制刷新，清除缓存');
       clearCache(code);
     }
 
-    // ✅ 优化：检查持久化缓存（数据库）
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
@@ -54,13 +48,10 @@ class FundService {
         final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null || 
                           cachedInfo.navReturn6m != null || cachedInfo.navReturn1y != null;
         
-        // ✅ 新增：检查收益率是否需要更新
         final returnCacheAge = DateTime.now().difference(cachedInfo.cacheTime).inDays;
         final returnsNeedRefresh = hasReturns && returnCacheAge >= AppConstants.fundReturnCacheValidDays;
         
         if (returnsNeedRefresh) {
-          // 收益率已过期，后台静默更新
-          debugPrint('[FundService] 🔄 基金 $code 收益率数据过期，后台更新...');
           _fetchAndUpdateReturnsInBackground(code, cachedInfo);
         }
         
@@ -83,7 +74,6 @@ class FundService {
       }
     }
 
-    // 检查内存缓存
     if (!forceRefresh && _cache.containsKey(code)) {
       final cached = _cache[code]!;
       _dataManager?.addLog(
@@ -97,7 +87,6 @@ class FundService {
       return await _activeRequests[code]!;
     }
 
-    // 从 API 获取
     _dataManager?.addLog('🌐 [API请求] 基金 $code', type: LogType.network);
     final future = _fetchFromPingzhongdata(code);
     _activeRequests[code] = future;
@@ -136,10 +125,8 @@ class FundService {
     }
   }
   
-  /// ✅ 新增：后台更新收益率数据（不阻塞UI）
   void _fetchAndUpdateReturnsInBackground(String code, FundInfoCache cachedInfo) async {
     try {
-      debugPrint('[FundService] 🔄 开始后台更新基金 $code 的收益率数据...');
       final result = await _fetchFromPingzhongdata(code);
       
       if (result['isValid'] == true && _dataManager != null) {
@@ -152,14 +139,11 @@ class FundService {
           navReturn3m: result['navReturn3m'] as double?,
           navReturn6m: result['navReturn6m'] as double?,
           navReturn1y: result['navReturn1y'] as double?,
-          cacheTime: DateTime.now(), // ✅ 重置缓存时间
+          cacheTime: DateTime.now(),
         );
         _dataManager!.saveFundInfoCache(updatedInfo);
-        debugPrint('[FundService] ✅ 基金 $code 收益率数据已更新');
       }
     } catch (e) {
-      debugPrint('[FundService] ❌ 后台更新基金 $code 收益率失败: $e');
-      // 静默失败，不影响用户使用旧数据
     }
   }
 
@@ -678,7 +662,6 @@ class FundService {
       return null;
     }
 
-    // Try multiple sources for redundancy
     for (int i = 0; i < AppConstants.apiValuationSources.length; i++) {
       final sourceUrl = AppConstants.apiValuationSources[i];
       final sourceName = i == 0 ? '主源' : '备用源${i}';
@@ -853,26 +836,19 @@ class FundService {
   }
   
   Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
-    // 使用内存缓存
     return _navCache[code];
   }
   
   Future<void> saveNavToCache(String code, List<NetWorthPoint> points) async {
-    // 保存到内存缓存
     _navCache[code] = points;
   }
   
   Future<void> clearNavCache(String code) async {
-    // 清除内存缓存
     _navCache.remove(code);
   }
   
-  /// 并行获取基金的完整数据（净值趋势、基准数据、重仓股）
-  /// 
-  /// 这个方法会同时发起多个 API 请求，提高加载速度
   Future<FundCompleteData> fetchFundCompleteData(String code) async {
     try {
-      // 并行发起三个请求
       final results = await Future.wait([
         fetchNetWorthTrend(code).catchError((e) {
           _dataManager?.addLog('获取净值趋势失败: $e', type: LogType.error);
@@ -904,7 +880,6 @@ class FundService {
   }
 }
 
-/// 基金完整数据
 class FundCompleteData {
   final List<NetWorthPoint> netWorthPoints;
   final Map<String, List<NetWorthPoint>> benchmarkData;

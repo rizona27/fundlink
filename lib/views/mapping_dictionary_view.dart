@@ -24,11 +24,9 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
   List<ClientMapping> _filteredMappings = [];
   bool _isLoading = true;
   
-  // 排序状态
   SortColumn? _sortColumn;
   bool _sortAscending = true;
   
-  // 搜索状态
   String _searchText = '';
   
   double _scrollOffset = 0;
@@ -62,9 +60,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     }
   }
 
-  /// 应用搜索过滤和排序
   void _applyFilterAndSort() {
-    // 先过滤
     var filtered = _mappings;
     if (_searchText.isNotEmpty) {
       final searchLower = _searchText.toLowerCase();
@@ -74,7 +70,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
       }).toList();
     }
     
-    // 再排序
     if (_sortColumn != null) {
       if (_sortColumn == SortColumn.clientId) {
         filtered.sort((a, b) {
@@ -109,15 +104,15 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
+        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
         setState(() {
-          _scrollOffset = offset;
+          _scrollOffset = normalizedOffset;
         });
       }
       _scrollThrottleTimer = null;
     });
   }
 
-  /// 排序方法
   void _sortByClientId() {
     setState(() {
       if (_sortColumn == SortColumn.clientId) {
@@ -142,13 +137,11 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     });
   }
 
-  /// 显示新增/编辑弹窗
   Future<void> _showEditDialog({ClientMapping? mapping}) async {
     final isEdit = mapping != null;
     final clientIdController = TextEditingController(text: isEdit ? mapping.clientId : '');
     final clientNameController = TextEditingController(text: isEdit ? mapping.clientName : '');
     
-    // 创建焦点节点
     final clientIdFocusNode = FocusNode();
     final clientNameFocusNode = FocusNode();
     
@@ -164,7 +157,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
             child: Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,  // ✅ 动态适配键盘高度
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                 ),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -176,7 +169,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                  // 标题栏
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -240,13 +232,11 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                     ),
                   ),
                   
-                  // 内容区
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 客户号输入
                         KeyboardListener(
                           focusNode: clientIdFocusNode,
                           onKeyEvent: (KeyEvent event) {
@@ -288,7 +278,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                         ),
                         const SizedBox(height: 12),
                         
-                        // 客户名输入
                         KeyboardListener(
                           focusNode: clientNameFocusNode,
                           onKeyEvent: (KeyEvent event) {
@@ -338,13 +327,12 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
       },
     );
     
-    // 释放焦点节点
     clientIdFocusNode.dispose();
     clientNameFocusNode.dispose();
     
     if (result != null && mounted) {
       try {
-        if (isEdit && mapping != null) {
+        if (isEdit) {
           await _mappingService.updateMapping(
             mapping.id,
             result['clientId']!,
@@ -365,7 +353,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     }
   }
 
-  /// 删除确认
   Future<void> _confirmDelete(ClientMapping mapping) async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
@@ -432,7 +419,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                   showRefresh: false,
                   showExpandCollapse: false,
                   showSearch: true,
-                  // ✅ 移除 isSearchVisible，让搜索框默认隐藏，点击后显示
                   searchText: _searchText,
                   searchPlaceholder: '搜索客户号或客户名',
                   onSearchChanged: (value) {
@@ -444,7 +430,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                   showReset: false,
                   showFilter: false,
                   showSort: false,
-                  // ✅ 传递映射词典的数据状态
                   hasData: _filteredMappings.isNotEmpty,
                   backgroundColor: Colors.transparent,
                   iconColor: CupertinoTheme.of(context).primaryColor,
@@ -453,7 +438,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 
-                // 工具栏（滚动时隐藏）
                 AnimatedOpacity(
                   opacity: _scrollOffset < 50 ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 200),
@@ -487,7 +471,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                       : const SizedBox.shrink(),
                 ),
                 
-                // 表格区域
                 Expanded(
                   child: Stack(
                     children: [
@@ -535,7 +518,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                                     _buildHeaderRow(isDarkMode),
                                     Expanded(
                                       child: ListView.builder(
-                                        padding: const EdgeInsets.only(bottom: 80),  // ✅ 避免被悬浮按钮遮挡
+                                        padding: const EdgeInsets.only(bottom: 80),
                                         itemCount: _filteredMappings.length,
                                         itemBuilder: (context, index) {
                                           return _buildMappingRow(
@@ -549,7 +532,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                                   ],
                                 ),
                                       
-                      // 悬浮新增按钮（底部居中）
                       Positioned(
                         bottom: 20,
                         left: 0,
@@ -558,7 +540,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                           child: GestureDetector(
                             onTap: () => _showEditDialog(),
                             onLongPress: () {
-                              // ✅ 长按跳转到导入页面
                               Navigator.push(
                                 context,
                                 CupertinoPageRoute(
@@ -607,7 +588,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
       color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
       child: Row(
         children: [
-          // 序号
           Expanded(
             flex: 1,
             child: Container(
@@ -620,7 +600,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 客户号（可排序）
           Expanded(
             flex: 2,
             child: GestureDetector(
@@ -649,7 +628,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 客户名（可排序）
           Expanded(
             flex: 2,
             child: GestureDetector(
@@ -678,7 +656,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 操作
           Expanded(
             flex: 2,
             child: Container(
@@ -704,7 +681,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
       color: backgroundColor,
       child: Row(
         children: [
-          // 序号
           Expanded(
             flex: 1,
             child: Container(
@@ -720,7 +696,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 客户号
           Expanded(
             flex: 2,
             child: Container(
@@ -739,7 +714,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 客户名
           Expanded(
             flex: 2,
             child: Container(
@@ -757,13 +731,11 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           ),
           _buildDivider(isDarkMode),
           
-          // 操作按钮
           Expanded(
             flex: 2,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 编辑按钮
                 CupertinoButton(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   onPressed: () => _showEditDialog(mapping: mapping),
@@ -775,7 +747,6 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                 ),
                 const SizedBox(width: 8),
                 
-                // 删除按钮
                 CupertinoButton(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   onPressed: () => _confirmDelete(mapping),

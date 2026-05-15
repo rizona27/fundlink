@@ -1,21 +1,7 @@
-/// 用户友好的错误消息映射工具
-/// 
-/// 将技术性错误消息转换为用户易于理解的提示。
-/// 
-/// 使用示例：
-/// ```dart
-/// try {
-///   await fetchData();
-/// } catch (e) {
-///   showToast(getUserFriendlyErrorMessage(e));
-/// }
-/// ```
 class ErrorMessageMapper {
-  /// 获取用户友好的错误消息
   static String getUserFriendlyErrorMessage(Object error) {
     final errorStr = error.toString().toLowerCase();
     
-    // 网络相关错误
     if (errorStr.contains('socketexception') || 
         errorStr.contains('connection refused') ||
         errorStr.contains('network is unreachable')) {
@@ -32,7 +18,6 @@ class ErrorMessageMapper {
       return '无法连接到服务器，请检查网络';
     }
     
-    // HTTP 错误
     if (errorStr.contains('404') || 
         errorStr.contains('not found')) {
       return '请求的资源不存在';
@@ -55,7 +40,6 @@ class ErrorMessageMapper {
       return '服务暂时不可用，请稍后重试';
     }
     
-    // 数据相关错误
     if (errorStr.contains('null') && 
         errorStr.contains('check')) {
       return '数据格式错误，请检查输入';
@@ -71,7 +55,6 @@ class ErrorMessageMapper {
       return '无效的数据，请检查后重试';
     }
     
-    // 文件相关错误
     if (errorStr.contains('file not found') || 
         errorStr.contains('no such file')) {
       return '文件不存在，请检查文件路径';
@@ -87,19 +70,16 @@ class ErrorMessageMapper {
       return '存储空间不足，请清理后重试';
     }
     
-    // 数据库相关错误
     if (errorStr.contains('database') || 
         errorStr.contains('sqlite')) {
       return '数据库操作失败，请重启应用';
     }
     
-    // JSON 解析错误
     if (errorStr.contains('json') || 
         errorStr.contains('decode')) {
       return '数据格式错误，请稍后重试';
     }
     
-    // 基金相关特定错误
     if (errorStr.contains('fund') && 
         errorStr.contains('not found')) {
       return '未找到该基金信息';
@@ -110,11 +90,9 @@ class ErrorMessageMapper {
       return '净值数据暂未公布，请稍后再试';
     }
     
-    // 默认错误消息
     return '操作失败，请稍后重试';
   }
   
-  /// 根据错误类型获取更详细的建议
   static String getErrorSuggestion(Object error) {
     final errorStr = error.toString().toLowerCase();
     
@@ -142,7 +120,6 @@ class ErrorMessageMapper {
     return '';
   }
   
-  /// 格式化完整的错误提示（包含建议）
   static String formatCompleteErrorMessage(Object error) {
     final message = getUserFriendlyErrorMessage(error);
     final suggestion = getErrorSuggestion(error);

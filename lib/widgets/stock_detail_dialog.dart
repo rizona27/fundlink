@@ -33,7 +33,6 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   
   final GlobalKey<StockCandleChartState> _candleChartKey = GlobalKey();
   
-  // ✅ 关键修复：提前标记K线图是否已初始化
   bool _candleChartInitialized = false;
 
   @override
@@ -48,7 +47,6 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
       duration: const Duration(milliseconds: 800),
     );
     
-    // ✅ 关键修复：延迟一帧初始化K线图，避免与对话框动画冲突
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {
@@ -96,7 +94,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
 
   Future<void> _loadStockData({bool refreshOnly = false}) async {
     if (!refreshOnly && mounted) {
-      setState(() => _loading = true);  // ✅ 添加 mounted 检查
+      setState(() => _loading = true);
     }
     
     try {
@@ -330,7 +328,6 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                                 children: [
                                   _buildPriceCard(isDark, textColor, secondaryTextColor),
                                   const SizedBox(height: 10),
-                                  // ✅ 关键修复：只有当K线图初始化后才显示，避免加载动画
                                   if (_candleChartInitialized)
                                     Container(
                                       padding: const EdgeInsets.all(16),

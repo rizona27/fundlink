@@ -61,7 +61,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
   }
 
   Future<void> _loadData() async {
-    if (mounted) setState(() => _loading = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _loading = true);
     try {
       final rawTrend = await _fundService.fetchNetWorthTrend(widget.fundCode);
       final pointsAsc = List<NetWorthPoint>.from(rawTrend)
@@ -71,9 +71,9 @@ class _HistoryDialogState extends State<HistoryDialog> {
       _allPoints = pointsDesc;
       _hasMore = pointsDesc.length > _pageSize;
       _displayList = pointsDesc.take(_pageSize).toList();
-      if (mounted) setState(() => _loading = false);  // ✅ 添加 mounted 检查
+      if (mounted) setState(() => _loading = false);
     } catch (e) {
-      if (mounted) {  // ✅ 添加 mounted 检查
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
@@ -91,7 +91,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
-    if (mounted) setState(() => _loadingMore = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _loadingMore = true);
     await Future.delayed(const Duration(milliseconds: 300));
     final start = _page * _pageSize;
     final end = start + _pageSize;
@@ -105,7 +105,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
           context.showToast('已加载到 ${_formatDate(earliestDate)} 的数据');
         }
       }
-      if (mounted) {  // ✅ 添加 mounted 检查
+      if (mounted) {
         setState(() {
           _displayList.addAll(newItems);
           _page++;
@@ -113,7 +113,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
         });
       }
     }
-    if (mounted) setState(() => _loadingMore = false);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   Widget _buildErrorView(bool isDark) {

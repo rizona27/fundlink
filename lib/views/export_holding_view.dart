@@ -67,7 +67,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
 
   List<ExportHistoryItem> _exportHistory = [];
   
-  // 筛选器焦点节点
   late FocusNode _fundCodeFocusNode;
   late FocusNode _minAmountFocusNode;
   late FocusNode _maxAmountFocusNode;
@@ -78,7 +77,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   void initState() {
     super.initState();
     
-    // 初始化焦点节点
     _fundCodeFocusNode = FocusNode();
     _minAmountFocusNode = FocusNode();
     _maxAmountFocusNode = FocusNode();
@@ -94,7 +92,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   
   @override
   void dispose() {
-    // 释放焦点节点
     _fundCodeFocusNode.dispose();
     _minAmountFocusNode.dispose();
     _maxAmountFocusNode.dispose();
@@ -271,7 +268,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       return;
     }
 
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _isExporting = true;
         _exportProgress = 0.0;
@@ -307,7 +304,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       context.showToast('导出失败: $e');
       _dataManager.addLog('导出失败: $e', type: LogType.error);
     } finally {
-      if (mounted) setState(() => _isExporting = false);  // ✅ 添加 mounted 检查
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -821,7 +818,6 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   Widget _buildFilterTextField(String label, String key, {bool isNumber = false, bool allowNegative = false}) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     
-    // 根据 key 获取对应的焦点节点
     FocusNode? focusNode;
     TextInputAction textInputAction = TextInputAction.next;
     
@@ -834,14 +830,14 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
         break;
       case 'maxAmount':
         focusNode = _maxAmountFocusNode;
-        textInputAction = TextInputAction.done; // 最后一个金额输入框
+        textInputAction = TextInputAction.done;
         break;
       case 'profitMin':
         focusNode = _profitMinFocusNode;
         break;
       case 'profitMax':
         focusNode = _profitMaxFocusNode;
-        textInputAction = TextInputAction.done; // 最后一个收益率输入框
+        textInputAction = TextInputAction.done;
         break;
     }
     

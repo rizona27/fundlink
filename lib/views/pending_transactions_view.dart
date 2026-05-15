@@ -28,7 +28,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
     _dataManager = DataManagerProvider.of(context);
     _fundService = FundService(_dataManager);
     
-    // ✅ 添加数据监听器，当数据变化时自动刷新列表
     _dataListener = () {
       if (mounted) {
         _loadPendingTransactions();
@@ -41,13 +40,12 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   
   @override
   void dispose() {
-    // ✅ 移除监听器，防止内存泄漏
     _dataManager.removeListener(_dataListener);
     super.dispose();
   }
 
   void _loadPendingTransactions() {
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _pendingTransactions = _dataManager.getPendingTransactions();
       });
@@ -55,16 +53,15 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   }
 
   Future<void> _refreshAndConfirm() async {
-    // ✅ 显示开始提示
     if (mounted) {
       setState(() => _isLoading = true);
     }
 
     try {
       int confirmedCount = 0;
-      int networkErrorCount = 0;  // 网络错误计数
-      int holdingErrorCount = 0;  // 持仓错误计数
-      int navNotAvailableCount = 0;  // 净值未公布计数
+      int networkErrorCount = 0;
+      int holdingErrorCount = 0;
+      int navNotAvailableCount = 0;
       final pendingTxs = _dataManager.getPendingTransactions();
       
       if (pendingTxs.isEmpty && mounted) {
@@ -75,7 +72,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
       
       for (final tx in pendingTxs) {
         try {
-          // ✅ 第1步: 查询数据库中该基金的最新净值
           final holding = _dataManager.holdings.firstWhere(
             (h) => h.fundCode == tx.fundCode,
             orElse: () {
@@ -87,7 +83,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           final dbNav = holding.currentNav;
           final dbNavDate = holding.navDate;
           
-          // ✅ 第2步: 计算交易对应的净值日期
           final expectedNavDate = await DataManager.calculateNavDateForTradeAsync(
             tx.tradeDate, 
             tx.isAfter1500,
@@ -96,19 +91,16 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           bool shouldFetchFromApi = true;
           double? navToUse;
           
-          // ✅ 第3步: 如果数据库中有净值且日期匹配,直接使用
           if (dbNav != null && dbNav > 0 && dbNavDate != null) {
             final dbNavDay = DateTime(dbNavDate.year, dbNavDate.month, dbNavDate.day);
             final expectedNavDay = DateTime(expectedNavDate.year, expectedNavDate.month, expectedNavDate.day);
             
             if (!dbNavDay.isBefore(expectedNavDay)) {
-              // 数据库中的净值日期 >= 期望的净值日期,可以直接使用
               navToUse = dbNav;
               shouldFetchFromApi = false;
             }
           }
           
-          // ✅ 第4步: 如果数据库中没有合适的净值,调用 API 获取
           if (shouldFetchFromApi) {
             try {
               final fundInfo = await _fundService.fetchFundInfo(tx.fundCode, forceRefresh: true);
@@ -130,23 +122,20 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                 navNotAvailableCount++;
               }
             } catch (e) {
-              // API 请求失败，判断是网络问题
               networkErrorCount++;
               await _dataManager.addLog(
                 '获取${tx.fundName}净值失败: $e',
                 type: LogType.error,
               );
-              rethrow;  // 重新抛出，让外层 catch 处理
+              rethrow;
             }
           }
           
-          // ✅ 第5步: 如果获取到净值,立即确认交易
           if (navToUse != null && navToUse > 0) {
             await _dataManager.confirmPendingTransaction(tx.id, navToUse!);
             confirmedCount++;
           }
         } catch (e) {
-          // 已经在上层统计了错误类型，这里只需要记录日志
           await _dataManager.addLog(
             '手动确认单笔交易失败 (${tx.fundCode}): $e',
             type: LogType.error,
@@ -154,11 +143,9 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
         }
       }
       
-      // ✅ 刷新列表
       if (mounted) {
         _loadPendingTransactions();
         
-        // ✅ 根据结果显示不同的提示（只显示一次）
         if (confirmedCount > 0) {
           if (networkErrorCount > 0 || holdingErrorCount > 0) {
             context.showToast('确认 $confirmedCount 笔，部分失败');
@@ -166,7 +153,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             context.showToast('成功确认 $confirmedCount 笔交易');
           }
         } else {
-          // 全部失败，给出具体原因
           if (holdingErrorCount > 0) {
             context.showToast('缺少基金持仓信息，请先添加持仓');
           } else if (networkErrorCount > 0) {
@@ -200,18 +186,17 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   Future<void> _showManualConfirmDialog(TransactionRecord tx) async {
     final TextEditingController navController = TextEditingController();
     
-    // 使用 MediaQuery 获取键盘高度，避免遮挡
     final mediaQuery = MediaQuery.of(context);
     
     await showCupertinoDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) => GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(), // 点击背景关闭键盘
+        onTap: () => FocusScope.of(context).unfocus(),
         child: Center(
           child: Container(
             margin: EdgeInsets.only(
-              bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 0, // 键盘弹出时上移
+              bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 0,
             ),
             constraints: const BoxConstraints(maxWidth: 400),
             child: CupertinoPopupSurface(
@@ -219,7 +204,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 标题栏
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
@@ -257,7 +241,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                       ],
                     ),
                   ),
-                  // 内容区域
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -323,7 +306,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             onChanged: (value) {
-                              // 限制只能输入数字和小数点，最多4位小数
                               if (value.isNotEmpty && !RegExp(r'^\d*\.?\d{0,4}$').hasMatch(value)) {
                                 navController.text = value.substring(0, value.length - 1);
                                 navController.selection = TextSelection.fromPosition(
@@ -332,7 +314,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                               }
                             },
                             onSubmitted: (value) async {
-                              // 按回车键确认
                               await _confirmManualNav(tx, navController.text);
                             },
                           ),
@@ -356,7 +337,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // 按钮区域
                         Row(
                           children: [
                             Expanded(
@@ -423,7 +403,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
       return;
     }
     
-    // 验证小数位数
     if (trimmedText.contains('.') && trimmedText.split('.')[1].length > 4) {
       context.showToast('净值最多支持4位小数');
       return;
@@ -431,13 +410,12 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
     
     Navigator.pop(context);
     
-    // 执行手动确认
     try {
       await _dataManager.manuallyConfirmTransaction(
         tx.id,
         nav,
-        null, // 份额自动计算
-        null, // 金额使用原值
+        null,
+        null,
       );
       
       if (mounted) {
@@ -470,8 +448,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               showBack: true,
               onBack: () => Navigator.of(context).pop(),
               showRefresh: true,
-              onRefresh: _refreshAndConfirm, // ✅ 始终可用,不受 loading 状态限制
-              hasData: true, // ✅ 强制刷新按钮始终可用
+              onRefresh: _refreshAndConfirm,
+              hasData: true,
               showExpandCollapse: false,
               showSearch: false,
               showReset: false,
@@ -594,7 +572,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
         children: [
           Row(
             children: [
-              // ✅ 客户信息放在最前面，使用相对加重的颜色
               if (tx.clientId.isNotEmpty)
                 Text(
                   '${tx.clientName}(${tx.clientId})',
@@ -668,7 +645,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
           
           const SizedBox(height: 6),
           
-          // ✅ 基金名称和代码在同一行，代码颜色更浅、字体更细
           RichText(
             text: TextSpan(
               children: [
@@ -790,7 +766,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             ),
           ),
           
-          // 显示重试次数和手动确认按钮
           if (tx.retryCount > 0 || tx.status == TransactionStatus.confirmFailed)
             const SizedBox(height: 8),
           if (tx.retryCount > 0 || tx.status == TransactionStatus.confirmFailed)

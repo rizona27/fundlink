@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'utils/animation_config.dart';
-import 'package:flutter/material.dart' show Colors, AnimatedTheme;
+import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, kReleaseMode;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'services/data_manager.dart';
@@ -14,9 +14,7 @@ import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
-import 'widgets/update_dialog.dart';
 import 'views/splash_view.dart';
-import 'constants/app_constants.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,23 +24,18 @@ void main() {
     statusBarIconBrightness: Brightness.light,
   ));
 
-  // 启动内存监控（仅调试模式）
   if (!kReleaseMode) {
     final monitor = MemoryMonitor();
     monitor.warningThresholdMB = 200;
     monitor.criticalThresholdMB = 400;
     
     monitor.onWarning = (snapshot) {
-      debugPrint('⚡ 内存警告: ${snapshot.memoryUsageMB.toStringAsFixed(2)} MB');
     };
     
     monitor.onCritical = (snapshot) {
-      debugPrint('⚠️ 严重警告: ${snapshot.memoryUsageMB.toStringAsFixed(2)} MB');
-      // 可以触发垃圾回收或清理缓存
     };
     
     monitor.startMonitoring(interval: const Duration(seconds: 10));
-    debugPrint('内存监控已启动');
   }
 
   _requestPermissionsOnStart();
@@ -65,14 +58,10 @@ Future<void> _requestPermissionsOnStart() async {
     }
 
     if (status.isGranted) {
-      debugPrint('Storage permission granted');
     } else if (status.isPermanentlyDenied) {
-      debugPrint('Storage permission permanently denied');
     } else {
-      debugPrint('Storage permission denied');
     }
   } catch (e) {
-    debugPrint('Permission request error: $e');
   }
 }
 
@@ -90,32 +79,22 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[Main] 🚀 MyApp initState开始');
-    debugPrint('[Main] 🔧 创建DataManager实例...');
     _dataManager = DataManager();
-    debugPrint('[Main] ✅ DataManager实例创建完成');
     
     _targetBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     
     _dataManager.addListener(_onThemeChanged);
-    debugPrint('[Main] 📋 DataManager监听器已添加');
     
-    // 等待网络权限授权后再检查版本（延迟执行，不阻塞启动）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _waitForNetworkPermissionAndCheck();
     });
   }
   
-  /// 等待网络就绪后检查版本更新
   Future<void> _waitForNetworkPermissionAndCheck() async {
-    // 网络访问不需要特殊权限，直接等待1秒确保网络初始化完成（优化启动速度）
-    debugPrint('等待网络初始化...');
     await Future.delayed(const Duration(seconds: 1));
     
-    debugPrint('开始检查版本...');
     await _checkForUpdatesSilently();
     
-    // 监听DataManager变化，当版本信息更新时立即通知UI刷新
     _dataManager.addListener(() {
       if (mounted) {
         setState(() {});
@@ -123,37 +102,27 @@ class _MyAppState extends State<MyApp> {
     });
   }
   
-  /// 静默检查版本更新（带多阶段重试机制）
   Future<void> _checkForUpdatesSilently() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
       
-      debugPrint('当前版本: $currentVersion');
-      
-      // 首次尝试 + 3次快速重试（间隔5秒）
       bool success = await _tryCheckVersion(currentVersion, '首次尝试');
       
       if (!success) {
-        // 3次快速重试，间隔3秒（优化启动速度）
         for (int i = 1; i <= 3; i++) {
-          debugPrint('快速重试 #$i/3，等待3秒...');
           await Future.delayed(const Duration(seconds: 3));
           
           success = await _tryCheckVersion(currentVersion, '快速重试 #$i');
           if (success) return;
         }
         
-        // 5分钟后重试
-        debugPrint('快速重试全部失败，5分钟后再次尝试...');
         await Future.delayed(const Duration(minutes: 5));
         
         if (mounted) {
           success = await _tryCheckVersion(currentVersion, '5分钟后重试');
           if (success) return;
           
-          // 10分钟后最终尝试
-          debugPrint('5分钟后重试失败，10分钟后最终尝试...');
           await Future.delayed(const Duration(minutes: 10));
           
           if (mounted) {
@@ -162,38 +131,30 @@ class _MyAppState extends State<MyApp> {
         }
       }
     } catch (e) {
-      debugPrint('版本检查异常: $e');
     }
   }
   
-  /// 单次尝试检查版本，返回是否成功
   Future<bool> _tryCheckVersion(String currentVersion, String attemptName) async {
     try {
-      debugPrint('$attemptName - 开始检查版本...');
-      
       final versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
       
       if (versionInfo != null && mounted) {
         _dataManager.setLatestVersionInfo(versionInfo);
-        debugPrint('$attemptName - 成功！最新版本: ${versionInfo.version}, 需要更新: ${versionInfo.hasUpdate}');
         return true;
       } else {
-        debugPrint('$attemptName - 失败，未获取到版本信息');
         return false;
       }
     } catch (e) {
-      debugPrint('$attemptName - 异常: $e');
       return false;
     }
   }
 
   void _onThemeChanged() {
-    // 主题变化时触发重建
     if (mounted) {
       final newBrightness = _getBrightness();
       if (newBrightness != _targetBrightness) {
         _targetBrightness = newBrightness;
-        setState(() {}); // 触发 rebuild
+        setState(() {});
       }
     }
   }
@@ -212,14 +173,13 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     _dataManager.removeListener(_onThemeChanged);
-    _dataManager.dispose();  // ✅ 释放 DataManager 资源，防止内存泄漏
+    _dataManager.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final brightness = _getBrightness();
-    final isDarkMode = brightness == Brightness.dark;
     final currentBrightness = _targetBrightness ?? brightness;
     final currentIsDarkMode = currentBrightness == Brightness.dark;
     

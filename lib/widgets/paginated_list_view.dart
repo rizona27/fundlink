@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import '../utils/animation_config.dart';
 
-/// 分页加载控制器
 class PaginationController extends ChangeNotifier {
   int _currentPage = 0;
   int _pageSize = 20;
@@ -18,7 +17,6 @@ class PaginationController extends ChangeNotifier {
   
   PaginationController({int pageSize = 20}) : _pageSize = pageSize;
   
-  /// 加载下一页
   Future<void> loadNextPage() async {
     if (_isLoading || !_hasMore) return;
     
@@ -26,10 +24,9 @@ class PaginationController extends ChangeNotifier {
     notifyListeners();
     
     try {
-      await Future.delayed(const Duration(milliseconds: 100)); // 模拟加载
+      await Future.delayed(const Duration(milliseconds: 100));
       _currentPage++;
       
-      // 检查是否还有更多数据
       if (loadedCount >= _totalCount) {
         _hasMore = false;
       }
@@ -39,7 +36,6 @@ class PaginationController extends ChangeNotifier {
     }
   }
   
-  /// 重置分页
   void reset({int totalCount = 0}) {
     _currentPage = 0;
     _hasMore = true;
@@ -48,21 +44,18 @@ class PaginationController extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// 设置总数量
   void setTotalCount(int count) {
     _totalCount = count;
     _hasMore = loadedCount < count;
     notifyListeners();
   }
   
-  /// 刷新
   Future<void> refresh() async {
     reset();
     await loadNextPage();
   }
 }
 
-/// 分页列表视图 - 支持下拉刷新和上拉加载更多
 class PaginatedListView<T> extends StatefulWidget {
   final Future<List<T>> Function(int page, int pageSize) onLoadPage;
   final Widget Function(BuildContext context, T item, int index) itemBuilder;
@@ -102,19 +95,19 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   }
   
   Future<void> _loadFirstPage() async {
-    if (mounted) setState(() {  // ✅ 添加 mounted 检查
+    if (mounted) setState(() {
       _isInitialLoading = true;
     });
     
     try {
       final items = await widget.onLoadPage(0, widget.pageSize);
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _items = items;
         _isInitialLoading = false;
-        _controller.setTotalCount(items.length); // 简化处理，实际应该从后端获取总数
+        _controller.setTotalCount(items.length);
       });
     } catch (e) {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _isInitialLoading = false;
       });
     }
@@ -122,7 +115,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   
   Future<void> _onRefresh() async {
     if (widget.onRefresh != null) {
-      widget.onRefresh!();  // ✅ 修复：VoidCallback返回void，不能await
+      widget.onRefresh!();
     }
     await _loadFirstPage();
   }
@@ -144,7 +137,6 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
         });
       }
     } catch (e) {
-      // 加载失败，回滚页码
       _controller.reset(totalCount: _items.length);
     }
   }
@@ -182,9 +174,9 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
         return false;
       },
       child: widget.enablePullRefresh
-        ? CustomScrollView(  // ✅ 修复：使用 CustomScrollView 而不是 CupertinoScrollView
+        ? CustomScrollView(
             physics: const BouncingScrollPhysics(),
-            slivers: [  // ✅ 修复：使用 slivers 而不是 children
+            slivers: [
               CupertinoSliverRefreshControl(
                 onRefresh: _onRefresh,
               ),
@@ -192,7 +184,6 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     if (index == _items.length) {
-                      // 加载更多指示器
                       if (_controller.hasMore) {
                         return Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -226,7 +217,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
                     
                     return AnimationConfig.fadeTransition(
                       duration: const Duration(milliseconds: 300),
-                      opacity: 1.0,  // ✅ 修复：添加必需的 opacity 参数
+                      opacity: 1.0,
                       child: widget.itemBuilder(context, _items[index], index),
                     );
                   },
@@ -240,7 +231,6 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
             itemCount: _items.length + (_controller.hasMore ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == _items.length) {
-                // 加载更多指示器
                 if (_controller.hasMore) {
                   return Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -274,7 +264,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
               
               return AnimationConfig.fadeTransition(
                 duration: const Duration(milliseconds: 300),
-                opacity: 1.0,  // ✅ 修复：添加必需的 opacity 参数
+                opacity: 1.0,
                 child: widget.itemBuilder(context, _items[index], index),
               );
             },

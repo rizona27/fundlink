@@ -82,7 +82,6 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
       });
       _updateAnimation();
       
-      // 背景色变化完成后，立即开始文字淡入（无延迟）
       _textFadeTimer?.cancel();
       _textFadeTimer = Timer(const Duration(milliseconds: 400), () {
         if (mounted) {
@@ -106,12 +105,10 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // ✅ 修复：滑块宽度 = 容器宽度 / 3，确保只覆盖当前选项
         final containerWidth = constraints.maxWidth;
-        final sliderWidth = containerWidth / 3; // 滑块宽度为容器的1/3
-        const margin = 2.0; // 左右margin
+        final sliderWidth = containerWidth / 3;
+        const margin = 2.0;
         
-        // 可移动距离 = 容器宽度 - 滑块宽度 - 左右margin
         final maxOffset = containerWidth - sliderWidth - (margin * 2);
         
         return Container(
@@ -126,7 +123,6 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
                 animation: _animationController,
                 builder: (context, child) {
                   final slideValue = _animationController.value;
-                  // ✅ 动态计算偏移量，确保三个位置都能精确对齐
                   final leftOffset = slideValue * maxOffset;
                   return Transform.translate(
                     offset: Offset(leftOffset, 0),

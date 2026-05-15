@@ -12,7 +12,6 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/file_import_service.dart';
 import '../services/client_mapping_service.dart';
-import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../widgets/toast.dart';
@@ -26,12 +25,11 @@ class ImportHoldingView extends StatefulWidget {
   State<ImportHoldingView> createState() => _ImportHoldingViewState();
 }
 
-// ✅ 文件类型标识枚举（必须在类外部）
 enum ImportFileType {
   unknown,
-  holding,      // 持仓数据
-  mapping,      // 映射索引
-  fullBackup,   // 完整备份
+  holding,
+  mapping,
+  fullBackup,
 }
 
 class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProviderStateMixin {
@@ -43,7 +41,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   bool _isProcessing = false;
   final ClientMappingService _mappingService = ClientMappingService();
   
-  // ✅ 文件类型检测结果
   ImportFileType _detectedFileType = ImportFileType.unknown;
 
   final List<FieldConfig> _fieldConfigs = [
@@ -70,10 +67,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   ImportResult? _importResult;
   bool _importCompleted = false;
   
-  // ✅ 导入中断控制
-  bool _shouldAbortImport = false;  // 是否应该中止导入
-  bool _isBackgroundImport = false;  // 是否正在后台导入
-  bool _isPaused = false;  // 是否暂停导入
+  bool _shouldAbortImport = false;
+  bool _isBackgroundImport = false;
+  bool _isPaused = false;
 
   bool get _allRequiredMapped => _fieldConfigs.where((f) => f.required).every((f) => f.mappedIndex != -1);
   int get _validRowsCount => _validData.length;
@@ -84,7 +80,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   @override
   void initState() {
     super.initState();
-    // ✅ 初始化动画控制器，用于平滑进度条
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -102,7 +97,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     super.dispose();
   }
 
-  // ✅ 显示导入中止确认对话框
   Future<bool?> _showAbortImportDialog() async {
     return await showCupertinoDialog<bool>(
       context: context,
@@ -137,12 +131,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           CupertinoDialogAction(
             child: const Text('中止导入'),
             isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, false),  // false = 中止
+            onPressed: () => Navigator.pop(context, false),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
             child: const Text('继续'),
-            onPressed: () => Navigator.pop(context, true),  // true = 后台继续
+            onPressed: () => Navigator.pop(context, true),
           ),
         ],
       ),
@@ -155,38 +149,32 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     return PopScope(
-      canPop: !_isImporting || _isPaused,  // ✅ 导入中且未暂停时不允许直接返回
+      canPop: !_isImporting || _isPaused,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;  // 已经返回了
+        if (didPop) return;
         
         if (_isImporting && !_isPaused) {
-          // ✅ 先暂停导入
           setState(() {
             _isPaused = true;
           });
           
-          // ✅ 显示确认对话框
           final shouldContinue = await _showAbortImportDialog();
           if (shouldContinue == true) {
-            // 用户选择继续，恢复导入
             setState(() {
               _isPaused = false;
               _isBackgroundImport = true;
             });
           } else if (shouldContinue == false) {
-            // 用户选择中止，设置中止标志
             setState(() {
               _shouldAbortImport = true;
               _isPaused = false;
             });
           }
         } else if (_isImporting && _isPaused) {
-          // 已暂停状态，不应该到达这里，但为了安全
           setState(() {
             _isPaused = false;
           });
         } else {
-          // 没有导入，直接返回
           Navigator.pop(context);
         }
       },
@@ -205,8 +193,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           ],
         ),
       ),
-    ),  // CupertinoPageScaffold
-    );  // PopScope
+    ),
+    );
   }
 
   Widget _buildStepIndicator(bool isDarkMode) {
@@ -1248,7 +1236,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   : CupertinoColors.systemGrey,
                             ),
                           ),
-                          // ✅ 导入过程中显示返回按钮
                           if (_importProgress < 1.0)
                             CupertinoButton(
                               padding: EdgeInsets.zero,
@@ -1315,7 +1302,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Future<void> _downloadTemplate() async {
-    // ✅ 显示选择对话框，让用户选择下载哪种模板
     await showCupertinoModalPopup(
       context: context,
       builder: (context) {
@@ -1414,7 +1400,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     );
   }
   
-  /// ✅ 新增：下载持仓数据模板
   Future<void> _downloadHoldingTemplate() async {
     try {
       final headers = [
@@ -1434,7 +1419,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       if (kIsWeb) {
         final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
         final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
+        html.AnchorElement(href: url)
           ..setAttribute("download", "FundLink-持仓模板.csv")
           ..click();
         html.Url.revokeObjectUrl(url);
@@ -1458,7 +1443,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
   }
   
-  /// ✅ 新增：下载映射索引模板
   Future<void> _downloadMappingTemplate() async {
     try {
       final headers = ['客户号', '客户姓名'];
@@ -1477,7 +1461,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       if (kIsWeb) {
         final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
         final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
+        html.AnchorElement(href: url)
           ..setAttribute("download", "FundLink-映射索引模板.csv")
           ..click();
         html.Url.revokeObjectUrl(url);
@@ -1502,16 +1486,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Future<void> _pickFile() async {
-    // ✅ 修复：file_picker 11.x API变更，直接使用 FilePicker.pickFiles
-    final result = await FilePicker.pickFiles(  // 移除 .platform
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'xlsx', 'xls'],
       withData: true,
     );
     if (result != null) {
-      // 检查文件大小(限制5MB)
       final fileSize = result.files.single.size;
-      const int maxFileSize = 5 * 1024 * 1024; // 5MB
+      const int maxFileSize = 5 * 1024 * 1024;
       
       if (fileSize > maxFileSize) {
         if (mounted) {
@@ -1520,7 +1502,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         return;
       }
       
-      if (mounted) {  // ✅ 添加 mounted 检查
+      if (mounted) {
         setState(() {
           _fileResult = result;
           _fileName = result.files.single.name;
@@ -1538,7 +1520,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       if (val == null) return '';
 
       if (val is excel.TextCellValue) {
-        return val.value?.text ?? '';
+        return val.value.text ?? '';
       }
       if (val is excel.IntCellValue) {
         return val.value.toString();
@@ -1574,7 +1556,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
   Future<void> _processFile() async {
     if (_fileResult == null) return;
-    if (mounted) setState(() => _isProcessing = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isProcessing = true);
     try {
       final file = _fileResult!.files.single;
       final bytes = file.bytes;
@@ -1583,16 +1565,13 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
       final extension = file.extension?.toLowerCase();
 
-      // ✅ 新增：检测是否为完整备份文件
       final isFullBackup = await _detectFullBackup(bytes, extension);
       
       if (isFullBackup) {
-        // 处理完整备份文件
         await _processFullBackup(bytes, extension);
         return;
       }
 
-      // 处理普通CSV/Excel文件
       final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
       final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
       final isCsvFile = extension == 'csv' && !isZipFile;
@@ -1644,11 +1623,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         throw Exception('文件没有数据行');
       }
 
-      // ✅ 新增：智能检测文件类型
       _detectedFileType = _detectFileType(_headers);
       debugPrint('[Import] 检测到文件类型: $_detectedFileType');
       
-      // 如果是映射索引文件，直接导入
       if (_detectedFileType == ImportFileType.mapping) {
         await _processMappingFile();
         return;
@@ -1656,12 +1633,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
-    } catch (e, stack) {
+    } catch (e) {
       final dataManager = DataManagerProvider.of(context);
-      // 详细错误记录到日志(不显示给用户)
       dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
-        // 显示友好的错误消息(不泄露技术细节)
         final friendlyMessage = SecurityUtils.getFriendlyErrorMessage(e);
         context.showToast(friendlyMessage);
         showCupertinoDialog(
@@ -1683,27 +1658,22 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
   }
   
-  /// 检测是否为完整备份文件
   Future<bool> _detectFullBackup(Uint8List bytes, String? extension) async {
     try {
       extension = extension?.toLowerCase();
       
-      // 如果是 xlsx 或 xls，尝试作为 Excel 解析
       if (extension == 'xlsx' || extension == 'xls') {
         final excelFile = excel.Excel.decodeBytes(bytes);
-        // 检查是否有 Holdings 和 Transactions 工作表
         return excelFile.tables.containsKey('Holdings') && 
                excelFile.tables.containsKey('Transactions');
       }
       
-      // 如果是 csv，检查是否包含备份标记
       if (extension == 'csv') {
         final csvString = utf8.decode(bytes, allowMalformed: true);
         return csvString.contains('# FundLink Full Backup') ||
                csvString.contains('=== HOLDINGS DATA ===');
       }
       
-      // 其他情况，尝试两种方式
       try {
         final csvString = utf8.decode(bytes, allowMalformed: true);
         if (csvString.contains('# FundLink Full Backup') ||
@@ -1725,12 +1695,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
   }
   
-  /// ✅ 新增：智能检测文件类型（持仓 or 映射索引）
   ImportFileType _detectFileType(List<String> headers) {
     final lowerHeaders = headers.map((h) => h.toLowerCase()).toList();
     
-    // 1. 先检测是否为持仓数据文件（优先级更高）
-    // 特征：包含基金代码、购买金额等字段
     bool hasFundCode = false;
     bool hasAmountOrShares = false;
     
@@ -1754,19 +1721,15 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
     }
     
-    // 如果有基金代码和金额/份额，一定是持仓数据
     if (hasFundCode && hasAmountOrShares) {
       return ImportFileType.holding;
     }
     
-    // 2. 再检测是否为映射索引文件
-    // 特征：只有客户号和客户名相关的列，且没有持仓相关字段
     bool hasClientIdColumn = false;
     bool hasClientNameColumn = false;
     int totalColumns = headers.length;
     
     for (final header in lowerHeaders) {
-      // 检测客户号相关列
       if (header.contains('客户号') || 
           header.contains('核心客户号') || 
           header.contains('用户号') || 
@@ -1779,7 +1742,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         hasClientIdColumn = true;
       }
       
-      // 检测客户名相关列
       if (header.contains('客户姓名') || 
           header.contains('客户名') || 
           header.contains('姓名') || 
@@ -1795,19 +1757,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
     }
     
-    // 如果同时有客户号和客户名，且总列数较少（<= 5），很可能是映射索引
     if (hasClientIdColumn && hasClientNameColumn && totalColumns <= 5) {
       return ImportFileType.mapping;
     }
     
-    // 3. 默认认为是持仓数据（保持原有行为）
     return ImportFileType.holding;
   }
   
-  /// ✅ 新增：处理映射索引文件
   Future<void> _processMappingFile() async {
-    final dataManager = DataManagerProvider.of(context);
-    
     try {
       debugPrint('[Import] 开始处理映射索引文件，共${_rawData.length}条记录');
       
@@ -1815,14 +1772,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       int fail = 0;
       int skip = 0;
       
-      // 自动识别客户号和客户名列
       int clientIdIndex = -1;
       int clientNameIndex = -1;
       
       for (int i = 0; i < _headers.length; i++) {
         final header = _headers[i].toLowerCase();
         
-        // 识别客户号
         if (clientIdIndex == -1 && 
             (header.contains('客户号') || 
              header.contains('核心客户号') || 
@@ -1836,7 +1791,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           clientIdIndex = i;
         }
         
-        // 识别客户名
         if (clientNameIndex == -1 && 
             (header.contains('客户姓名') || 
              header.contains('客户名') || 
@@ -1859,7 +1813,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       
       debugPrint('[Import] 客户号列: $_headers[$clientIdIndex], 客户名列: $_headers[$clientNameIndex]');
       
-      // 逐行导入
       for (final row in _rawData) {
         try {
           if (row.length <= clientIdIndex || row.length <= clientNameIndex) {
@@ -1875,12 +1828,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
             continue;
           }
           
-          // 检查是否已存在
           final existing = await _mappingService.getAllMappings();
           final existingMapping = existing.where((m) => m.clientId == clientId).firstOrNull;
           
           if (existingMapping != null) {
-            // 如果已存在，更新客户名
             await _mappingService.updateMapping(
               existingMapping.id,
               clientId,
@@ -1889,7 +1840,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
             success++;
             debugPrint('[Import] 更新映射: $clientId -> $clientName');
           } else {
-            // 新增映射
             await _mappingService.addMapping(clientId, clientName);
             success++;
             debugPrint('[Import] 新增映射: $clientId -> $clientName');
@@ -1904,7 +1854,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       
       if (mounted) {
         context.showToast('映射索引导入完成\n成功: $success, 跳过: $skip, 失败: $fail');
-        Navigator.pop(context); // 返回上一页
+        Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('[Import] 处理映射文件失败: $e');
@@ -1914,7 +1864,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
   }
   
-  /// 处理完整备份文件
   Future<void> _processFullBackup(Uint8List bytes, String? extension) async {
     final dataManager = DataManagerProvider.of(context);
     
@@ -1932,14 +1881,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         throw Exception('备份文件中没有数据');
       }
       
-      // 直接导入所有交易记录（会自动重建持仓）
       int success = 0;
       int fail = 0;
       int skip = 0;
       
       for (final transaction in result.transactions) {
         try {
-          // 检查是否已存在
           final exists = dataManager.transactions.any(
             (tx) => tx.id == transaction.id || 
                     (tx.clientId == transaction.clientId && 
@@ -1963,13 +1910,11 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       
       debugPrint('[Import] 导入结果: 成功$success, 跳过$skip, 失败$fail');
       
-      // 强制保存数据
       if (!kIsWeb && success > 0) {
         await dataManager.saveData();
         debugPrint('[Import] 数据已保存到数据库');
       }
       
-      // 显示结果
       if (mounted) {
         String message = '备份恢复完成';
         if (success > 0) message += '\n成功恢复 $success 条交易';
@@ -1978,7 +1923,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         
         context.showToast(message);
         
-        // 返回上一页
         Navigator.pop(context);
       }
       
@@ -1995,14 +1939,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     try {
       return DateTime.parse(dateStr);
     } catch (_) {
-      // 尝试其他格式
     }
     final parts = dateStr.split('-');
     if (parts.length == 3) {
       try {
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       } catch (_) {
-        // 继续尝试其他格式
       }
     }
     final slashParts = dateStr.split('/');
@@ -2010,20 +1952,19 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       try {
         return DateTime(int.parse(slashParts[0]), int.parse(slashParts[1]), int.parse(slashParts[2]));
       } catch (_) {
-        // 所有格式都失败，返回 null
       }
     }
     return null;
   }
 
   Future<void> _startImport() async {
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _isImporting = true;
         _importProgress = 0;
-        _shouldAbortImport = false;  // ✅ 重置中止标志
-        _isBackgroundImport = false;  // ✅ 重置后台导入标志
-        _isPaused = false;  // ✅ 重置暂停标志
+        _shouldAbortImport = false;
+        _isBackgroundImport = false;
+        _isPaused = false;
       });
     }
 
@@ -2036,24 +1977,21 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     List<String> errors = [];
     List<String> skipReasons = [];
 
-    // ✅ 添加统一的暂停检查函数
     Future<bool> _checkPauseOrAbort() async {
-      if (_shouldAbortImport) return true; // 需要中止
+      if (_shouldAbortImport) return true;
       if (_isPaused) {
         debugPrint('[Import] 导入已暂停，等待用户选择...');
         while (_isPaused && mounted) {
           await Future.delayed(const Duration(milliseconds: 100));
         }
-        // 用户恢复后，检查是否要中止
         if (_shouldAbortImport) return true;
       }
-      return false; // 继续执行
+      return false;
     }
 
     final existingHoldings = dataManager.holdings;
 
     for (int i = 0; i < _validData.length; i++) {
-      // ✅ 每次循环开始检查
       if (await _checkPauseOrAbort()) break;
       
       final row = _validData[i];
@@ -2064,7 +2002,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         final clientId = row['clientId']?.toString() ?? '';
         if (clientId.isEmpty) throw Exception('客户号为空');
         
-        // ✅ 新增：查询映射词典，如果客户号存在且客户名是客户号本身，则替换为映射的客户名
         if (clientName == clientId) {
           try {
             final mappedName = await _mappingService.getClientNameByClientId(clientId);
@@ -2073,7 +2010,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
               debugPrint('[Import] ✅ 第${i+1}行: 客户号 $clientId 映射为客户名 $mappedName');
             }
           } catch (e) {
-            // 未找到映射，使用原客户名（即客户号）
             debugPrint('[Import] ⚠️ 第${i+1}行: 客户号 $clientId 未在映射词典中找到');
           }
         }
@@ -2107,7 +2043,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           continue;
         }
 
-        // ✅ 修复：允许离线导入，网络失败时使用默认值
         Map<String, dynamic> fundInfo = {  
           'fundName': '',
           'currentNav': 0.0,
@@ -2124,7 +2059,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         bool networkFailed = false;
         
         while (retryCount <= maxRetries) {
-          // ✅ 重试前检查
           if (await _checkPauseOrAbort()) break;
           
           try {
@@ -2138,17 +2072,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
             }
           }
           
-          // ✅ 重试后检查
           if (await _checkPauseOrAbort()) break;
         }
         
-        // ✅ 如果被中止，退出循环
         if (_shouldAbortImport) break;
         
         if (retryCount > maxRetries) {
           networkFailed = true;
           dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.warning);
-          // ✅ 关键修复：网络失败时不抛出异常，继续使用默认值
         }
 
         final fundName = fundInfo['fundName'] as String? ?? '';
@@ -2156,13 +2087,11 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
         final isValid = fundInfo['isValid'] as bool? ?? (currentNav > 0);
         
-        // ✅ 新增：提取收益率数据
         final navReturn1m = fundInfo['navReturn1m'] as double?;
         final navReturn3m = fundInfo['navReturn3m'] as double?;
         final navReturn6m = fundInfo['navReturn6m'] as double?;
         final navReturn1y = fundInfo['navReturn1y'] as double?;
 
-        // ✅ 保存前检查
         if (await _checkPauseOrAbort()) break;
         
         final transaction = TransactionRecord(
@@ -2180,7 +2109,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         
         await dataManager.addTransaction(transaction);
         
-        // ✅ 新增：立即更新持仓的净值和收益率数据到UI
         if (currentNav > 0 || navReturn1m != null || navReturn3m != null || navReturn6m != null || navReturn1y != null) {
           try {
             final holdingIndex = dataManager.holdings.indexWhere(
@@ -2211,41 +2139,36 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         errors.add('第${i+1}行: $e');
         dataManager.addLog('导入第${i+1}行失败: $e', type: LogType.error);
       }
-      // ✅ 优化：每条数据都更新进度，实现平滑的0-100%动画
       final progress = (i+1) / _validData.length;
       _targetProgress = progress;
       _animationController.animateTo(
         progress,
-        duration: const Duration(milliseconds: 200),  // 更短的动画时长，响应更快
-        curve: Curves.easeOut,  // 先快后慢，让用户感觉响应迅速
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
       );
       
-      // ✅ 检查是否应该暂停导入（等待用户选择）
       if (_isPaused) {
         debugPrint('[Import] 导入已暂停，等待用户选择...');
-        // 等待直到不再暂停
         while (_isPaused && mounted) {
           await Future.delayed(const Duration(milliseconds: 100));
         }
-        // 如果用户选择了中止，退出循环
         if (_shouldAbortImport) {
           debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
           break;
         }
       }
       
-      // ✅ 检查是否应该中止导入
       if (_shouldAbortImport) {
         debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
-        break;  // 退出循环
+        break;
       }
     }
 
     setState(() {
       _isImporting = false;
-      _isBackgroundImport = false;  // ✅ 重置后台导入标志
-      _shouldAbortImport = false;  // ✅ 重置中止标志
-      _isPaused = false;  // ✅ 重置暂停标志
+      _isBackgroundImport = false;
+      _shouldAbortImport = false;
+      _isPaused = false;
       _importResult = ImportResult(
         successCount: success,
         failCount: fail,
@@ -2261,8 +2184,6 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     if (fail > 0) message += '，失败$fail条';
     context.showToast(message);
     
-    // ✅ 关键修复：导入完成后强制刷新数据库，确保所有数据立即写入磁盘
-    // 即使立即退出程序，数据也不会丢失
     if (!kIsWeb && success > 0) {
       debugPrint('[Import] 导入完成，开始强制保存数据...');
       await dataManager.saveData();

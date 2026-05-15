@@ -196,7 +196,6 @@ class _LogViewState extends State<LogView> {
               searchPlaceholder: '搜索日志内容或类型',
               dataManager: _dataManager,
               fundService: null,
-              // ✅ 传递日志的数据状态（根据日志数量判断）
               hasData: totalCount > 0,
               onToggleExpandAll: null,
               onSearchChanged: (value) {

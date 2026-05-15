@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:pinyin/pinyin.dart';
@@ -10,7 +9,7 @@ import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/scroll_to_top_button.dart'; // ✅ 使用Overlay方式
+import '../widgets/scroll_to_top_button.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
 import '../utils/animation_config.dart';
@@ -32,7 +31,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   final ScrollController _scrollController = ScrollController();
   Timer? _scrollThrottleTimer;
   
-  // ✅ 缓存排序结果，避免重复计算
   List<String>? _cachedSortedKeys;
   String? _lastSearchTextForSort;
 
@@ -41,10 +39,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
       return;
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
-      if (mounted && _scrollOffset != offset) {
-        setState(() {
-          _scrollOffset = offset;
-        });
+      if (mounted) {
+        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+        if (_scrollOffset != normalizedOffset) {
+          setState(() {
+            _scrollOffset = normalizedOffset;
+          });
+        }
       }
       _scrollThrottleTimer = null;
     });
@@ -53,7 +54,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   @override
   void initState() {
     super.initState();
-    // ✅ 显示返回顶部按钮
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScrollToTopButton.show(
         context: context,
@@ -75,7 +75,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     if (mounted) {
       setState(() {
         _dataVersion++;
-        _cachedSortedKeys = null; // ✅ 数据变化时清除缓存
+        _cachedSortedKeys = null;
       });
     }
   }
@@ -85,7 +85,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     _scrollController.dispose();
-    // ✅ 隐藏返回顶部按钮
     ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
@@ -120,20 +119,17 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   }
 
   List<String> get _sortedKeys {
-    // ✅ 使用缓存，避免每次重建都重新计算拼音
     if (_cachedSortedKeys != null && _lastSearchTextForSort == _searchText) {
       return _cachedSortedKeys!;
     }
       
     final keys = _filteredGroupedHoldings.keys.toList();
     keys.sort((a, b) {
-      // 从 key中提取客户名（格式：clientName|clientId）
       final partsA = a.split('|');
       final partsB = b.split('|');
       final originalNameA = partsA[0];
       final originalNameB = partsB[0];
         
-      // 获取完整拼音进行比较
       String fullPinyinA = '';
       if (originalNameA.isNotEmpty) {
         try {
@@ -155,7 +151,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
       return fullPinyinA.compareTo(fullPinyinB);
     });
       
-    // ✅ 更新缓存
     _cachedSortedKeys = keys;
     _lastSearchTextForSort = _searchText;
     return keys;
@@ -377,13 +372,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
                   onSearchChanged: hasData ? (value) {
                     setState(() {
                       _searchText = value;
-                      _cachedSortedKeys = null; // ✅ 搜索条件变化时清除缓存
+                      _cachedSortedKeys = null;
                     });
                   } : null,
                   onSearchClear: hasData ? () {
                     setState(() {
                       _searchText = '';
-                      _cachedSortedKeys = null; // ✅ 清空搜索时清除缓存
+                      _cachedSortedKeys = null;
                     });
                   } : null,
                   backgroundColor: Colors.transparent,

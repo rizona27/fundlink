@@ -509,7 +509,6 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     final customFundSpots = List.generate(transformedCustomFundValues.length,
             (i) => FlSpot(i.toDouble(), transformedCustomFundValues[i]));
 
-    // 计算所有可见数据的最大最小值
     double minY = transformedFundValues.reduce((a, b) => a < b ? a : b);
     double maxY = transformedFundValues.reduce((a, b) => a > b ? a : b);
     if (_showAverage && transformedAvgValues.isNotEmpty) {
@@ -543,18 +542,15 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       maxY = maxY > customMax ? maxY : customMax;
     }
 
-    // ✅ 修复：根据数据范围动态计算padding，避免固定-5%到5%
     final range = maxY - minY;
-    final padding = range * 0.1; // 使用10%的冗余
+    final padding = range * 0.1;
     
-    // 应用padding
     minY = minY - padding;
     maxY = maxY + padding;
     
-    // 如果范围太小，设置一个合理的最小范围（基于实际数据）
-    if (range < 0.02) { // 如果涨跌幅小于2%
+    if (range < 0.02) {
       final center = (maxY + minY) / 2;
-      minY = center - 0.02; // 上下各2%
+      minY = center - 0.02;
       maxY = center + 0.02;
     }
 

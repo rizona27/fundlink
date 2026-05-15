@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Divider;
 import 'package:flutter/services.dart';
@@ -12,7 +11,6 @@ import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
 import '../utils/desktop_focus_manager.dart';
-import 'add_holding_view.dart';
 
 class EditHoldingView extends StatefulWidget {
   final FundHolding holding;
@@ -80,11 +78,9 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _confirmDeleteTransaction(TransactionRecord tx) async {
-    // 检查是否是基石交易(该基金的第一笔买入交易)
-    // _transactions按日期降序排列,last是最早的交易
     final buyTransactions = _transactions.where((t) => t.type == TransactionType.buy).toList();
     final isFoundationBuy = buyTransactions.isNotEmpty && 
-                            tx.id == buyTransactions.last.id;  // last是时间最早的买入
+                            tx.id == buyTransactions.last.id;
     
     if (isFoundationBuy) {
       await showCupertinoDialog(
@@ -103,7 +99,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       return;
     }
     
-    // 非基石交易的待确认交易可以删除
     if (tx.isPending) {
       final confirmed = await showCupertinoDialog<bool>(
         context: context,
@@ -126,7 +121,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       
       if (confirmed != true) return;
     } else {
-      // 已确认交易需要二次确认
       final confirmed = await showCupertinoDialog<bool>(
         context: context,
         barrierDismissible: true, 
@@ -191,7 +185,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             ? CupertinoColors.white.withOpacity(0.6)
             : CupertinoColors.systemGrey;
         
-        // 获取键盘高度，用于回避
         final mediaQuery = MediaQuery.of(context);
         
         return StatefulBuilder(
@@ -204,11 +197,10 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     left: 24,
                     right: 24,
                     top: 40,
-                    bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 40, // 键盘弹出时调整底部边距
+                    bottom: mediaQuery.viewInsets.bottom > 0 ? 20 : 40,
                   ),
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: SingleChildScrollView(
-                    // ✅ 添加 padding 以避让键盘
                     padding: EdgeInsets.only(
                       bottom: mediaQuery.viewInsets.bottom,
                     ),
@@ -217,7 +209,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 标题栏
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
@@ -255,7 +246,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               ],
                             ),
                           ),
-                          // 内容区域
                           Container(
                             padding: const EdgeInsets.all(12),
                             color: bgColor,
@@ -329,7 +319,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                // 确认按钮
                                 Row(
                                   children: [
                                     Expanded(
@@ -537,9 +526,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                             Row(
                               children: [
                                 Text('当前净值', style: TextStyle(fontSize: 11, color: secondaryTextColor)),
-                                if (holding.navDate != null)
-                                  Text(
-                                    ' (${holding.navDate!.month.toString().padLeft(2, '0')}-${holding.navDate!.day.toString().padLeft(2, '0')})',
+                                Text(
+                                  ' (${holding.navDate.month.toString().padLeft(2, '0')}-${holding.navDate.day.toString().padLeft(2, '0')})',
                                     style: TextStyle(fontSize: 11, color: secondaryTextColor),
                                   ),
                               ],
@@ -552,7 +540,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       ),
                     ],
                   ),
-                  // 备注显示区域
                   if (holding.remarks.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 12),
@@ -839,11 +826,9 @@ class _EditHoldingViewState extends State<EditHoldingView> {
   }
 
   Future<void> _editTransaction(TransactionRecord tx) async {
-    // 检查是否是基石交易(时间上最早的那笔买入交易)
-    // 注意:_transactions是按日期降序排列的,所以last才是最早的
     final buyTransactions = _transactions.where((t) => t.type == TransactionType.buy).toList();
     final isFoundationBuy = buyTransactions.isNotEmpty && 
-                            tx.id == buyTransactions.last.id;  // last是最早的交易
+                            tx.id == buyTransactions.last.id;
     
     if (isFoundationBuy) {
       await showCupertinoDialog(
@@ -862,7 +847,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       return;
     }
     
-    // 非基石交易的待确认交易可以编辑
     if (tx.isPending) {
       final confirmed = await showCupertinoDialog<bool>(
         context: context,

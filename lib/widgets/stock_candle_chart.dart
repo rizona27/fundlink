@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -103,13 +102,11 @@ class StockCandleChartState extends State<StockCandleChart> {
     return 'candle_cache_${widget.stockCode}_$_selectedPeriod';
   }
   
-  // 注意：已移除 SharedPreferences 缓存，直接使用网络请求
-  // 如需缓存，建议使用 SmartCache 或数据库
   
   Future<void> _loadInitialData() async {
     if (_isLoading) return;
     
-    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isLoading = true);
     
     try {
       final now = DateTime.now();
@@ -155,7 +152,6 @@ class StockCandleChartState extends State<StockCandleChart> {
         '&ut=b2884a393a59ad64002292a3e90d46a5',
       );
       
-      // 增加超时时间和重试机制，处理网络切换问题
       http.Response? res;
       int retryCount = 0;
       const maxRetries = 3;
@@ -211,9 +207,7 @@ class StockCandleChartState extends State<StockCandleChart> {
         }
       }
     } catch (e) {
-      // 网络错误时，如果有缓存数据则继续使用
       if (_candleDataList.isEmpty) {
-        debugPrint('K线数据加载失败: $e');
       }
     } finally {
       setState(() => _isLoading = false);
@@ -314,13 +308,10 @@ class StockCandleChartState extends State<StockCandleChart> {
               _hasPreloaded = true;
             });
             
-            // 已移除缓存保存
           }
         }
       }
     } catch (e) {
-      debugPrint('加载K线数据失败 (${widget.stockCode}): $e');
-      // 静默失败，不影响用户界面
     }
   }
   
@@ -344,13 +335,11 @@ class StockCandleChartState extends State<StockCandleChart> {
     return mergedList;
   }
   
-  // 注意：已移除 SharedPreferences 缓存方法
-  // Future<void> _saveToCache(List<CandleData> candles) async { ... }
 
   Future<void> _loadData({int retryCount = 0}) async {
     if (_isLoading) return;
     
-    if (mounted) setState(() => _isLoading = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isLoading = true);
 
     try {
       String formattedSecid = widget.stockCode;
@@ -468,7 +457,7 @@ class StockCandleChartState extends State<StockCandleChart> {
         return;
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);  // ✅ 添加 mounted 检查
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -615,21 +604,17 @@ class StockCandleChartState extends State<StockCandleChart> {
                 _earliestDate = DateTime.parse(uniqueNewCandles.first.date);
                 _displayOffset += uniqueNewCandles.length;
                 
-              // 已移除缓存保存
               }
             });
           }
         }
       }
     } catch (e) {
-      debugPrint('加载K线数据失败 (${widget.stockCode}): $e');  // ✅ 修复：使用 widget.stockCode
-      // 静默失败，不影响用户界面
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 关键修复：加载中显示固定高度的占位符，避免布局跳动
     if (_isLoading && _candleDataList.isEmpty) {
       return const SizedBox(
         height: 200,
@@ -862,7 +847,6 @@ class StockCandleChartState extends State<StockCandleChart> {
             height: 45,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // ✅ 修复：使用与蜡烛图完全相同的 offset 计算逻辑
                 final totalCandles = _candleDataList.length;
                 final int maxOffset = totalCandles > _actualVisibleCount ? totalCandles - _actualVisibleCount : 0;
                 final int actualOffset = _displayOffset.clamp(0, maxOffset);
@@ -877,7 +861,7 @@ class StockCandleChartState extends State<StockCandleChart> {
                       selectedIndex: _selectedIndex,
                       isDark: widget.isDark,
                       barWidth: volumeBarWidth,
-                      displayOffset: actualOffset,  // ✅ 使用 actualOffset 而不是 _displayOffset
+                      displayOffset: actualOffset,
                       visibleCount: _actualVisibleCount,  
                     ),
                     size: Size(constraints.maxWidth, 45),

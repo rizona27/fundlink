@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
@@ -139,7 +139,7 @@ class FileExportService {
 
     for (int i = 0; i < selectedFields.length; i++) {
       final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
-      sheet?.cell(cellIndex).value = excel.TextCellValue(_getFieldLabel(selectedFields[i]));
+      sheet.cell(cellIndex).value = excel.TextCellValue(_getFieldLabel(selectedFields[i]));
     }
 
     for (int r = 0; r < holdings.length; r++) {
@@ -147,7 +147,7 @@ class FileExportService {
       for (int c = 0; c < selectedFields.length; c++) {
         final value = _getFieldValue(holding, selectedFields[c], dataManager: _dataManager);
         final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1);
-        sheet?.cell(cellIndex).value = excel.TextCellValue(value);
+        sheet.cell(cellIndex).value = excel.TextCellValue(value);
       }
     }
 

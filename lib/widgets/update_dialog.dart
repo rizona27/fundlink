@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../services/version_check_service.dart';
 
-/// 版本更新提示对话框
 class UpdateDialog extends StatefulWidget {
   final VersionInfo versionInfo;
 
@@ -105,36 +104,30 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final platform = defaultTargetPlatform;
     
     if (platform == TargetPlatform.android) {
-      // Android: 后台下载 APK 并安装
       await _downloadAndInstallApk();
     } else if (platform == TargetPlatform.windows) {
-      // Windows: 打开下载页面或下载 exe
       await _openDownloadUrl();
     } else {
-      // iOS/macOS: 打开下载页面
       await _openDownloadUrl();
     }
   }
 
-  /// Android: 下载并安装 APK
   Future<void> _downloadAndInstallApk() async {
     if (widget.versionInfo.downloadUrl.isEmpty) {
       await _openDownloadUrl();
       return;
     }
 
-    if (mounted) setState(() {  // ✅ 添加 mounted 检查
+    if (mounted) setState(() {
       _isDownloading = true;
       _downloadStatus = '准备下载...';
     });
 
     try {
-      // 获取临时目录
       final tempDir = await getTemporaryDirectory();
       final filePath = '${tempDir.path}/fundlink_update.apk';
       final file = File(filePath);
 
-      // 下载文件
       final request = http.Request('GET', Uri.parse(widget.versionInfo.downloadUrl));
       final response = await request.send();
       final totalBytes = response.contentLength ?? 0;
@@ -148,7 +141,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         
         if (totalBytes > 0) {
           final progress = receivedBytes / totalBytes;
-          if (mounted) setState(() {  // ✅ 添加 mounted 检查
+          if (mounted) setState(() {
             _downloadProgress = progress;
             _downloadStatus = '下载中: ${(progress * 100).toStringAsFixed(1)}%';
           });
@@ -157,31 +150,26 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
       await sink.close();
 
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _downloadStatus = '下载完成，准备安装...';
       });
 
-      // 安装 APK（需要权限）
-      // 注意：Android 8.0+ 需要 REQUEST_INSTALL_PACKAGES 权限
-      // 这里使用 url_launcher 打开文件
       final uri = Uri.file(filePath);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       }
 
     } catch (e) {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _isDownloading = false;
         _downloadStatus = '下载失败: $e';
       });
       
-      // 失败后回退到浏览器下载
       await Future.delayed(const Duration(seconds: 2));
       await _openDownloadUrl();
     }
   }
 
-  /// 打开下载链接
   Future<void> _openDownloadUrl() async {
     if (widget.versionInfo.downloadUrl.isEmpty) return;
     

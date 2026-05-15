@@ -48,15 +48,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
     
-    final today = DateTime(now.year, now.month, now.day);
     
     final hour = now.hour;
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     
     final morningStart = 9 * 60 + 15;  
-    final morningEnd = 11 * 60 + 30;   
-    final afternoonStart = 13 * 60;     
     final afternoonEnd = 15 * 60 + 30;  
     
     return currentTime >= morningStart && currentTime < afternoonEnd;
@@ -66,17 +63,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     final now = DateTime.now();
     final weekday = now.weekday;
     
-    // ✅ 修复：周末不交易
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return true;
     }
     
-    // ✅ 修复：检查当前时间是否在交易时间内，而不是检查估值时间
     final hour = now.hour;
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     
-    // 交易时间：9:15-11:30, 13:00-15:00
     final morningStart = 9 * 60 + 15;
     final morningEnd = 11 * 60 + 30;
     final afternoonStart = 13 * 60;
@@ -85,7 +79,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     final isTradingTime = (currentTime >= morningStart && currentTime <= morningEnd) ||
                          (currentTime >= afternoonStart && currentTime <= afternoonEnd);
     
-    return !isTradingTime;  // 非交易时间应该暂停
+    return !isTradingTime;
   }
 
   double _scrollOffset = 0;
@@ -118,7 +112,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _loadValuationRefreshInterval();
     _startMarketStatusTimer();
     
-    // ✅ 显示返回顶部按钮
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScrollToTopButton.show(
         context: context,
@@ -140,10 +133,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       return;
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
-      if (mounted && _scrollOffset != offset) {
-        setState(() {
-          _scrollOffset = offset;
-        });
+      if (mounted) {
+        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+        if (_scrollOffset != normalizedOffset) {
+          setState(() {
+            _scrollOffset = normalizedOffset;
+          });
+        }
       }
       _scrollThrottleTimer = null;
     });
@@ -173,7 +169,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _sortOrder = SortOrder.descending;
       }
     } catch (e) {
-      debugPrint('加载排序状态失败: $e');
     }
   }
 
@@ -183,7 +178,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       await uiState.saveString(_keySortKey, _sortKey.toString());
       await uiState.saveString(_keySortOrder, _sortOrder.toString());
     } catch (e) {
-      debugPrint('保存排序状态失败: $e');
     }
   }
   
@@ -213,12 +207,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
     _scrollController.dispose();
-    // ✅ 隐藏返回顶部按钮
     ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 
-  /// 统一清理所有 Timer，防止内存泄漏
   void _cancelAllTimers() {
     _stopValuationTimer();
     _stopMarketStatusTimer();
@@ -228,7 +220,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!mounted) return;  // ✅ 生命周期方法中检查 mounted
+    if (!mounted) return;
     
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
@@ -249,7 +241,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void _startValuationTimer() {
     _stopValuationTimer();
     
-    // ✅ 修复：在非交易时间或周末时，不启动定时器
     if (_shouldPauseAutoRefresh()) {
       return;
     }
@@ -261,7 +252,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _valuationTimer = Timer.periodic(
       Duration(seconds: _valuationRefreshIntervalSeconds),
           (timer) {
-        // ✅ 修复：每次触发时再次检查是否为交易时间
         if (_shouldPauseAutoRefresh()) {
           _stopValuationTimer();
           return;
@@ -330,11 +320,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       }
       _restartValuationTimer();
     } catch (e) {
-      debugPrint('加载估值刷新间隔失败: $e');
       _valuationRefreshIntervalSeconds = 180;
       _restartValuationTimer();
     }
-    if (mounted) setState(() {});  // ✅ 已有 mounted 检查
+    if (mounted) setState(() {});
   }
   
   Future<void> _autoConfirmPendingTransactions() async {
@@ -343,24 +332,18 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final pendingCount = pendingTxs.length;
       
       if (pendingCount == 0) {
-        debugPrint('[SummaryView] ✅ 无待确认交易，跳过自动确认');
         return;
       }
       
-      debugPrint('[SummaryView] 🔄 开始自动确认 $pendingCount 笔待确认交易');
       for (final tx in pendingTxs) {
-        debugPrint('[SummaryView]   - ${tx.fundCode} (${tx.fundName}), isPending=${tx.isPending}, status=${tx.status.name}');
       }
       
       final confirmedCount = await _dataManager.autoConfirmPendingTransactions(_fundService);
       
       if (confirmedCount > 0 && mounted) {
         context.showToast('已自动确认 $confirmedCount 笔交易');
-        debugPrint('[SummaryView] ✅ 成功确认 $confirmedCount 笔交易');
       }
     } catch (e) {
-      debugPrint('自动确认待确认交易失败: $e');
-      // 静默失败，不影响用户使用
     }
   }
 
@@ -369,18 +352,15 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final uiState = UIStateService();
       await uiState.saveInt('valuationRefreshInterval', seconds);
     } catch (e) {
-      debugPrint('保存估值刷新间隔失败: $e');
     }
   }
 
   void _onValuationRefreshIntervalChanged(int seconds) async {
-    print('DEBUG: 用户选择的刷新间隔 = $seconds 秒');
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _valuationRefreshIntervalSeconds = seconds;
       });
     }
-    print('DEBUG: 设置后的值 = $_valuationRefreshIntervalSeconds 秒');
     await _saveValuationRefreshInterval(_valuationRefreshIntervalSeconds);
     _restartValuationTimer();
     String intervalText = seconds == 60 ? '1分钟'
@@ -412,9 +392,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Future<void> _checkAndRefreshStaleValuation() async {
     if (!_showValuationRefresh || _dataManager.isValuationRefreshInProgress) return;
     
-    // ✅ 修复：非交易时间不进行自动检查和刷新
     if (_shouldPauseAutoRefresh()) {
-      debugPrint('[SummaryView] 非交易时间，跳过估值缓存检查');
       return;
     }
     
@@ -453,7 +431,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     try {
       await _dataManager.refreshAllValuations(_fundService, silent: silent);
       if (mounted && _sortKey == SortKey.latestNav) {
-        setState(() {  // ✅ 已有 mounted 检查
+        setState(() {
           _cachedSortedFundCodes = null;
         });
       }
@@ -525,22 +503,18 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
     final allHoldings = _dataManager.holdings;
     if (_searchText.isEmpty) {
-      debugPrint('[SummaryView] 📊 No search text, returning all ${allHoldings.length} holdings');
       return _groupByFundCode(allHoldings);
     }
     
-    debugPrint('[SummaryView] 🔎 Filtering with searchText: "$_searchText"');
     final filtered = allHoldings.where((holding) {
       final match = holding.fundCode.contains(_searchText) ||
           holding.fundName.contains(_searchText) ||
           holding.clientName.contains(_searchText);
       if (match) {
-        debugPrint('[SummaryView]    ✅ Matched: ${holding.fundCode} - ${holding.fundName}');
       }
       return match;
     }).toList();
     
-    debugPrint('[SummaryView] 📊 Filtered result: ${filtered.length} holdings');
     return _groupByFundCode(filtered);
   }
 
@@ -870,14 +844,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               sortCycleType: SortCycleType.fundReturns,
               onSortKeyChanged: enableButtons
                   ? (key) async {
-                if (mounted) setState(() => _sortKey = key);  // ✅ 添加 mounted 检查
+                if (mounted) setState(() => _sortKey = key);
                 await _saveSortState();
                 _showSortToast();
               }
                   : null,
               onSortOrderChanged: enableButtons
                   ? (order) async {
-                if (mounted) setState(() => _sortOrder = order);  // ✅ 添加 mounted 检查
+                if (mounted) setState(() => _sortOrder = order);
                 await _saveSortState();
                 _showSortToast();
               }
@@ -896,23 +870,17 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               onToggleExpandAll: enableButtons ? _toggleExpandAll : null,
               onSearchChanged: enableButtons
                   ? (text) { 
-                      debugPrint('[SummaryView] 🔍 onSearchChanged called: "$text"');
-                      debugPrint('[SummaryView]    - Text length: ${text.length}');
-                      debugPrint('[SummaryView]    - Is empty: ${text.isEmpty}');
                       if (mounted) {
                         setState(() => _searchText = text);
-                        debugPrint('[SummaryView]    - _searchText updated to: "$_searchText"');
                       }
-                    }  // ✅ 添加 mounted 检查
+                    }
                   : null,
               onSearchClear: enableButtons
                   ? () { 
-                      debugPrint('[SummaryView] 🗑️ onSearchClear called');
                       if (mounted) {
                         setState(() => _searchText = '');
-                        debugPrint('[SummaryView]    - _searchText cleared');
                       }
-                    }  // ✅ 添加 mounted 检查
+                    }
                   : null,
               backgroundColor: Colors.transparent,
               iconColor: CupertinoTheme.of(context).primaryColor,

@@ -93,7 +93,6 @@ class LogEntry {
     );
   }
 
-  /// 转换为 SQLite Map（用于数据库存储）
   Map<String, dynamic> toMap() {
     return {
       'message': message,
@@ -102,7 +101,6 @@ class LogEntry {
     };
   }
 
-  /// 从 SQLite Map 创建对象（用于数据库读取）
   factory LogEntry.fromMap(Map<String, dynamic> map) {
     return LogEntry(
       id: (map['id'] as int?)?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),

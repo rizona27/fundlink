@@ -5,14 +5,13 @@ enum TransactionType {
   sell,
 }
 
-/// 交易申请状态枚举
 enum TransactionStatus {
-  pendingSubmit,   // 待提交：用户已下单，尚未到达合法交易时间（如节假日前置申请）
-  submitted,       // 已提交：交易指令已到达交易系统，等待未知价净值
-  pendingConfirm,  // 待确认：T日净值已出，已成交易成本，正等待份额到账
-  confirmed,       // 已确认：份额已到账
-  confirmFailed,   // 确认失败：重试5次后仍无法获取份额，转为人工处理
-  cancelled,       // 已撤销：在规定时间内撤单
+  pendingSubmit,
+  submitted,
+  pendingConfirm,
+  confirmed,
+  confirmFailed,
+  cancelled,
 }
 
 extension TransactionTypeExtension on TransactionType {
@@ -63,11 +62,11 @@ class TransactionRecord {
   final bool isAfter1500;
   final bool isPending;
   final double? confirmedNav;
-  final TransactionStatus status;           // 交易状态
-  final int retryCount;                     // 净值获取重试次数
-  final DateTime? applicationDate;          // 交易申请日(T日_申请)
-  final DateTime? confirmDate;              // 确认日期(份额到账日)
-  final double? frozenShares;               // 冻结份额(用于赎回)
+  final TransactionStatus status;
+  final int retryCount;
+  final DateTime? applicationDate;
+  final DateTime? confirmDate;
+  final double? frozenShares;
 
   TransactionRecord({
     String? id,
@@ -202,7 +201,6 @@ class TransactionRecord {
     );
   }
 
-  /// 转换为 SQLite Map（用于数据库存储）
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -226,7 +224,6 @@ class TransactionRecord {
     };
   }
 
-  /// 从 SQLite Map 创建对象（用于数据库读取）
   factory TransactionRecord.fromMap(Map<String, dynamic> map) {
     return TransactionRecord(
       id: map['id'] as String,

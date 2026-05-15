@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../main.dart';
 
 class SplashView extends StatefulWidget {
@@ -178,7 +177,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         : const Color(0xFFFFB347); 
 
     final sizes = [400.0, 300.0, 250.0];
-    final size = sizes[index] ?? 300.0;
+    final size = sizes[index];
     
     return Positioned(
       top: MediaQuery.of(context).size.height * 0.3 + offsetY,

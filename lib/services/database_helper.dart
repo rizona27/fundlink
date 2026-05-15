@@ -5,9 +5,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 数据库帮助类 - 跨平台 SQLite 支持
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
@@ -38,34 +36,26 @@ class DatabaseHelper {
     return _database!;
   }
 
-  /// 移动端初始化(iOS/Android)
   Future<Database> _initMobileDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'fundlink.db');
-    
-    debugPrint('[Database] iOS数据库路径: $path');
 
     return await openDatabase(
       path,
       version: 1,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
-      // 确保数据立即写入磁盘
       singleInstance: true,
     );
   }
 
-  /// 桌面端初始化(Windows/macOS/Linux)
   Future<Database> _initDesktopDatabase() async {
-    // 初始化 FFI
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
 
-    // 获取应用数据目录
     final appDataDir = await getApplicationSupportDirectory();
     final dbPath = join(appDataDir.path, 'fundlink.db');
 
-    // 检查数据库是否存在，不存在则从资源复制或创建
     final dbFile = File(dbPath);
     if (!await dbFile.exists()) {
       await _copyOrCreateDatabase(dbPath);
@@ -76,36 +66,26 @@ class DatabaseHelper {
       version: 1,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
-      // 确保数据立即写入磁盘
       singleInstance: true,
     );
   }
 
-  /// 从资源复制预置数据库或创建新数据库
   Future<void> _copyOrCreateDatabase(String targetPath) async {
     try {
-      // 尝试从 assets 读取预置数据库
       final byteData = await rootBundle.load('assets/database/fundlink_template.db');
       final buffer = byteData.buffer.asUint8List();
       
-      // 写入到目标位置
       final file = File(targetPath);
       await file.create(recursive: true);
       await file.writeAsBytes(buffer);
-      
-      debugPrint('已从资源复制数据库模板');
     } catch (e) {
-      debugPrint('未找到预置数据库，将创建新数据库: $e');
-      // 如果资源中没有，就创建新的空数据库
       final db = await openDatabase(targetPath);
       await _createSchema(db, 1);
       await db.close();
     }
   }
 
-  /// 创建数据库表结构
   Future<void> _createSchema(Database db, int version) async {
-    // 持仓表
     await db.execute('''
       CREATE TABLE IF NOT EXISTS holdings (
         id TEXT PRIMARY KEY,
@@ -129,7 +109,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 交易记录表
     await db.execute('''
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
@@ -155,7 +134,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 日志表
     await db.execute('''
       CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,7 +143,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 用户设置表
     await db.execute('''
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -174,7 +151,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // 创建索引以提升查询性能
     await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_client ON holdings(client_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_fund ON holdings(fund_code)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_pinned ON holdings(is_pinned)');
@@ -182,20 +158,14 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(trade_date)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)');
     
-    // 新增复合索引，优化常用查询
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_fund ON transactions(client_id, fund_code)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, trade_date DESC)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)');
-
-    debugPrint('数据库 schema 创建完成 (version $version)');
   }
 
-/// 数据库升级处理
 Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
-  debugPrint('数据库升级: $oldVersion -> $newVersion');
 }
 
-  // ==================== 持仓操作 ====================
 
   Future<int> insertHolding(Map<String, dynamic> holding) async {
     final db = await database;
@@ -253,13 +223,10 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     );
   }
 
-  // ==================== 交易记录操作 ====================
 
   Future<int> insertTransaction(Map<String, dynamic> transaction) async {
     final db = await database;
-    debugPrint('[Database] 插入交易记录: id=${transaction['id']}, client=${transaction['client_name']}, fund=${transaction['fund_code']}');
     final result = await db.insert('transactions', transaction, conflictAlgorithm: ConflictAlgorithm.replace);
-    debugPrint('[Database] 插入结果: $result');
     return result;
   }
 
@@ -274,7 +241,6 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
       limit: limit,
       offset: offset,
     );
-    debugPrint('[Database] 查询交易记录: 共${result.length}条');
     return result;
   }
 
@@ -317,7 +283,6 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     );
   }
 
-  // ==================== 日志操作 ====================
 
   Future<int> insertLog(Map<String, dynamic> log) async {
     final db = await database;
@@ -343,7 +308,6 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     );
   }
 
-  // ==================== 设置操作 ====================
 
   Future<void> saveSetting(String key, String value) async {
     final db = await database;
@@ -370,7 +334,6 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
     return result.first['value'] as String?;
   }
 
-  /// 关闭数据库
   Future<void> close() async {
     final db = await database;
     await db.close();

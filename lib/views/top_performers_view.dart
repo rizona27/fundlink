@@ -5,13 +5,12 @@ import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
 import '../models/fund_holding.dart';
-import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
-import '../widgets/scroll_to_top_button.dart'; // ✅ 使用Overlay方式
+import '../widgets/scroll_to_top_button.dart';
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
@@ -92,7 +91,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _updateCachedItems();
       }
     };
-    // ✅ 显示返回顶部按钮
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScrollToTopButton.show(
         context: context,
@@ -123,7 +121,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         );
       }
     } catch (e) {
-      debugPrint('加载排序状态失败: $e');
     }
   }
 
@@ -133,7 +130,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
       await uiState.saveString(_keySortKey, _sortKey.toString());
       await uiState.saveString(_keySortOrder, _sortOrder.toString());
     } catch (e) {
-      debugPrint('保存排序状态失败: $e');
     }
   }
 
@@ -164,8 +160,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
+        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
         setState(() {
-          _scrollOffset = offset;
+          _scrollOffset = normalizedOffset;
         });
         if (_showFilter && offset > _filterAutoCollapseThreshold && _autoCollapseEnabled) {
           setState(() {
@@ -187,7 +184,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel(); 
     _scrollController.dispose();
-    // ✅ 隐藏返回顶部按钮
     ScrollToTopButton.hide(scrollController: _scrollController);
     _minAmountController.dispose();
     _maxAmountController.dispose();
@@ -403,7 +399,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onSortKeyChanged(SortKey key) async {
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         if (_sortKey == key) {
           _sortOrder = _sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
@@ -421,7 +417,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onSortOrderChanged(SortOrder order) async {
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _sortOrder = order;
       });
@@ -530,7 +526,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
     return GestureDetector(
       onTap: () {
-        // ✅ 点击外部时收起键盘
         FocusScope.of(context).unfocus();
       },
       behavior: HitTestBehavior.translucent,
@@ -644,7 +639,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           ),
         ),
       ),
-      ),  // ✅ GestureDetector 结束
+      ),
     );
   }
 
@@ -767,7 +762,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   fontSize: 12,
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),  // ✅ 允许正负小数
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                 inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 
@@ -804,7 +799,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                   fontSize: 12,
                   color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),  // ✅ 允许正负小数
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                 inputFormatters: [AmountInputFormatter()],
                 onChanged: (_) => _scheduleFilterApply(),
                 onTap: () => _resetFilterAutoCollapseTimer(), 

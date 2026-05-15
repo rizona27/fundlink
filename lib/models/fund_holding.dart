@@ -172,7 +172,6 @@ class FundHolding {
     );
   }
 
-  /// 转换为 SQLite Map（用于数据库存储）
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -196,7 +195,6 @@ class FundHolding {
     };
   }
 
-  /// 从 SQLite Map 创建对象（用于数据库读取）
   factory FundHolding.fromMap(Map<String, dynamic> map) {
     return FundHolding(
       id: map['id'] as String,
@@ -258,7 +256,6 @@ class FundHolding {
     double totalCost = 0;
     
     for (final tx in transactions) {
-      // ✅ 新增：只计算已确认的交易
       if (tx.isPending) continue;
       
       if (tx.isBuy) {

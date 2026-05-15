@@ -2,10 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart' show Colors, Divider;
 import '../services/data_manager.dart';
-import '../services/ui_state_service.dart';  // ✅ 使用 SQLite 存储 UI 状态
+import '../services/ui_state_service.dart';
 import '../models/log_entry.dart';
 import '../widgets/theme_switch.dart';
-import '../utils/animation_config.dart';  // ✅ 统一动画配置
+import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import 'manage_holdings_view.dart';
 import 'log_view.dart';
@@ -28,12 +28,11 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   late DataManager _dataManager;
   Brightness? _lastBrightness;
   Timer? _animationTimer;
-  double _backgroundOpacity = 1.0; // 背景透明度
+  double _backgroundOpacity = 1.0;
   
-  // ✅ 修复：添加 section 展开/折叠状态
-  bool _isHoldingsExpanded = true;  // 数据管理默认展开
-  bool _isGeneralExpanded = true;   // 基础配置默认展开
-  bool _isAboutExpanded = false;    // 关于默认折叠
+  bool _isHoldingsExpanded = true;
+  bool _isGeneralExpanded = true;
+  bool _isAboutExpanded = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -46,13 +45,11 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _dataManager = DataManagerProvider.of(context);
         _lastBrightness = CupertinoTheme.brightnessOf(context);
         
-        // ✅ 修复：加载 section 展开/折叠状态
         await _loadSectionStates();
       }
     });
   }
   
-  // ✅ 修复：加载 section 状态（使用 SQLite）
   Future<void> _loadSectionStates() async {
     final uiState = UIStateService();
     if (mounted) {
@@ -68,7 +65,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     }
   }
   
-  // ✅ 修复：保存 section 状态（使用 SQLite）
   void _saveSectionState(String key, bool value) {
     UIStateService().saveBool(key, value);
   }
@@ -82,12 +78,10 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     if (_lastBrightness != null && currentBrightness != _lastBrightness) {
       _lastBrightness = currentBrightness;
       
-      // 背景淡出再淡入，文字颜色自动跟随主题变化
       setState(() {
         _backgroundOpacity = 0.0;
       });
       
-      // 主题动画完成后立即淡入背景
       _animationTimer?.cancel();
       _animationTimer = Timer(AnimationConfig.durationSlow, () {
         if (mounted) {
@@ -112,11 +106,11 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     return Container(
-      color: backgroundColor, // 底层：固定主题色，避免闪烁
+      color: backgroundColor,
       child: AnimatedContainer(
         duration: AnimationConfig.durationSlow,
         curve: AnimationConfig.curveEaseInOutCubic,
-        color: backgroundColor.withOpacity(_backgroundOpacity), // 上层：透明度控制淡入淡出
+        color: backgroundColor.withOpacity(_backgroundOpacity),
         child: SafeArea(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -160,7 +154,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.togglePrivacyMode();
-            if (mounted) setState(() {});  // ✅ 添加 mounted 检查
+            if (mounted) setState(() {});
           },
         ),
         _buildDivider(isDarkMode),
@@ -172,7 +166,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.setShowHoldersOnSummaryCard(value);
-            if (mounted) setState(() {});  // ✅ 添加 mounted 检查
+            if (mounted) setState(() {});
           },
         ),
         _buildDivider(isDarkMode),
@@ -233,7 +227,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           },
         ),
         _buildDivider(isDarkMode),
-        // ✅ 修复：添加数据迁移子菜单
         _buildMenuItem(
           icon: CupertinoIcons.cloud_download,
           title: '导入数据',
@@ -260,7 +253,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           },
         ),
         _buildDivider(isDarkMode),
-        // ✅ 修复：添加映射索引菜单
         _buildMenuItem(
           icon: CupertinoIcons.book,
           title: '映射索引',
@@ -302,10 +294,10 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
           title: '版本信息',
-          subtitle: '', // 清空subtitle，我们将自定义显示
+          subtitle: '',
           isDarkMode: isDarkMode,
-          trailing: null, // 不使用trailing
-          customSubtitle: _buildVersionWithBadge(isDarkMode), // 使用自定义subtitle
+          trailing: null,
+          customSubtitle: _buildVersionWithBadge(isDarkMode),
           onTap: () {
             Navigator.push(
               context,
@@ -369,7 +361,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       ),
       child: Column(
         children: [
-          // ✅ 修复：添加点击区域和三角图标
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             onPressed: onToggle,
@@ -403,7 +394,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                     ),
                   ),
                 ),
-                // ✅ 修复：添加三角图标
                 AnimatedRotation(
                   turns: isExpanded ? 0.5 : 0,
                   duration: AnimationConfig.durationMedium,
@@ -419,7 +409,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               ],
             ),
           ),
-          // ✅ 添加展开/折叠动画
           AnimatedSize(
             duration: AnimationConfig.durationMedium,
             curve: AnimationConfig.curveEaseInOutCubic,
@@ -472,7 +461,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     required VoidCallback onTap,
     bool isDestructive = false,
     Widget? trailing,
-    Widget? customSubtitle, // 自定义subtitle widget
+    Widget? customSubtitle,
   }) {
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -671,10 +660,9 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             ),
           ),
           const SizedBox(width: 12),
-          // ✅ 修复：使用 ConstrainedBox 限制最大宽度，避免无限宽度错误
           ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.4, // 最多占据屏幕宽度的40%
+              maxWidth: MediaQuery.of(context).size.width * 0.4,
             ),
             child: ThemeSwitch(
               initialMode: _dataManager.themeMode,
@@ -716,12 +704,10 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     );
   }
 
-  /// 构建版本徽章（NEW 或 Latest）
   Widget _buildVersionBadge(bool isDarkMode) {
     final versionInfo = _dataManager.latestVersionInfo;
     
     if (versionInfo == null) {
-      // 还在检查中或未获取到信息，不显示徽章
       return const SizedBox.shrink();
     }
     
@@ -744,7 +730,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     );
   }
 
-  /// 构建带徽章的版本号（内联显示）
   Widget _buildVersionWithBadge(bool isDarkMode) {
     final versionInfo = _dataManager.latestVersionInfo;
     
@@ -838,7 +823,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                       ],
                     ),
                   );
-                  if (mounted) setState(() {});  // ✅ 添加 mounted 检查
+                  if (mounted) setState(() {});
                 }
               } catch (e) {
                 await _dataManager.addLog('清空持仓失败: $e', type: LogType.error);

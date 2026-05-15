@@ -1,10 +1,9 @@
-/// 客户号与客户名映射关系模型
 class ClientMapping {
-  final String id;              // 唯一标识
-  final String clientId;        // 客户号
-  final String clientName;      // 客户名
-  final DateTime createdAt;     // 创建时间
-  final DateTime updatedAt;     // 更新时间
+  final String id;
+  final String clientId;
+  final String clientName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
   ClientMapping({
     required this.id,
@@ -15,7 +14,6 @@ class ClientMapping {
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
-  /// 从 JSON 创建
   factory ClientMapping.fromJson(Map<String, dynamic> json) {
     return ClientMapping(
       id: json['id'] as String,
@@ -26,7 +24,6 @@ class ClientMapping {
     );
   }
 
-  /// 转换为 JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -37,7 +34,6 @@ class ClientMapping {
     };
   }
 
-  /// 复制并更新
   ClientMapping copyWith({
     String? id,
     String? clientId,

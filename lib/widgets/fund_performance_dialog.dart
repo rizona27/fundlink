@@ -3,7 +3,6 @@ import '../services/fund_service.dart';
 import '../services/data_manager.dart';
 import '../models/net_worth_point.dart';
 import '../models/fund_holding.dart';
-import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 
 class FundPerformanceDialog extends StatefulWidget {
@@ -59,7 +58,7 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
   }
 
   Future<void> _loadPerformanceData() async {
-    if (mounted) setState(() {  // ✅ 添加 mounted 检查
+    if (mounted) setState(() {
       _loading = true;
       _error = null;
     });
@@ -149,11 +148,11 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         }
       }
       
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _error = e.toString();
         _loading = false;
       });

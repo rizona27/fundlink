@@ -13,7 +13,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
-import '../widgets/scroll_to_top_button.dart'; // ✅ 使用Overlay方式
+import '../widgets/scroll_to_top_button.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import '../constants/app_constants.dart';
@@ -50,10 +50,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   DateTime? _lastAutoFixTime;
   Timer? _debounceTimer;
   Timer? _scrollThrottleTimer;
-  late AnimationController _scrollAnimationController;
   final ScrollController _scrollController = ScrollController();
   
-  // ✅ 用于控制置顶区的淡入淡出动画
   bool _showPinnedSection = false;
 
   @override
@@ -64,14 +62,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   void initState() {
     super.initState();
-    _scrollAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
-      vsync: this,
-    );
     _loadState(); 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
-      // ✅ 显示返回顶部按钮
       ScrollToTopButton.show(
         context: context,
         scrollController: _scrollController,
@@ -89,7 +82,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
         _isPinnedSectionExpanded = pinnedExpanded;
       }
     } catch (e) {
-      debugPrint('加载UI状态失败: $e');
     }
   }
 
@@ -98,7 +90,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       final uiState = UIStateService();
       await uiState.saveBool(_keyPinnedSectionExpanded, _isPinnedSectionExpanded);
     } catch (e) {
-      debugPrint('保存UI状态失败: $e');
     }
   }
 
@@ -113,21 +104,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     await Future.delayed(AnimationConfig.durationVerySlow);
     if (!mounted) return;
   
-    // ✅ 详细诊断：检查每个基金的名称
-    debugPrint('[ClientView] 🔍 开始检查基金名称...');
     final garbledHoldings = <FundHolding>[];
     for (final holding in _dataManager.holdings) {
       final name = holding.fundName;
       final hasReplacementChar = name.contains('\ufffd');
-      // ✅ 修复：移除错误的空字符串检测（''.contains('') 永远为true）
-      // 只检测替换字符�（Unicode replacement character）
       
       if (hasReplacementChar) {
         garbledHoldings.add(holding);
-        debugPrint('[ClientView] ⚠️ 发现乱码基金: ${holding.fundCode} - "${holding.fundName}"');
-        debugPrint('[ClientView]    - 包含替换字符(): true');
-        debugPrint('[ClientView]    - 名称长度: ${name.length}');
-        debugPrint('[ClientView]    - 名称字节: ${name.codeUnits}');
       }
     }
     
@@ -135,12 +118,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       _autoFixTriggered = true;
       _lastAutoFixTime = DateTime.now();
       try {
-        debugPrint('[ClientView] 🛠️ 发现 ${garbledHoldings.length} 个基金名称乱码，开始修复...');
         
         for (final holding in garbledHoldings) {
           if (!mounted) break;
           try {
-            debugPrint('[ClientView] 🔄 正在修复基金 ${holding.fundCode}...');
             final fundInfo = await _fundService.fetchFundInfo(holding.fundCode);
             if (fundInfo['isValid'] == true && mounted) {
               final index = _dataManager.holdings.indexWhere((h) => h.id == holding.id);
@@ -150,13 +131,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   isValid: true,
                 );
                 _dataManager.updateHolding(updated);
-                debugPrint('[ClientView] ✅ 修复成功: ${holding.fundCode} - ${updated.fundName}');
               }
             } else {
-              debugPrint('[ClientView] ❌ 修复失败: ${holding.fundCode} - ${fundInfo['error']}');
             }
           } catch (e) {
-            debugPrint('[ClientView] ❌ 修复基金 ${holding.fundCode} 异常: $e');
           }
         }
         
@@ -165,11 +143,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
           context.showToast('已修复 ${garbledHoldings.length} 个基金名称');
         }
       } catch (e) {
-        debugPrint('[ClientView] ❌ 自动修复基金名称失败: $e');
       }
     } else if (mounted) {
-      // ✅ 没有乱码，记录日志但不刷新
-      debugPrint('[ClientView] ✅ 所有基金名称正常，无需修复（共${_dataManager.holdings.length}个基金）');
     }
   }
 
@@ -178,10 +153,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       return;
     }
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
-      if (mounted && _scrollOffset != offset) {
-        setState(() {
-          _scrollOffset = offset;
-        });
+      if (mounted) {
+        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+        if (_scrollOffset != normalizedOffset) {
+          setState(() {
+            _scrollOffset = normalizedOffset;
+          });
+        }
       }
       _scrollThrottleTimer = null;
     });
@@ -190,15 +168,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   void dispose() {
     _cancelAllTimers();
-    _scrollAnimationController.dispose();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
-    // ✅ 隐藏返回顶部按钮
     ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 
-  /// 统一清理所有 Timer，防止内存泄漏
   void _cancelAllTimers() {
     _scrollThrottleTimer?.cancel();
     _scrollThrottleTimer = null;
@@ -213,7 +188,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _fundService = FundService(_dataManager);
     _dataManager.addListener(_onDataManagerChanged);
     
-    // ✅ 初始化置顶区显示状态
     final hasPinned = _filteredPinnedHoldings.isNotEmpty;
     if (hasPinned) {
       _showPinnedSection = true;
@@ -228,13 +202,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   void _onDataManagerChanged() {
     if (mounted) {
-      // ✅ 更新置顶区显示状态
       final hasPinned = _filteredPinnedHoldings.isNotEmpty;
       if (hasPinned && !_showPinnedSection) {
-        // 有置顶基金，立即显示（淡入）
         setState(() => _showPinnedSection = true);
       } else if (!hasPinned && _showPinnedSection) {
-        // 没有置顶基金，延迟隐藏（淡出）
         Future.delayed(AnimationConfig.durationFade, () {
           if (mounted && _filteredPinnedHoldings.isEmpty) {
             setState(() => _showPinnedSection = false);
@@ -248,35 +219,29 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   List<FundHolding> get _filteredHoldings {
     if (_searchText.isEmpty) {
-      debugPrint('[ClientView] 📊 No search text, returning all ${_dataManager.holdings.length} holdings');
       return _dataManager.holdings;
     }
     
-    debugPrint('[ClientView] 🔎 Filtering with searchText: "$_searchText"');
     final filtered = _dataManager.holdings.where((h) {
       final match = h.clientName.contains(_searchText) ||
           h.clientId.contains(_searchText) ||
           h.fundCode.contains(_searchText) ||
           h.fundName.contains(_searchText);
       if (match) {
-        debugPrint('[ClientView]    ✅ Matched: ${h.fundCode} - ${h.fundName} (${h.clientName})');
       }
       return match;
     }).toList();
     
-    debugPrint('[ClientView] 📊 Filtered result: ${filtered.length} holdings');
     return filtered;
   }
 
   List<FundHolding> get _filteredPinnedHoldings {
-    // ✅ 修复：搜索时不显示置顶区，只在客户卡片内显示搜索结果
     if (_searchText.isNotEmpty) return [];
     return _filteredHoldings.where((h) => h.isPinned).toList();
   }
 
   List<_ClientGroup> get _clientGroups {
     final map = <String, _ClientGroup>{};
-    // ✅ 修复：置顶的持仓仍然保留在客户列表中，不跳过
     for (final holding in _filteredHoldings) {
       final key = holding.clientId.isNotEmpty ? holding.clientId : holding.clientName;
 
@@ -293,11 +258,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
     var groups = map.values.toList();
     groups.sort((a, b) {
-      // ✅ 修复：直接从分组的holdings中获取客户名，确保排序稳定
       final originalNameA = a.holdings.first.clientName;
       final originalNameB = b.holdings.first.clientName;
       
-      // ✅ 修复：比较完整拼音而非仅首字母，确保同首字母客户正确排序
       String fullPinyinA = '';
       if (originalNameA.isNotEmpty) {
         try {
@@ -478,19 +441,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                 }
                     : null,
                 onSearchChanged: (text) { 
-                        debugPrint('[ClientView] 🔍 onSearchChanged called: "$text"');
-                        debugPrint('[ClientView]    - Text length: ${text.length}');
-                        debugPrint('[ClientView]    - Is empty: ${text.isEmpty}');
                         if (mounted) {
                           setState(() => _searchText = text);
-                          debugPrint('[ClientView]    - _searchText updated to: "$_searchText"');
                         }
                       },
                 onSearchClear: () { 
-                        debugPrint('[ClientView] 🗑️ onSearchClear called');
                         if (mounted) {
                           setState(() => _searchText = '');
-                          debugPrint('[ClientView]    - _searchText cleared');
                         }
                       },
                 backgroundColor: Colors.transparent,
@@ -523,20 +480,19 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                     : ListView.builder(
                   controller: _scrollController,
                   key: ValueKey('list_${_searchText}'),
-                  cacheExtent: 500,  // ✅ 优化滚动性能
+                  cacheExtent: 500,
                   padding: EdgeInsets.only(
                     left: 12,
                     right: 12,
                     top: 8,
                     bottom: totalBottomPadding,
                   ),
-                  itemCount: 1 + groups.length,  // ✅ 始终包含置顶区，通过 AnimatedSize 控制高度
+                  itemCount: 1 + groups.length,
                   itemBuilder: (context, index) {
-                    // 第一项始终是置顶区域
                     if (index == 0) {
                       return AnimatedSize(
-                        duration: const Duration(milliseconds: 500),  // ✅ 更柔和的动画时长
-                        curve: Curves.easeInOutCubic,  // ✅ 更柔和的缓动曲线
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeInOutCubic,
                         alignment: Alignment.topCenter,
                         child: Opacity(
                           opacity: _showPinnedSection ? 1.0 : 0.0,
@@ -594,13 +550,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                           const SizedBox(height: 16),
                         ],
                       )
-                              : const SizedBox.shrink(),  // ✅ opacity为0时不渲染内容
-                        ),  // Opacity
-                      );  // AnimatedSize
+                              : const SizedBox.shrink(),
+                        ),
+                      );
                     }
                     
-                    // 否则渲染客户分组
-                    final groupIndex = index - 1;  // ✅ 置顶区始终占据第一项
+                    final groupIndex = index - 1;
                     if (groupIndex >= 0 && groupIndex < groups.length) {
                       final isLastGroup = groupIndex == groups.length - 1;
                       return RepaintBoundary(
@@ -751,7 +706,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
           isExpanded: isExpanded,
           child: Container(
             margin: const EdgeInsets.only(left: 16, top: 8), 
-            child: _buildFundCards(group.holdings),  // ✅ 修复：直接使用返回的Widget
+            child: _buildFundCards(group.holdings),
           ),
         ),
       ],

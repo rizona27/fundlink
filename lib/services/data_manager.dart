@@ -31,37 +31,6 @@ extension ThemeModeDisplayName on ThemeMode {
   }
 }
 
-/// 数据管理器 - 应用核心数据服务
-/// 
-/// 负责管理所有业务数据，包括：
-/// - 持仓管理（增删改查）
-/// - 交易记录管理
-/// - 日志系统
-/// - 缓存管理（智能缓存 + 自动清理）
-/// - 用户设置（隐私模式、主题等）
-/// - 估值数据刷新
-/// 
-/// 特性：
-/// - 跨平台支持（Web 使用 SharedPreferences，移动端/桌面端使用 SQLite）
-/// - 智能缓存机制（TTL + LRU）
-/// - 自动内存监控和缓存清理
-/// - 响应式数据更新（ChangeNotifier）
-/// 
-/// 使用示例：
-/// ```dart
-/// final dataManager = DataManager();
-/// 
-/// // 监听数据变化
-/// dataManager.addListener(() {
-///   print('数据已更新');
-/// });
-/// 
-/// // 添加持仓
-/// await dataManager.addHolding(holding);
-/// 
-/// // 获取持仓列表
-/// final holdings = dataManager.holdings;
-/// ```
 class DataManager extends ChangeNotifier {
   final DatabaseRepository? _repository = kIsWeb ? null : DatabaseRepository();
 
@@ -81,15 +50,10 @@ class DataManager extends ChangeNotifier {
   bool _isValuationRefreshInProgress = false;
   Completer<void>? _currentValuationRefreshCompleter;
 
-  bool _shouldNotifyListeners = true;
-  
-  // 防止已销毁后仍执行操作
   bool _disposed = false;
   
-  // ✅ 高优先级修复：防止 autoConfirmPendingTransactions 并发执行
   bool _isAutoConfirming = false;
   
-  // 使用智能缓存
   final SmartCache<String, ProfitResult> _profitCache = SmartCache(
     maxSize: 50,
     ttl: const Duration(minutes: 30),
@@ -100,20 +64,16 @@ class DataManager extends ChangeNotifier {
     ttl: const Duration(hours: 1),
   );
   
-  // 内存监控和自动清理
   Timer? _cacheCleanupTimer;
   static const int memoryWarningThresholdMB = 200;
   static const int memoryCriticalThresholdMB = 400;
   
-  // 版本信息
   VersionInfo? _latestVersionInfo;
   
-  // Helper to clear related caches automatically
   void _clearRelatedCaches(String clientId, String fundCode) {
     final cacheKey = '${clientId}_$fundCode';
     _transactionHistoryCache.remove(cacheKey);
     
-    // Clear profit cache for this specific holding
     _profitCache.removeWhere((key, value) => key.startsWith('${clientId}_$fundCode'));
   }
 
@@ -132,67 +92,44 @@ class DataManager extends ChangeNotifier {
   FundInfoCache? getFundInfoCache(String fundCode) {
     final cached = _fundInfoCache[fundCode];
     if (cached == null) {
-      debugPrint('[DataManager] ❌ 基金 $fundCode 无缓存数据');
       return null;
     }
     
     final now = DateTime.now();
     
-    // ✅ 优化：检查缓存是否过期（100年，近似永久）
     final cacheAgeDays = now.difference(cached.cacheTime).inDays;
     if (cacheAgeDays > AppConstants.fundInfoCacheValidDays) {
-      debugPrint('[DataManager] ❌ 基金 $fundCode 缓存已过期 (缓存时间: ${cached.cacheTime}, 距今${cacheAgeDays}天)');
       _fundInfoCache.remove(fundCode);
       return null;
     }
     
-    // ✅ 优化：检查净值日期是否是最近的有效数据
-    // 不再要求必须是"今天"，因为周末/节假日/闭市后净值不会更新
-    // 只要净值日期不早于7天前，就认为是有效缓存
     final navDateOnly = DateTime(cached.navDate.year, cached.navDate.month, cached.navDate.day);
     final todayOnly = DateTime(now.year, now.month, now.day);
     final daysDiff = todayOnly.difference(navDateOnly).inDays;
     
     if (daysDiff < 0) {
-      // 净值日期在未来（异常情况），缓存失效
-      debugPrint('[DataManager] ❌ 基金 $fundCode 净值日期异常（未来日期），缓存失效');
       _fundInfoCache.remove(fundCode);
       return null;
     }
     
     if (daysDiff > 7) {
-      // 净值日期超过7天，数据过旧，需要更新
-      final navDateStr = '${cached.navDate.year}-${cached.navDate.month.toString().padLeft(2, '0')}-${cached.navDate.day.toString().padLeft(2, '0')}';
-      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      debugPrint('[DataManager] ⚠️ 基金 $fundCode 净值日期($navDateStr)距今${daysDiff}天，缓存过旧，需要更新');
       _fundInfoCache.remove(fundCode);
       return null;
     }
-    
-    // ✅ 新增：检查收益率是否需要更新（1天过期）
+        
     final hasReturns = cached.navReturn1m != null || cached.navReturn3m != null || 
                       cached.navReturn6m != null || cached.navReturn1y != null;
     final returnCacheAge = now.difference(cached.cacheTime).inDays;
     final returnsNeedRefresh = hasReturns && returnCacheAge >= AppConstants.fundReturnCacheValidDays;
     
     if (returnsNeedRefresh) {
-      debugPrint('[DataManager] 🔄 基金 $fundCode 收益率数据已过期(${returnCacheAge}天)，将重新获取');
-      // 注意：这里不移除缓存，而是返回部分数据，让调用方决定是否刷新
-      // 保留基本信息（名称、代码、净值），但标记收益率需要更新
     }
     
-    final navDateStr = '${cached.navDate.year}-${cached.navDate.month.toString().padLeft(2, '0')}-${cached.navDate.day.toString().padLeft(2, '0')}';
-    debugPrint('[DataManager] 📦 [缓存命中] 基金 $fundCode | 从本地缓存读取净值: ${cached.currentNav} (净值日期: $navDateStr, ${daysDiff}天前)');
-    if (returnsNeedRefresh) {
-      debugPrint('[DataManager] ⚠️ 收益率数据需要更新');
-    }
     return cached;
   }
 
   void saveFundInfoCache(FundInfoCache fundInfo) {
     _fundInfoCache[fundInfo.fundCode] = fundInfo;
-    final navDateStr = '${fundInfo.navDate.year}-${fundInfo.navDate.month.toString().padLeft(2, '0')}-${fundInfo.navDate.day.toString().padLeft(2, '0')}';
-    debugPrint('[DataManager] 💾 saveFundInfoCache被调用: ${fundInfo.fundCode} - ${fundInfo.fundName} | 净值: ${fundInfo.currentNav} ($navDateStr)');
     saveFundInfoCacheToPrefs();
   }
 
@@ -205,175 +142,124 @@ class DataManager extends ChangeNotifier {
   }
 
   DataManager() {
-    debugPrint('[DataManager] 🏗️ DataManager构造函数被调用');
     loadData();
     _startCacheCleanup();
     _setupLifecycleObserver();
-    debugPrint('[DataManager] ✅ DataManager构造函数执行完成');
   }
   
-  /// 设置应用生命周期监听
   void _setupLifecycleObserver() {
     if (_disposed) return;
     
-    // 监听应用生命周期事件
     WidgetsBinding.instance.addObserver(_AppLifecycleObserver(this));
   }
   
-  /// 启动定期缓存清理
   void _startCacheCleanup() {
-    if (_disposed) return;  // ✅ 防止已销毁后仍启动
+    if (_disposed) return;
     
-    // 每 5 分钟清理一次过期缓存
     _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (!_disposed) {  // ✅ 每次执行前检查
+      if (!_disposed) {
         _cleanupExpiredCaches();
       }
     });
   }
   
-  /// 清理过期缓存
   Future<void> _cleanupExpiredCaches() async {
-    if (_disposed) return;  // ✅ 防止已销毁后仍执行
+    if (_disposed) return;
     
     try {
-      // 清理收益缓存
       final profitCleaned = _profitCache.cleanup();
       if (profitCleaned > 0) {
-        debugPrint('清理收益缓存: $profitCleaned 条');
       }
       
-      // 清理交易历史缓存
       final transactionCleaned = _transactionHistoryCache.cleanup();
       if (transactionCleaned > 0) {
-        debugPrint('清理交易历史缓存: $transactionCleaned 条');
       }
       
-      // 检查内存使用情况，如果超过阈值则主动清理
       await _checkMemoryAndCleanup();
     } catch (e) {
-      debugPrint('缓存清理异常: $e');
     }
   }
   
-  /// 检查内存并主动清理
   Future<void> _checkMemoryAndCleanup() async {
     try {
-      // 这里可以集成 MemoryMonitor 来获取真实内存数据
-      // 简化版本：当缓存数量超过一定阈值时主动清理
       if (_profitCache.size > 40 || _transactionHistoryCache.size > 25) {
-        debugPrint('缓存数量较多，执行主动清理');
         _profitCache.clear();
         _transactionHistoryCache.clear();
         await addLog('内存优化：已清理缓存', type: LogType.info);
       }
     } catch (e) {
-      debugPrint('内存检查异常: $e');
     }
   }
   
-  /// 手动触发缓存清理（供外部调用）
   Future<void> forceCleanupCaches() async {
-    if (_disposed) return;  // ✅ 防止已销毁后仍执行
+    if (_disposed) return;
     
     _profitCache.clear();
     _transactionHistoryCache.clear();
     await addLog('手动清理所有缓存', type: LogType.info);
   }
   
-  /// 释放资源（在应用退出时调用）
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     
-    // 移除生命周期观察者
     WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(this));
     
-    // 取消定时器
     _cacheCleanupTimer?.cancel();
     _cacheCleanupTimer = null;
     
-    // 清理所有缓存
     _profitCache.clear();
     _transactionHistoryCache.clear();
     
     super.dispose();
   }
   
-  /// 应用进入后台时保存数据
   Future<void> saveOnBackground() async {
     if (_disposed) return;
     
-    debugPrint('应用进入后台，保存数据...');
     try {
       await saveData();
-      // ✅ 关键修复：同时保存所有缓存到数据库
       await saveFundInfoCacheToPrefs();
       await saveValuationCache();
       await saveVersionInfoToPrefs();
       await addLog('应用进入后台，数据已保存', type: LogType.info);
     } catch (e) {
-      debugPrint('后台保存数据失败: $e');
     }
   }
   
-  /// 应用恢复时重新加载数据
   Future<void> reloadOnResume() async {
     if (_disposed) return;
     
-    debugPrint('应用恢复，跳过重新加载（内存数据保持最新）');
-    // ✅ 关键修复：不从数据库重新加载，保持内存中的最新数据
-    // 因为导入/新增时已经写入SQLite并flush，内存数据是最新的
-    // 重新加载会导致未完全同步的数据被空数据覆盖
   }
 
   Future<void> loadData() async {
-    debugPrint('[DataManager] 🚀 loadData被调用，开始加载数据...');
     try {
       if (kIsWeb) {
-        debugPrint('[DataManager] 🔍 Web平台，从SharedPreferences加载');
         await _loadDataFromPrefs();
       } else {
-        debugPrint('[DataManager] 🔍 非Web平台，从SQLite加载');
         await _loadDataFromSQLite();
       }
 
-      debugPrint('[DataManager] 🔍 开始加载估值缓存...');
       await loadValuationCache();
       
-      debugPrint('[DataManager] 🔍 开始加载基金信息缓存...');
       await loadFundInfoCache();
       
-      debugPrint('[DataManager] 🔍 开始加载版本信息缓存...');
-      await loadVersionInfo(); // ✅ 加载版本信息缓存
+      await loadVersionInfo();
       
-      // ✅ 新增：输出缓存加载统计
-      debugPrint('[DataManager] ✅ 所有数据加载完成:');
-      debugPrint('[DataManager]   - 持仓数: ${_holdings.length}');
-      debugPrint('[DataManager]   - 交易数: ${_transactions.length}');
-      debugPrint('[DataManager]   - 日志数: ${_logs.length}');
-      debugPrint('[DataManager]   - 基金信息缓存: ${_fundInfoCache.length} 个');
-      debugPrint('[DataManager]   - 估值缓存: ${_valuationCache.length} 个');
       
       notifyListeners();
-    } catch (e, stackTrace) {
-      debugPrint('[DataManager] ❌ 数据加载异常: $e');
-      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+    } catch (e) {
       await addLog('数据加载异常: $e', type: LogType.error);
     }
   }
   
   Future<void> _loadDataFromSQLite() async {
-    debugPrint('[DataManager] 开始从 SQLite 加载数据...');
     _holdings = await _repository!.getAllHoldings();
-    debugPrint('[DataManager] 加载持仓: ${_holdings.length}条');
     
     _transactions = await _repository!.getAllTransactions();
-    debugPrint('[DataManager] 加载交易: ${_transactions.length}条');
     
     _logs = await _repository!.getLogs(limit: AppConstants.maxLogEntries);
-    debugPrint('[DataManager] 加载日志: ${_logs.length}条');
     
     final privacyModeStr = await _repository!.getSetting('privacy_mode');
     if (privacyModeStr != null) {
@@ -392,7 +278,6 @@ class DataManager extends ChangeNotifier {
       _showHoldersOnSummaryCard = showHoldersStr == 'true';
     }
     
-    debugPrint('[DataManager] SQLite 数据加载完成');
   }
   
   Future<void> _loadDataFromPrefs() async {
@@ -455,40 +340,25 @@ class DataManager extends ChangeNotifier {
 
   Future<void> saveData() async {
     try {
-      debugPrint('[DataManager] saveData 开始...');
       if (kIsWeb) {
         await _saveDataToPrefs();
-        debugPrint('[DataManager] Web 平台数据已保存');
       } else {
-        // ✅ 修复：非 Web 平台需要同时保存数据和设置
-        // 数据已通过 insert/update 写入 SQLite，这里确保设置也同步保存
         await _saveSettingsToPrefs();
-        debugPrint('[DataManager] 设置已保存');
         
-        // ✅ 关键修复：强制刷新数据库，确保数据立即写入磁盘
-        // iOS 可能在应用退出时杀死进程，导致 SQLite 缓冲数据丢失
-        // 必须等待 flush 完成，不能异步执行
         await _repository!.flush();
-        debugPrint('[DataManager] 数据库已刷新');
       }
       notifyListeners();
-      debugPrint('[DataManager] saveData 完成');
-    } catch (e, stackTrace) {
-      debugPrint('[DataManager] ❌ 保存数据失败: $e');
-      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+    } catch (e) {
     }
   }
   
-  /// 保存设置到 SQLite（非 Web 平台）
   Future<void> _saveSettingsToPrefs() async {
     if (kIsWeb) {
-      // Web 平台继续使用 SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(AppConstants.keyPrivacyMode, _isPrivacyMode);
       await prefs.setString(AppConstants.keyThemeMode, _themeModeToString(_themeMode));
       await prefs.setBool(AppConstants.keyShowHoldersOnSummaryCard, _showHoldersOnSummaryCard);
     } else {
-      // ✅ 修复：非 Web 平台使用 SQLite 存储设置
       await _repository!.saveSetting('privacy_mode', _isPrivacyMode.toString());
       await _repository!.saveSetting('theme_mode', _themeModeToString(_themeMode));
       await _repository!.saveSetting('show_holders_on_summary_card', _showHoldersOnSummaryCard.toString());
@@ -521,104 +391,78 @@ class DataManager extends ChangeNotifier {
 
   Future<void> loadValuationCache() async {
     if (kIsWeb) {
-      // Web 平台使用内存存储
       _valuationCache = {};
       return;
     }
     
-    // ✅ 关键修复：从 SQLite 加载估值缓存
     try {
       final cacheStr = await _repository!.getSetting('valuation_cache');
       if (cacheStr != null && cacheStr.isNotEmpty) {
         final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
         _valuationCache = cacheMap.map((key, value) => MapEntry(key, value as Map<String, dynamic>));
-        debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取 ${_valuationCache.length} 条估值数据');
       } else {
         _valuationCache = {};
       }
     } catch (e) {
-      debugPrint('[DataManager] 加载估值缓存失败: $e');
       _valuationCache = {};
     }
   }
 
   Future<void> saveValuationCache() async {
     if (kIsWeb) {
-      // Web 平台使用内存存储，无需保存
       return;
     }
     
-    // ✅ 关键修复：保存估值缓存到 SQLite
     try {
       final cacheStr = jsonEncode(_valuationCache);
       await _repository!.saveSetting('valuation_cache', cacheStr);
-      debugPrint('[DataManager] 💾 [缓存保存] 已保存 ${_valuationCache.length} 条估值数据到数据库');
     } catch (e) {
-      debugPrint('[DataManager] 保存估值缓存失败: $e');
     }
   }
 
   Future<void> loadFundInfoCache() async {
-    debugPrint('[DataManager] 🔍 loadFundInfoCache被调用');
     
     if (kIsWeb) {
-      // Web 平台使用内存存储
       _fundInfoCache = {};
-      debugPrint('[DataManager] Web平台，基金缓存为空');
       return;
     }
     
-    // ✅ 关键修复：从 SQLite 加载基金信息缓存
     try {
-      debugPrint('[DataManager] 🔍 开始从数据库读取fund_info_cache...');
       final cacheStr = await _repository!.getSetting('fund_info_cache');
       
       if (cacheStr == null) {
-        debugPrint('[DataManager] ⚠️ 数据库中fund_info_cache为null');
         _fundInfoCache = {};
         return;
       }
       
       if (cacheStr.isEmpty) {
-        debugPrint('[DataManager] ⚠️ 数据库中fund_info_cache为空字符串');
         _fundInfoCache = {};
         return;
       }
       
-      debugPrint('[DataManager] 🔍 读取到缓存数据，长度: ${cacheStr.length}字符');
       final Map<String, dynamic> cacheMap = jsonDecode(cacheStr);
-      debugPrint('[DataManager] 🔍 解析JSON成功，共有 ${cacheMap.length} 条记录');
       
       _fundInfoCache = cacheMap.map((key, value) {
         return MapEntry(key, FundInfoCache.fromJson(value));
       });
       
-      debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取 ${_fundInfoCache.length} 条基金信息');
-      // 输出每个基金的缓存信息
       for (final entry in _fundInfoCache.entries) {
         final navDateStr = '${entry.value.navDate.year}-${entry.value.navDate.month.toString().padLeft(2, '0')}-${entry.value.navDate.day.toString().padLeft(2, '0')}';
         final hasReturns = entry.value.navReturn1m != null || entry.value.navReturn3m != null || 
                           entry.value.navReturn6m != null || entry.value.navReturn1y != null;
-        debugPrint('[DataManager]   - ${entry.key}: ${entry.value.fundName} | 净值: ${entry.value.currentNav} ($navDateStr) | 收益率: ${hasReturns ? "有" : "无"}');
       }
-    } catch (e, stackTrace) {
-      debugPrint('[DataManager] ❌ 加载基金缓存失败: $e');
-      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+    } catch (e) {
       _fundInfoCache = {};
     }
   }
 
   Future<void> saveFundInfoCacheToPrefs() async {
     if (kIsWeb) {
-      // Web 平台使用内存存储，无需保存
-      debugPrint('[DataManager] Web平台，跳过保存基金缓存');
       return;
     }
     
-    // ✅ 关键修复：保存基金信息缓存到 SQLite
     try {
       if (_fundInfoCache.isEmpty) {
-        debugPrint('[DataManager] ⚠️ 基金缓存为空，跳过保存');
         return;
       }
       
@@ -626,21 +470,14 @@ class DataManager extends ChangeNotifier {
         return MapEntry(key, value.toJson());
       });
       final cacheStr = jsonEncode(cacheMap);
-      debugPrint('[DataManager] 💾 [缓存保存] 开始保存 ${_fundInfoCache.length} 条基金信息到数据库...');
       await _repository!.saveSetting('fund_info_cache', cacheStr);
-      debugPrint('[DataManager] ✅ [缓存保存] 成功保存 ${_fundInfoCache.length} 条基金信息到数据库');
       
-      // 验证保存是否成功
       final verifyStr = await _repository!.getSetting('fund_info_cache');
       if (verifyStr != null && verifyStr.isNotEmpty) {
         final verifyMap = jsonDecode(verifyStr);
-        debugPrint('[DataManager] 🔍 验证成功: 数据库中有 ${verifyMap.length} 条基金缓存');
       } else {
-        debugPrint('[DataManager] ❌ 验证失败: 数据库中无基金缓存数据!');
       }
-    } catch (e, stackTrace) {
-      debugPrint('[DataManager] ❌ 保存基金缓存失败: $e');
-      debugPrint('[DataManager] 堆栈跟踪: $stackTrace');
+    } catch (e) {
     }
   }
 
@@ -650,26 +487,22 @@ class DataManager extends ChangeNotifier {
     final cacheTime = DateTime.tryParse(cached['cacheTime'] ?? '');
     if (cacheTime == null) return null;
     
-    // ✅ 关键修复：检查是否超过1小时
     final now = DateTime.now();
     if (now.difference(cacheTime).inSeconds > AppConstants.valuationCacheValidSeconds) {
       return null;
     }
     
-    // ✅ 关键修复：检查是否闭市，闭市后不再更新
     final hour = now.hour;
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     final isTradingTime = (currentTime >= 9 * 60 + 30 && currentTime <= 11 * 60 + 30) ||
                           (currentTime >= 13 * 60 && currentTime <= 15 * 60);
     
-    // 如果是闭市时间且缓存数据是今天的，继续使用
     if (!isTradingTime) {
       final cachedDate = DateTime.parse(cached['cacheTime']);
       final todayOnly = DateTime(now.year, now.month, now.day);
       final cachedDateOnly = DateTime(cachedDate.year, cachedDate.month, cachedDate.day);
       if (cachedDateOnly.isAtSameMomentAs(todayOnly)) {
-        debugPrint('[DataManager] 📦 [缓存命中] 基金 $fundCode | 使用闭市缓存估值: ${cached['gsz']}');
         return {
           'gsz': cached['gsz'],
           'gszzl': cached['gszzl'],
@@ -723,15 +556,12 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 设置最新版本信息
   void setLatestVersionInfo(VersionInfo? versionInfo) {
     _latestVersionInfo = versionInfo;
-    // ✅ 关键修复：保存版本信息到数据库
     saveVersionInfoToPrefs();
     notifyListeners();
   }
   
-  /// 加载版本信息缓存
   Future<void> loadVersionInfo() async {
     if (kIsWeb) {
       return;
@@ -745,22 +575,17 @@ class DataManager extends ChangeNotifier {
         
         if (cachedTime != null) {
           final now = DateTime.now();
-          // 缓存有效期24小时
           if (now.difference(cachedTime).inHours < 24) {
             _latestVersionInfo = VersionInfo.fromJson(cacheMap['versionInfo']);
-            debugPrint('[DataManager] 📦 [缓存加载] 从数据库读取版本信息: ${_latestVersionInfo?.version}');
           } else {
-            debugPrint('[DataManager] ⚠️ 版本信息缓存已过期');
             _latestVersionInfo = null;
           }
         }
       }
     } catch (e) {
-      debugPrint('[DataManager] 加载版本信息失败: $e');
     }
   }
   
-  /// 保存版本信息到数据库
   Future<void> saveVersionInfoToPrefs() async {
     if (kIsWeb || _latestVersionInfo == null) {
       return;
@@ -773,9 +598,7 @@ class DataManager extends ChangeNotifier {
       };
       final cacheStr = jsonEncode(cacheMap);
       await _repository!.saveSetting('version_info_cache', cacheStr);
-      debugPrint('[DataManager] 💾 [缓存保存] 版本信息已保存到数据库');
     } catch (e) {
-      debugPrint('[DataManager] 保存版本信息失败: $e');
     }
   }
 
@@ -790,8 +613,6 @@ class DataManager extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('格式化估值时间失败 ($gztime): $e');
-      // 返回原始字符串
     }
     return gztime;
   }
@@ -910,12 +731,9 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ 新增：批量添加持仓（用于导入场景）
-  /// 与addHolding不同，此方法不会逐个保存和通知，性能更高
   Future<void> batchAddHoldings(List<FundHolding> holdings) async {
     if (holdings.isEmpty) return;
     
-    // 验证所有持仓
     for (final holding in holdings) {
       if (!holding.isValidHolding) {
         await addLog('批量添加持仓失败: 持仓 ${holding.fundCode} 数据无效', type: LogType.error);
@@ -923,12 +741,10 @@ class DataManager extends ChangeNotifier {
       }
     }
     
-    // 批量插入数据库（已使用事务）
     if (!kIsWeb) {
       await _repository!.batchInsertHoldings(holdings);
     }
     
-    // 添加到内存
     _holdings = [..._holdings, ...holdings];
     
     await addLog('批量添加 ${holdings.length} 个持仓', type: LogType.success);
@@ -936,12 +752,9 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// ✅ 新增：批量添加交易记录（用于导入场景，带事务支持）
-  /// 与addTransaction不同，此方法批量处理，性能更高且保证原子性
   Future<void> batchAddTransactions(List<TransactionRecord> transactions) async {
     if (transactions.isEmpty) return;
     
-    // ✅ 验证所有交易记录
     for (final tx in transactions) {
       if (tx.amount <= 0) {
         await addLog('批量添加交易失败: 交易金额必须大于0', type: LogType.error);
@@ -949,7 +762,6 @@ class DataManager extends ChangeNotifier {
       }
     }
     
-    // ✅ 增强交易记录（设置状态、申请日期等）
     final enhancedTransactions = <TransactionRecord>[];
     for (final tx in transactions) {
       final applicationDate = await getTradeApplicationDate(tx.tradeDate);
@@ -973,15 +785,12 @@ class DataManager extends ChangeNotifier {
       ));
     }
     
-    // ✅ 批量插入数据库（使用事务保证原子性）
     if (!kIsWeb) {
       await _repository!.batchInsertTransactions(enhancedTransactions);
     }
     
-    // 添加到内存
     _transactions = [..._transactions, ...enhancedTransactions];
     
-    // ✅ 重建所有相关持仓
     final uniquePairs = <String>{};
     for (final tx in enhancedTransactions) {
       final key = '${tx.clientId}_${tx.fundCode}';
@@ -1007,16 +816,13 @@ class DataManager extends ChangeNotifier {
       throw Exception('无效的交易数据');
     }
 
-    // ✅ 新增：计算申请日期并设置状态
     final applicationDate = await getTradeApplicationDate(transaction.tradeDate);
     TransactionStatus initialStatus;
     double? frozenShares;
     
     if (transaction.isPending) {
-      // 待确认交易
       initialStatus = TransactionStatus.submitted;
       
-      // ✅ 新增：如果是卖出交易，冻结份额
       if (transaction.type == TransactionType.sell) {
         frozenShares = transaction.shares;
         await freezeSharesForRedemption(
@@ -1026,12 +832,10 @@ class DataManager extends ChangeNotifier {
         );
       }
     } else {
-      // 已确认交易
       initialStatus = TransactionStatus.confirmed;
       frozenShares = null;
     }
     
-    // 更新交易记录的状态和申请日期
     final enhancedTransaction = transaction.copyWith(
       status: initialStatus,
       applicationDate: applicationDate,
@@ -1065,14 +869,12 @@ class DataManager extends ChangeNotifier {
       ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
 
     if (relatedTransactions.isEmpty) {
-      // 从内存中移除
       final holdingToRemove = _holdings.firstWhere(
         (h) => h.clientId == clientId && h.fundCode == fundCode,
         orElse: () => FundHolding.invalid(fundCode: fundCode),
       );
       _holdings.removeWhere((h) => h.clientId == clientId && h.fundCode == fundCode);
       
-      // ✅ 关键修复：从数据库中删除持仓
       if (!kIsWeb && holdingToRemove.id.isNotEmpty) {
         await _repository!.deleteHolding(holdingToRemove.id);
       }
@@ -1109,16 +911,12 @@ class DataManager extends ChangeNotifier {
     );
 
     if (existingIndex != -1) {
-      // 更新内存
       _holdings[existingIndex] = newHolding;
-      // ✅ 关键修复：更新数据库中的持仓
       if (!kIsWeb) {
         await _repository!.updateHolding(newHolding.id, newHolding);
       }
     } else {
-      // 添加到内存
       _holdings = [..._holdings, newHolding];
-      // ✅ 关键修复：插入新持仓到数据库
       if (!kIsWeb) {
         await _repository!.insertHolding(newHolding);
       }
@@ -1155,7 +953,6 @@ class DataManager extends ChangeNotifier {
 
     final transaction = _transactions[index];
     
-    // ✅ 新增：如果是待确认的卖出交易，释放冻结份额
     if (transaction.isPending && 
         transaction.type == TransactionType.sell && 
         transaction.frozenShares != null && 
@@ -1168,7 +965,6 @@ class DataManager extends ChangeNotifier {
     }
     _transactions = List.from(_transactions)..removeAt(index);
     
-    // Automatic cache invalidation
     _clearRelatedCaches(transaction.clientId, transaction.fundCode);
 
     await _rebuildHolding(transaction.clientId, transaction.fundCode);
@@ -1178,22 +974,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 更新持仓信息
-  /// 
-  /// 用于更新持仓的净值、收益率等动态数据。
-  /// 注意：此方法不会触发交易记录重建，仅更新持仓对象本身。
-  /// 
-  /// 参数：
-  /// - [updatedHolding]: 更新后的持仓对象
-  /// 
-  /// 异常：
-  /// - [Exception]: 当持仓不存在时抛出
-  /// 
-  /// 示例：
-  /// ```dart
-  /// final updated = holding.copyWith(currentNav: 1.2345, navDate: DateTime.now());
-  /// await dataManager.updateHolding(updated);
-  /// ```
   Future<void> updateHolding(FundHolding updatedHolding) async {
     final index = _holdings.indexWhere((h) => h.id == updatedHolding.id);
     if (index == -1) {
@@ -1229,13 +1009,10 @@ class DataManager extends ChangeNotifier {
   }
 
   Future<void> commitBatchUpdates() async {
-    // ✅ 修复：批量保存更新后的持仓到数据库
     if (!kIsWeb && _repository != null) {
       try {
         await _repository!.batchInsertHoldings(_holdings);
-        debugPrint('[DataManager] 批量保存 ${_holdings.length} 条持仓到数据库');
       } catch (e) {
-        debugPrint('[DataManager] 批量保存持仓失败: $e');
       }
     }
     notifyListeners();
@@ -1254,14 +1031,11 @@ class DataManager extends ChangeNotifier {
       
       for (final tx in pendingTransactions) {
         try {
-          // ✅ 优化：先尝试获取净值，如果净值已出就立即确认
           final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
           if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-            // 检查净值日期是否已经是交易对应的净值日
             final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
             final fundNavDate = fundInfo['navDate'] as DateTime?;
             
-            // 如果基金净值日期 >= 交易净值日期，说明净值已出，可以确认
             if (fundNavDate != null && !fundNavDate.isBefore(navDate)) {
               await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
               confirmedCount++;
@@ -1269,7 +1043,6 @@ class DataManager extends ChangeNotifier {
             }
           }
           
-          // 如果净值未出，检查是否到了确认日期
           final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
           
           if ((now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) &&
@@ -1291,23 +1064,11 @@ class DataManager extends ChangeNotifier {
     }
   }
 
-  /// 删除持仓
-  /// 
-  /// 根据索引删除指定持仓，同时会删除相关的交易记录。
-  /// 
-  /// 参数：
-  /// - [index]: 持仓在列表中的索引位置
-  /// 
-  /// 注意：
-  /// - 删除操作不可逆
-  /// - 会自动清理相关缓存
-  /// - 会记录日志
   Future<void> deleteHoldingAt(int index) async {
     if (index < 0 || index >= _holdings.length) return;
 
     final removed = _holdings[index];
     
-    // ✅ 删除持仓时，同步删除该客户该基金的待确认交易
     final pendingTxs = _transactions.where(
       (tx) => tx.clientId == removed.clientId && tx.fundCode == removed.fundCode && tx.isPending,
     ).toList();
@@ -1354,28 +1115,6 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 刷新所有持仓信息
-  /// 
-  /// [fundService] 基金服务
-  /// [onProgress] 进度回调函数 (current, total)
-  /// 刷新所有持仓信息
-  /// 
-  /// 从 API 获取最新的基金净值和收益率数据，并更新所有持仓。
-  /// 此方法会：
-  /// 1. 批量获取基金信息（每批5个，避免并发过多）
-  /// 2. 自动确认已到确认日的待确认交易
-  /// 3. 更新持仓的净值、收益率等字段
-  /// 
-  /// 参数：
-  /// - [fundService]: 基金服务实例，用于调用 API
-  /// - [onProgress]: 进度回调函数 (current, total)
-  /// 
-  /// 示例：
-  /// ```dart
-  /// await dataManager.refreshAllHoldings(fundService, (current, total) {
-  ///   print('进度: $current/$total');
-  /// });
-  /// ```
   Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress) async {
     final total = _holdings.length;
     
@@ -1402,7 +1141,6 @@ class DataManager extends ChangeNotifier {
             _holdings[index] = updated;
           }
           
-          // 自动确认相关待确认交易
           await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
         } else {
           await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
@@ -1418,13 +1156,11 @@ class DataManager extends ChangeNotifier {
     await commitBatchUpdates();
   }
   
-  /// 向后兼容的方法名（已废弃，请使用 refreshAllHoldings）
   @Deprecated('Use refreshAllHoldings instead')
   Future<void> refreshAllHoldingsWithAutoConfirm(FundService fundService, void Function(int, int)? onProgress) async {
     await refreshAllHoldings(fundService, onProgress);
   }
   
-  /// 向后兼容的方法名（已废弃，请使用 refreshAllHoldings）
   @Deprecated('Use refreshAllHoldings instead')
   Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
     await refreshAllHoldings(fundService, onProgress);
@@ -1628,7 +1364,6 @@ class DataManager extends ChangeNotifier {
         }
       }
       
-      // ✅ 新增：计算确认日期（T+1）
       final confirmDate = await calculateConfirmDateAsync(transaction.tradeDate, transaction.isAfter1500);
       
       final updatedTransaction = transaction.copyWith(
@@ -1638,18 +1373,15 @@ class DataManager extends ChangeNotifier {
         shares: calculatedShares,
         amount: calculatedAmount,
         confirmDate: confirmDate,
-        frozenShares: 0, // 释放冻结份额
+        frozenShares: 0,
       );
       
       _transactions[index] = updatedTransaction;
       
-      // ✅ 关键修复：更新数据库中的交易记录
       if (!kIsWeb) {
         await _repository!.updateTransaction(updatedTransaction.id, updatedTransaction);
-        debugPrint('[DataManager] ✅ 交易记录已更新到数据库: ${updatedTransaction.id}, isPending=${updatedTransaction.isPending}');
       }
       
-      // Automatic cache invalidation
       _clearRelatedCaches(transaction.clientId, transaction.fundCode);
       
       await _rebuildHolding(transaction.clientId, transaction.fundCode);
@@ -1677,7 +1409,6 @@ class DataManager extends ChangeNotifier {
   }
   
   Future<int> autoConfirmPendingTransactions(FundService fundService) async {
-    // ✅ 使用新的重试机制
     return await autoConfirmPendingTransactionsWithRetry(fundService);
   }
   
@@ -1837,36 +1568,24 @@ class DataManager extends ChangeNotifier {
     return !navDay.isBefore(today);
   }
   
-  /// ✅ 新增：计算交易申请日(T日_申请)
-  /// 规则：
-  /// 1. 工作日00:00-15:00提交 -> T_apply = 当天
-  /// 2. 工作日15:00后提交 -> T_apply = 下一个工作日
-  /// 3. 周末/节假日全天提交 -> T_apply = 节后第一个工作日
   static Future<DateTime> getTradeApplicationDate(DateTime submitTime) async {
     final submitDay = DateTime(submitTime.year, submitTime.month, submitTime.day);
     final hour = submitTime.hour;
     final minute = submitTime.minute;
     
-    // 判断是否是交易日
     final isTradingDay = await DataManager.isTradingDay(submitDay);
     
     if (isTradingDay) {
-      // 工作日内，检查是否在15:00前
       if (hour < 15 || (hour == 15 && minute == 0)) {
-        // 00:00 - 15:00 -> T_apply = 当天
         return submitDay;
       } else {
-        // 15:00后 -> T_apply = 下一个交易日
         return await DataManager.getNextTradingDay(from: submitDay);
       }
     } else {
-      // 非交易日（周末或节假日）-> T_apply = 下一个交易日
       return await DataManager.getNextTradingDay(from: submitDay);
     }
   }
   
-  /// ✅ 新增：净值获取重试机制（最多5次）
-  /// 返回：是否成功确认
   Future<bool> confirmPendingTransactionWithRetry(
     String transactionId,
     FundService fundService,
@@ -1882,15 +1601,12 @@ class DataManager extends ChangeNotifier {
         throw Exception('该交易已经确认');
       }
       
-      // 检查重试次数
       if (transaction.retryCount >= 5) {
-        // 5次失败后，标记为确认失败，转人工处理
         final failedTransaction = transaction.copyWith(
           status: TransactionStatus.confirmFailed,
         );
         _transactions[index] = failedTransaction;
         
-        // ✅ 关键修复：更新数据库中的交易记录
         if (!kIsWeb) {
           await _repository!.updateTransaction(failedTransaction.id, failedTransaction);
         }
@@ -1908,14 +1624,11 @@ class DataManager extends ChangeNotifier {
         return false;
       }
       
-      // 尝试获取基金信息
       final fundInfo = await fundService.fetchFundInfo(transaction.fundCode);
       
       if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-        // 成功获取净值，确认交易
         await confirmPendingTransaction(transactionId, fundInfo['currentNav']);
         
-        // 更新状态为已确认
         final confirmedIndex = _transactions.indexWhere((tx) => tx.id == transactionId);
         if (confirmedIndex != -1) {
           final confirmedTx = _transactions[confirmedIndex].copyWith(
@@ -1924,7 +1637,6 @@ class DataManager extends ChangeNotifier {
           );
           _transactions[confirmedIndex] = confirmedTx;
           
-          // ✅ 关键修复：更新数据库中的交易记录
           if (!kIsWeb) {
             await _repository!.updateTransaction(confirmedTx.id, confirmedTx);
           }
@@ -1934,13 +1646,11 @@ class DataManager extends ChangeNotifier {
         
         return true;
       } else {
-        // 获取失败，增加重试次数
         final retryTransaction = transaction.copyWith(
           retryCount: transaction.retryCount + 1,
         );
         _transactions[index] = retryTransaction;
         
-        // ✅ 关键修复：更新数据库中的交易记录
         if (!kIsWeb) {
           await _repository!.updateTransaction(retryTransaction.id, retryTransaction);
         }
@@ -1962,11 +1672,8 @@ class DataManager extends ChangeNotifier {
     }
   }
   
-  /// ✅ 新增：批量自动确认（带重试机制）
   Future<int> autoConfirmPendingTransactionsWithRetry(FundService fundService) async {
-    // ✅ 高优先级修复：防止并发执行
     if (_isAutoConfirming) {
-      debugPrint('⚠️ 自动确认已在进行中，跳过');
       return 0;
     }
     
@@ -1981,14 +1688,11 @@ class DataManager extends ChangeNotifier {
       
       for (final tx in pendingTransactions) {
         try {
-          // ✅ 优化：先尝试获取净值，如果净值已出就立即确认
           final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
           if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-            // 检查净值日期是否已经是交易对应的净值日
             final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
             final fundNavDate = fundInfo['navDate'] as DateTime?;
             
-            // 如果基金净值日期 >= 交易净值日期，说明净值已出，可以确认
             if (fundNavDate != null && !fundNavDate.isBefore(navDate)) {
               final success = await confirmPendingTransactionWithRetry(tx.id, fundService);
               if (success) {
@@ -1998,16 +1702,13 @@ class DataManager extends ChangeNotifier {
             }
           }
           
-          // 计算申请日
           final applicationDate = await getTradeApplicationDate(tx.tradeDate);
           final appDay = DateTime(applicationDate.year, applicationDate.month, applicationDate.day);
           
-          // 只有到达申请日后才开始尝试确认
           if (now.isBefore(appDay)) {
             continue;
           }
           
-          // 检查是否可以确认（T+1）
           final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
           
           if (now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) {
@@ -2015,7 +1716,6 @@ class DataManager extends ChangeNotifier {
             if (success) {
               confirmedCount++;
             } else {
-              // 检查是否已经是confirmFailed状态
               final txIndex = _transactions.indexWhere((t) => t.id == tx.id);
               if (txIndex != -1) {
                 final updatedTx = _transactions[txIndex];
@@ -2043,7 +1743,6 @@ class DataManager extends ChangeNotifier {
     }
   }
   
-  /// ✅ 新增：赎回时冻结份额
   Future<void> freezeSharesForRedemption(String clientId, String fundCode, double sharesToFreeze) async {
     try {
       final holdingIndex = _holdings.indexWhere(
@@ -2056,7 +1755,6 @@ class DataManager extends ChangeNotifier {
       
       final holding = _holdings[holdingIndex];
       
-      // 检查可用份额是否足够
       final availableShares = holding.totalShares - _getFrozenShares(clientId, fundCode);
       if (sharesToFreeze > availableShares) {
         throw Exception('可用份额不足（可用: ${availableShares.toStringAsFixed(2)}份）');
@@ -2076,7 +1774,6 @@ class DataManager extends ChangeNotifier {
     }
   }
   
-  /// ✅ 新增：获取某持仓的冻结份额总数
   double _getFrozenShares(String clientId, String fundCode) {
     double frozenShares = 0;
     for (final tx in _transactions) {
@@ -2091,7 +1788,6 @@ class DataManager extends ChangeNotifier {
     return frozenShares;
   }
   
-  /// ✅ 新增：释放冻结份额（用于撤单或确认后）
   Future<void> releaseFrozenShares(String transactionId) async {
     try {
       final index = _transactions.indexWhere((tx) => tx.id == transactionId);
@@ -2103,7 +1799,6 @@ class DataManager extends ChangeNotifier {
       final releasedTx = transaction.copyWith(frozenShares: 0);
       _transactions[index] = releasedTx;
       
-      // ✅ 关键修复：更新数据库中的交易记录
       if (!kIsWeb) {
         await _repository!.updateTransaction(releasedTx.id, releasedTx);
       }
@@ -2122,19 +1817,16 @@ class DataManager extends ChangeNotifier {
     }
   }
   
-  /// ✅ 新增：计算持有期天数（从确认日开始计算自然日）
   int calculateHoldingDays(String clientId, String fundCode) {
     final transactions = getTransactionHistory(clientId, fundCode);
     if (transactions.isEmpty) return 0;
     
-    // 找到第一笔确认的买入交易
     final firstConfirmedBuy = transactions.where(
       (tx) => tx.type == TransactionType.buy && !tx.isPending
     ).firstOrNull;
     
     if (firstConfirmedBuy == null) return 0;
     
-    // 使用确认日期或交易日期+1作为持有期起始日
     final startDate = firstConfirmedBuy.confirmDate ?? 
                       firstConfirmedBuy.tradeDate.add(const Duration(days: 1));
     
@@ -2145,7 +1837,6 @@ class DataManager extends ChangeNotifier {
     return today.difference(startDay).inDays;
   }
   
-  /// ✅ 新增：手动确认交易（用于5次重试失败后的人工处理）
   Future<void> manuallyConfirmTransaction(
     String transactionId,
     double confirmedNav,
@@ -2163,7 +1854,6 @@ class DataManager extends ChangeNotifier {
       double calculatedShares = confirmedShares ?? transaction.shares;
       double calculatedAmount = confirmedAmount ?? transaction.amount;
       
-      // 如果是买入且未提供份额，根据净值计算
       if (transaction.type == TransactionType.buy && confirmedShares == null) {
         if (transaction.amount > 0 && confirmedNav > 0) {
           final feeRate = transaction.fee ?? 0.0;
@@ -2171,7 +1861,6 @@ class DataManager extends ChangeNotifier {
         }
       }
       
-      // 如果是卖出且未提供金额，根据净值计算
       if (transaction.type == TransactionType.sell && confirmedAmount == null) {
         if (transaction.shares > 0 && confirmedNav > 0) {
           final feeRate = transaction.fee ?? 0.0;
@@ -2186,20 +1875,17 @@ class DataManager extends ChangeNotifier {
         shares: calculatedShares,
         amount: calculatedAmount,
         confirmDate: DateTime.now(),
-        frozenShares: 0, // 释放冻结份额
+        frozenShares: 0,
       );
       
       _transactions[index] = updatedTransaction;
       
-      // ✅ 关键修复：更新数据库中的交易记录
       if (!kIsWeb) {
         await _repository!.updateTransaction(updatedTransaction.id, updatedTransaction);
       }
       
-      // 清除相关缓存
       _clearRelatedCaches(transaction.clientId, transaction.fundCode);
       
-      // 重建持仓
       await _rebuildHolding(transaction.clientId, transaction.fundCode);
       
       await saveData();
@@ -2237,7 +1923,7 @@ class DataManagerProvider extends InheritedWidget {
     return provider!.dataManager;
   }
   
-  static DataManager? maybeOf(BuildContext context) {  // ✅ 添加 maybeOf 方法
+  static DataManager? maybeOf(BuildContext context) {
     final provider = context.dependOnInheritedWidgetOfExactType<DataManagerProvider>();
     return provider?.dataManager;
   }
@@ -2248,7 +1934,6 @@ class DataManagerProvider extends InheritedWidget {
   }
 }
 
-/// 应用生命周期观察者
 class _AppLifecycleObserver with WidgetsBindingObserver {
   final DataManager _dataManager;
   
@@ -2258,20 +1943,11 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-        // 应用进入后台 - 必须同步等待保存完成
-        debugPrint('应用状态: paused (进入后台)');
-        // ✅ 关键修复：使用await确保保存完成
         _dataManager.saveOnBackground();
         break;
       case AppLifecycleState.resumed:
-        // 应用恢复前台 - 不需要重新加载，内存中的数据是最新的
-        debugPrint('应用状态: resumed (恢复前台) - 跳过重新加载');
-        // 不调用 reloadOnResume()，避免覆盖内存中的最新数据
         break;
       case AppLifecycleState.detached:
-        // 应用被销毁 - 必须同步等待保存完成
-        debugPrint('应用状态: detached (被销毁)');
-        // ✅ 关键修复：强制刷新数据库，确保数据写入磁盘
         _dataManager.saveOnBackground();
         break;
       default:

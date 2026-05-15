@@ -83,44 +83,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     }
     return _pendingHintFuture!;
   }
-  
-  Future<String> _buildNavDateHintAsync() async {
-    final expectedNavDate = await DataManager.calculateNavDateForTradeAsync(_purchaseDate, _isAfter1500);
-    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
-    
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final navDateNotAvailable = !expectedNavDate.isBefore(today);
-    
-    if (navDateNotAvailable) {
-      return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认';
-    }
-    
-    if (_navDate != null) {
-      return '使用 ${_navDate!.month}月${_navDate!.day}日 净值';
-    }
-    
-    return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值';
-  }
-  
-  String _buildNavDateHint() {
-    final expectedNavDate = DataManager.calculateNavDateForTrade(_purchaseDate, _isAfter1500);
-    final confirmDate = DataManager.calculateConfirmDate(_purchaseDate, _isAfter1500);
-    
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final navDateNotAvailable = !expectedNavDate.isBefore(today);
-    
-    if (navDateNotAvailable) {
-      return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值，${confirmDate.month}月${confirmDate.day}日 确认';
-    }
-    
-    if (_navDate != null) {
-      return '使用 ${_navDate!.month}月${_navDate!.day}日 净值';
-    }
-    
-    return '预计使用 ${expectedNavDate.month}月${expectedNavDate.day}日 净值';
-  }
 
   @override
   void didChangeDependencies() {
@@ -206,7 +168,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     setState(() => _sharesError = error);
   }
 
-  /// 检查客户号是否在映射词典中，并提示用户选择
   Future<void> _checkClientMapping(String clientId) async {
     if (clientId.isEmpty) return;
     
@@ -216,7 +177,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (mappedName != null && mounted) {
         final currentName = _clientNameController.text.trim();
         
-        // 如果当前输入的客户名与映射词典不一致，提示用户选择
         if (currentName.isNotEmpty && currentName != mappedName) {
           final choice = await showCupertinoDialog<int>(
             context: context,
@@ -255,12 +215,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           );
           
           if (choice == 1 && mounted) {
-            // 使用词典姓名
             _clientNameController.text = mappedName;
             context.showToast('已自动填充词典姓名');
           }
         } else if (currentName.isEmpty) {
-          // 如果客户名为空，自动填充
           _clientNameController.text = mappedName;
           if (mounted) {
             context.showToast('已自动填充词典姓名');
@@ -268,12 +226,10 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         }
       }
     } catch (e) {
-      // 未找到映射，忽略
       debugPrint('查询映射词典失败: $e');
     }
   }
 
-  /// 根据客户名查询映射词典，提示用户选择客户号
   Future<void> _checkClientMappingByName(String clientName) async {
     if (clientName.isEmpty) return;
     
@@ -283,7 +239,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (mappings.isNotEmpty && mounted) {
         final currentClientId = _clientIdController.text.trim();
         
-        // 如果有多个匹配，让用户选择
         if (mappings.length > 1) {
           final selectedMapping = await showCupertinoDialog<ClientMapping>(
             context: context,
@@ -322,7 +277,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
             context.showToast('已自动填充客户号');
           }
         } else if (mappings.length == 1) {
-          // 只有一个匹配，自动填充
           final mapping = mappings.first;
           if (currentClientId.isEmpty || currentClientId != mapping.clientId) {
             _clientIdController.text = mapping.clientId;
@@ -333,7 +287,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
         }
       }
     } catch (e) {
-      // 未找到映射，忽略
       debugPrint('查询映射词典失败: $e');
     }
   }
@@ -388,21 +341,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
     } catch (e) {
       debugPrint('加载基金信息失败 ($fundCode): $e');
-      // 静默失败，不影响用户输入
-    }
-  }
-  
-  Future<void> _cacheTrendData(String fundCode) async {
-    try {
-      final trendData = await _fundService.fetchNetWorthTrend(fundCode);
-      if (mounted) {
-        setState(() {
-          _cachedTrendData = trendData;
-        });
-      }
-    } catch (e) {
-      debugPrint('缓存基金趋势数据失败 ($fundCode): $e');
-      // 静默失败，不影响主要功能
     }
   }
   
@@ -412,7 +350,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       if (mounted && trendData.isNotEmpty) {
         final latestPoint = trendData.last;
         
-        if (mounted) {  // ✅ 添加 mounted 检查
+        if (mounted) {
           setState(() {
             _cachedTrendData = trendData;
             
@@ -432,7 +370,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
     } catch (e) {
       debugPrint('更新最新净值失败 ($fundCode): $e');
-      // 静默失败，使用已有数据
     }
   }
   
@@ -551,8 +488,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       shares = double.tryParse(sharesText) ?? 0;
     }
     final fundCode = _fundCodeController.text.trim().toUpperCase();
-    final clientId = _clientIdController.text.trim();
-    final clientName = _clientNameController.text.trim();
     final feeRateText = _feeRateController.text.trim();
     final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
 
@@ -672,7 +607,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;
       
-      // ✅ 新增：提取收益率数据
       final navReturn1m = fundInfo['navReturn1m'] as double?;
       final navReturn3m = fundInfo['navReturn3m'] as double?;
       final navReturn6m = fundInfo['navReturn6m'] as double?;
@@ -708,7 +642,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
 
       await _dataManager.addTransaction(transaction);
       
-      // ✅ 新增：立即更新持仓的净值和收益率数据到UI
       if (currentNav > 0 || navReturn1m != null || navReturn3m != null || navReturn6m != null || navReturn1y != null) {
         try {
           final holdingIndex = _dataManager.holdings.indexWhere(
@@ -764,7 +697,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       builder: (context) => _DatePickerModal(
         initialDate: _purchaseDate,
         onConfirm: (newDate) async {
-          if (mounted) {  // ✅ 添加 mounted 检查
+          if (mounted) {
             setState(() {
               _purchaseDate = newDate;
               _pendingHintFuture = null;
@@ -794,7 +727,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       final navDateNotAvailable = !targetNavDate.isBefore(today);
       
       if (navDateNotAvailable) {
-        if (mounted) {  // ✅ 添加 mounted 检查
+        if (mounted) {
           setState(() {
             _confirmNavController.clear();
             _confirmNav = null;
@@ -830,7 +763,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
           break;
         }
         
-        if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
+        if (diff > 0 && (nextPoint == null || diff < nextPoint.date.difference(targetNavDate).inDays)) {
           nextPoint = point;
         }
         
@@ -842,27 +775,23 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
       
       NetWorthPoint? selectedPoint;
-      String matchType = '';
       
       if (exactPoint != null) {
         selectedPoint = exactPoint;
-        matchType = '精确匹配';
-      } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
+      } else if (nextPoint != null && nextPoint.date.difference(targetNavDate).inDays <= 3) {
         selectedPoint = nextPoint;
-        matchType = '下一交易日';
       } else if (closestPoint != null && minDiff <= 3) {
         selectedPoint = closestPoint;
-        matchType = '最接近';
       }
       
       if (selectedPoint != null) {
+        final point = selectedPoint;
         setState(() {
-          _confirmNav = selectedPoint!.nav;
-          _navDate = selectedPoint!.date;  
-          _confirmNavController.text = selectedPoint!.nav.toStringAsFixed(4);
-          _currentNav = selectedPoint!.nav;
+          _confirmNav = point.nav;
+          _navDate = point.date;  
+          _confirmNavController.text = point.nav.toStringAsFixed(4);
+          _currentNav = point.nav;
         });
-        final timeLabel = _isAfter1500 ? '15:00后' : '15:00前';
         
         if (!_isTodayTransaction) {
           _calculateShares();
@@ -872,7 +801,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
     } catch (e) {
       debugPrint('根据日期获取净值失败 ($fundCode): $e');
-      // 静默失败，用户可以手动输入
     }
   }
 
@@ -916,7 +844,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       error: _clientNameError,
                       onChanged: (value) {
                         _validateClientName(value);
-                        // 防抖：延迟 500ms 后检查映射词典
                         _mappingCheckTimer?.cancel();
                         _mappingCheckTimer = Timer(const Duration(milliseconds: 500), () {
                           final trimmedName = value.trim();
@@ -1013,7 +940,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                         _buildTimeSegmentField(
                           isAfter1500: _isAfter1500,
                           onChanged: (value) async {
-                            if (mounted) {  // ✅ 添加 mounted 检查
+                            if (mounted) {
                               setState(() {
                                 _isAfter1500 = value;
                                 _pendingHintFuture = null;
@@ -1126,7 +1053,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       controller: _clientIdController,
                       hint: '选填，最多12位数字',
                       onChanged: (value) {
-                        // 防抖：延迟 500ms 后检查映射词典
                         _mappingCheckTimer?.cancel();
                         _mappingCheckTimer = Timer(const Duration(milliseconds: 500), () {
                           final trimmed = value.trim();
@@ -1469,93 +1395,6 @@ class _AddHoldingViewState extends State<AddHoldingView> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildFundCodeField({
-    required TextEditingController controller,
-    required String fundName,
-    required bool error,
-    required Function(String) onChanged,
-    required Color inputBgColor,
-    required Color textColor,
-    required Color placeholderColor,
-    required bool isDarkMode,
-  }) {
-    Color bottomBorderColor;
-    if (error) {
-      bottomBorderColor = CupertinoColors.systemRed;
-    } else if (controller.text.trim().isNotEmpty && !error) {
-      bottomBorderColor = CupertinoColors.activeBlue;
-    } else {
-      bottomBorderColor = CupertinoColors.systemGrey.withValues(alpha: 0.3);
-    }
-
-    String rightText = '';
-    if (fundName.isNotEmpty) {
-      String displayName = fundName;
-      if (displayName.length > 6) {
-        displayName = displayName.substring(0, 6) + '...';
-      }
-      
-      if (_currentNav != null && _currentNav! > 0 && _navDate != null) {
-        final navDateStr = '${_navDate!.month.toString().padLeft(2, '0')}-${_navDate!.day.toString().padLeft(2, '0')}';
-        rightText = '$displayName ${_currentNav!.toStringAsFixed(4)}($navDateStr)';
-      } else {
-        rightText = displayName;
-      }
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: inputBgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border(
-          bottom: BorderSide(
-            color: bottomBorderColor,
-            width: 1.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: CupertinoTextField(
-              controller: controller,
-              placeholder: '请输入6位基金代码',
-              onChanged: onChanged,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
-              placeholderStyle: TextStyle(color: placeholderColor),
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-              keyboardType: TextInputType.number,
-              decoration: null,
-            ),
-          ),
-          if (rightText.isNotEmpty)
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Text(
-                  rightText,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDarkMode 
-                        ? CupertinoColors.systemBlue
-                        : const Color(0xFF007AFF),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  maxLines: 1,
-                ),
-              ),
-            ),
         ],
       ),
     );

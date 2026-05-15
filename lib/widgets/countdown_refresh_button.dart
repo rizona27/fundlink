@@ -8,8 +8,8 @@ class CountdownRefreshButton extends StatefulWidget {
   final bool isRefreshing;
   final double refreshProgress;
   final double size;
-  final Function(int)? onIntervalChanged; // 传递选择的间隔时间(秒)
-  final bool? isTradingTime; // 新增：是否为交易时间
+  final Function(int)? onIntervalChanged;
+  final bool? isTradingTime;
 
   const CountdownRefreshButton({
     super.key,
@@ -19,7 +19,7 @@ class CountdownRefreshButton extends StatefulWidget {
     this.refreshProgress = 0.0,
     this.size = 32,
     this.onIntervalChanged,
-    this.isTradingTime, // 新增参数
+    this.isTradingTime,
   });
 
   @override
@@ -48,11 +48,8 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (widget.isRefreshing) return;
 
-      // 检查是否为交易时间，非交易时间时暂停倒计时
       final isTradingTime = widget.isTradingTime ?? _checkIsTradingTime();
       if (!isTradingTime) {
-        // 非交易时间，不更新倒计时，也不自动触发刷新
-        // 保持显示剩余秒数或图标，但不进行倒计时
         return;
       }
 
@@ -77,12 +74,10 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     });
   }
   
-  /// 检查当前是否为交易时间
   bool _checkIsTradingTime() {
     final now = DateTime.now();
     final weekday = now.weekday;
     
-    // 周末不交易
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return false;
     }
@@ -91,7 +86,6 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     
-    // 交易时间：9:30-11:30, 13:00-15:00
     final morningStart = 9 * 60 + 30;
     final morningEnd = 11 * 60 + 30;
     final afternoonStart = 13 * 60;
@@ -145,10 +139,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
           final isSelected = seconds == widget.refreshIntervalSeconds;
           return CupertinoActionSheetAction(
             onPressed: () {
-              print('DEBUG countdown_refresh_button: 用户点击了 $label ($seconds 秒)');
               Navigator.pop(context);
-              // 传递用户选择的间隔时间
-              print('DEBUG countdown_refresh_button: 调用回调函数 onIntervalChanged?.call($seconds)');
               widget.onIntervalChanged?.call(seconds);
             },
             child: Row(
@@ -193,17 +184,15 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isRefreshing != widget.isRefreshing && !widget.isRefreshing) {
       _lastRefreshTime = DateTime.now();
-      if (mounted) {  // ✅ 添加 mounted 检查
+      if (mounted) {
         setState(() {
           _remainingSeconds = widget.refreshIntervalSeconds;
         });
       }
     }
     if (oldWidget.refreshIntervalSeconds != widget.refreshIntervalSeconds) {
-      print('DEBUG didUpdateWidget: refreshIntervalSeconds 从 ${oldWidget.refreshIntervalSeconds} 变为 ${widget.refreshIntervalSeconds}');
       _remainingSeconds = widget.refreshIntervalSeconds;
       _lastRefreshTime = DateTime.now();
-      print('DEBUG didUpdateWidget: 调用 _restartTimer()');
       _restartTimer();
     }
   }

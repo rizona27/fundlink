@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../services/database_helper.dart';
 
-/// 数据库访问层 - 封装所有数据库操作
 class DatabaseRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
   
-  // ==================== 持仓操作 ====================
   
   Future<List<FundHolding>> getAllHoldings({
     int? limit,
@@ -27,7 +24,6 @@ class DatabaseRepository {
       );
       return rows.map((row) => FundHolding.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询持仓失败: $e');
       return [];
     }
   }
@@ -37,7 +33,6 @@ class DatabaseRepository {
       final rows = await _db.queryPinnedHoldings();
       return rows.map((row) => FundHolding.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询置顶持仓失败: $e');
       return [];
     }
   }
@@ -60,7 +55,6 @@ class DatabaseRepository {
     return Sqflite.firstIntValue(result) ?? 0;
   }
   
-  // ==================== 交易记录操作 ====================
   
   Future<List<TransactionRecord>> getAllTransactions({
     int? limit,
@@ -73,7 +67,6 @@ class DatabaseRepository {
       );
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询交易记录失败: $e');
       return [];
     }
   }
@@ -83,7 +76,6 @@ class DatabaseRepository {
       final rows = await _db.queryTransactionsByHoldingId(holdingId);
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询持仓交易记录失败: $e');
       return [];
     }
   }
@@ -93,7 +85,6 @@ class DatabaseRepository {
       final rows = await _db.queryPendingTransactions();
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询待确认交易失败: $e');
       return [];
     }
   }
@@ -110,14 +101,12 @@ class DatabaseRepository {
     return await _db.deleteTransaction(id);
   }
   
-  // ==================== 日志操作 ====================
   
   Future<List<LogEntry>> getLogs({int limit = 100}) async {
     try {
       final rows = await _db.queryLogs(limit: limit);
       return rows.map((row) => LogEntry.fromMap(row)).toList();
     } catch (e) {
-      debugPrint('查询日志失败: $e');
       return [];
     }
   }
@@ -130,7 +119,6 @@ class DatabaseRepository {
     return await _db.clearOldLogs(daysToKeep);
   }
   
-  // ==================== 设置操作 ====================
   
   Future<String?> getSetting(String key) async {
     return await _db.getSetting(key);
@@ -140,15 +128,12 @@ class DatabaseRepository {
     await _db.saveSetting(key, value);
   }
   
-  // ==================== 批量操作（带事务支持）====================
   
-  /// 批量插入持仓（使用事务保证原子性）
   Future<void> batchInsertHoldings(List<FundHolding> holdings) async {
     if (holdings.isEmpty) return;
     
     final db = await _db.database;
     
-    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
     await db.transaction((txn) async {
       for (final holding in holdings) {
         await txn.insert(
@@ -160,13 +145,11 @@ class DatabaseRepository {
     });
   }
   
-  /// 批量插入交易记录（使用事务保证原子性）
   Future<void> batchInsertTransactions(List<TransactionRecord> transactions) async {
     if (transactions.isEmpty) return;
     
     final db = await _db.database;
     
-    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
     await db.transaction((txn) async {
       for (final transaction in transactions) {
         await txn.insert(
@@ -178,13 +161,11 @@ class DatabaseRepository {
     });
   }
   
-  /// 批量插入日志（使用事务保证原子性）
   Future<void> batchInsertLogs(List<LogEntry> logs) async {
     if (logs.isEmpty) return;
     
     final db = await _db.database;
     
-    // ✅ 使用事务确保所有操作要么全部成功，要么全部回滚
     await db.transaction((txn) async {
       for (final log in logs) {
         await txn.insert('logs', log.toMap());
@@ -192,9 +173,7 @@ class DatabaseRepository {
     });
   }
   
-  // ==================== 高级查询 ====================
   
-  /// 按客户分组统计
   Future<List<Map<String, dynamic>>> getHoldingsByClient() async {
     final db = await _db.database;
     return await db.rawQuery('''
@@ -206,7 +185,6 @@ class DatabaseRepository {
     ''');
   }
   
-  /// 按基金分组统计
   Future<List<Map<String, dynamic>>> getHoldingsByFund() async {
     final db = await _db.database;
     return await db.rawQuery('''
@@ -218,7 +196,6 @@ class DatabaseRepository {
     ''');
   }
   
-  /// 搜索持仓
   Future<List<FundHolding>> searchHoldings(String keyword) async {
     final db = await _db.database;
     final rows = await db.query(
@@ -230,45 +207,28 @@ class DatabaseRepository {
     return rows.map((row) => FundHolding.fromMap(row)).toList();
   }
   
-  // ==================== 数据库同步操作 ====================
   
-  /// ✅ 修复：强制刷新数据库，确保数据立即写入磁盘
-  /// iOS/Android 可能在应用退出时杀死进程，导致 SQLite 缓冲数据丢失
   Future<void> flush() async {
     try {
       final db = await _db.database;
       
-      // 先检查当前 journal_mode
       final modeResult = await db.rawQuery('PRAGMA journal_mode');
       final currentMode = modeResult.first.values.first.toString();
       
-      debugPrint('[Database] 当前数据库模式: $currentMode');
-      
-      // 如果是 WAL 模式，执行 FULL checkpoint
       if (currentMode.toLowerCase() == 'wal') {
-        final checkpointResult = await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
-        debugPrint('[Database] WAL checkpoint 已执行, 结果: $checkpointResult');
+        await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
       } else {
-        // 非 WAL 模式下，设置 synchronous 为 FULL 并执行写操作触发同步
         await db.execute('PRAGMA synchronous = FULL');
-        // 执行一个简单的写操作来触发同步
         await db.execute('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)', [
           '_last_flush',
           DateTime.now().toIso8601String(),
           DateTime.now().toIso8601String(),
         ]);
-        debugPrint('[Database] 数据库已同步 (synchronous=FULL)');
       }
       
-      // 验证数据是否真的写入了
-      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM transactions');
-      final count = countResult.first['count'];
-      debugPrint('[Database] 数据库中交易记录数: $count');
+      await db.rawQuery('SELECT COUNT(*) as count FROM transactions');
       
-    } catch (e, stackTrace) {
-      // flush 失败不应该影响主流程，但需要记录详细错误
-      debugPrint('[Database] ❌ 数据库刷新失败: $e');
-      debugPrint('[Database] 堆栈跟踪: $stackTrace');
+    } catch (e) {
     }
   }
 }

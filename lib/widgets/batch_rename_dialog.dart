@@ -62,14 +62,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       return;
     }
 
-    // 检查是否有其他客户使用相同的名称
     final allClientNames = _dataManager.holdings
         .map((h) => h.clientName)
         .where((name) => name != widget.currentName)
         .toSet();
     
     if (allClientNames.contains(newName)) {
-      // 找到使用该名称的所有持仓（排除当前正在重命名的这些持仓）
       final currentHoldingIds = widget.holdings.map((h) => h.id).toSet();
       final existingHoldings = _dataManager.holdings
           .where((h) => h.clientName == newName && !currentHoldingIds.contains(h.id))
@@ -78,7 +76,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       if (existingHoldings.isNotEmpty) {
         final shouldMerge = await _showMergeConfirmDialog(newName, existingHoldings);
         if (shouldMerge != true) {
-          return; // 用户取消或选择不合并
+          return;
         }
       }
     }
@@ -183,7 +181,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
 
     return GestureDetector(
       onTap: () {
-        // 点击空白处收起键盘
         FocusScope.of(context).unfocus();
       },
       child: Center(
@@ -191,14 +188,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           constraints: const BoxConstraints(maxWidth: 400),
           child: SingleChildScrollView(
-            // ✅ 添加键盘避让
             padding: MediaQuery.of(context).viewInsets,
             child: CupertinoPopupSurface(
               isSurfacePainted: true,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 标题栏
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
@@ -237,7 +232,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                     ),
                   ),
 
-                  // 内容区域
                   Container(
                     padding: const EdgeInsets.all(12),
                     color: bgColor,
@@ -245,7 +239,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 影响范围提示
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
@@ -273,7 +266,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 客户姓名输入框
                         Text(
                           '客户姓名',
                           style: TextStyle(
@@ -308,7 +300,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 客户号输入框
                         Text(
                           '客户号（选填）',
                           style: TextStyle(
@@ -343,7 +334,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         ),
                         const SizedBox(height: 14),
 
-                        // 确认按钮 - 横向排列
                         Row(
                           children: [
                             Expanded(

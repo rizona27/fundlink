@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import '../services/fund_service.dart';
-import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
 
@@ -40,14 +39,14 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
     final code = _codeController.text.trim();
     
     if (code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _validationError = '请输入6位数字';
         _fundExists = false;
       });
       return;
     }
 
-    if (mounted) setState(() {  // ✅ 添加 mounted 检查
+    if (mounted) setState(() {
       _isValidating = true;
       _validationError = null;
       _fundExists = false;
@@ -58,23 +57,23 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
       final data = await fundService.fetchNetWorthTrend(code);
       
       if (data.isNotEmpty) {
-        if (mounted) setState(() {  // ✅ 添加 mounted 检查
+        if (mounted) setState(() {
           _fundExists = true;
           _validationError = null;
         });
       } else {
-        if (mounted) setState(() {  // ✅ 添加 mounted 检查
+        if (mounted) setState(() {
           _fundExists = false;
           _validationError = '未找到该基金数据';
         });
       }
     } catch (e) {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _fundExists = false;
         _validationError = '基金不存在或网络错误';
       });
     } finally {
-      if (mounted) setState(() {  // ✅ 添加 mounted 检查
+      if (mounted) setState(() {
         _isValidating = false;
       });
     }
@@ -153,7 +152,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             onChanged: (_) {
                               if (_validationError != null || _fundExists) {
-                                if (mounted) setState(() {  // ✅ 添加 mounted 检查
+                                if (mounted) setState(() {
                                   _validationError = null;
                                   _fundExists = false;
                                 });

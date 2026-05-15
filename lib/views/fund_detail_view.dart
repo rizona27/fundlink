@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show debugPrint, defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
@@ -99,12 +98,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
       final elapsed = DateTime.now().difference(_lastFetchTime!);
       if (elapsed < _cacheDuration) {
         await _refreshValuationOnly();
-        if (mounted) setState(() {});  // ✅ 添加 mounted 检查
+        if (mounted) setState(() {});
         return;
       }
     }
 
-    if (mounted) setState(() => _loading = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _loading = true);
     try {
       final rawTrend = await _fundService!.fetchNetWorthTrend(widget.holding.fundCode);
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
@@ -140,10 +139,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
         }),
       ]);
       
-      _hsPoints = (results[0] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
-      _zz500Points = (results[1] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
-      _zz1000Points = (results[2] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
-      _customFundPoints = (results[3] as List<NetWorthPoint>)..sort((a, b) => a.date.compareTo(b.date));
+      _hsPoints = results[0]..sort((a, b) => a.date.compareTo(b.date));
+      _zz500Points = results[1]..sort((a, b) => a.date.compareTo(b.date));
+      _zz1000Points = results[2]..sort((a, b) => a.date.compareTo(b.date));
+      _customFundPoints = results[3]..sort((a, b) => a.date.compareTo(b.date));
       
       
       if (_avgPoints.isNotEmpty) {
@@ -199,7 +198,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   Future<void> _refreshValuationOnly() async {
     try {
       final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
-      if (mounted) {  // ✅ 添加 mounted 检查
+      if (mounted) {
         setState(() {
           _valuation = valuation;
         });
@@ -213,7 +212,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
     if (_topHoldings.isEmpty) return;
     final stockCodes = _topHoldings.map((h) => h.stockCode).toList();
     final quotes = await _fundService!.fetchStockQuotes(stockCodes);
-    if (mounted) {  // ✅ 添加 mounted 检查
+    if (mounted) {
       setState(() {
         _stockQuotes = quotes;
       });
@@ -222,7 +221,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
   
   Future<void> _refreshValuation() async {
     if (_isRefreshingValuation) return;
-    if (mounted) setState(() => _isRefreshingValuation = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isRefreshingValuation = true);
     try {
       final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
       if (mounted) {
@@ -267,7 +266,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
         return CustomFundConfigDialog(
           currentCode: _customFundCode,
           onConfirm: (newCode) async {
-            if (mounted) {  // ✅ 添加 mounted 检查
+            if (mounted) {
               setState(() {
                 _customFundCode = newCode;
                 _loading = true;
@@ -350,7 +349,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
                           const SizedBox(height: 24),
                           _buildChartSection(isDark),
                           const SizedBox(height: 24),
-                          // ✅ 修复：使用ErrorBoundary包裹十大持仓，启用自动重试
                           ErrorBoundary(
                             errorMessage: '重仓股加载失败',
                             autoRetry: true,
@@ -387,7 +385,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 使用错误边界包裹图表组件，防止图表崩溃导致整个页面白屏
         ErrorBoundary(
           errorMessage: '图表加载失败',
           child: RepaintBoundary(

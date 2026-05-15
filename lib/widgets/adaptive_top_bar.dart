@@ -6,13 +6,11 @@ import 'dart:ui' show ImageFilter;
 import '../utils/animation_config.dart';
 import 'search.dart';
 import 'countdown_refresh_button.dart';
-import 'glass_button.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
-import '../constants/app_constants.dart';
 
 enum SortCycleType {
   fundReturns,
@@ -246,8 +244,6 @@ class AdaptiveTopBar extends StatefulWidget {
 
   final bool useMenuStyle;
   
-  // ✅ 新增：允许调用者自定义数据状态检查
-  // 如果不提供，则默认使用 dataManager?.holdings.isNotEmpty
   final bool? hasData;
 
   const AdaptiveTopBar({
@@ -312,17 +308,16 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   double _lastProgress = 1.0;
   Timer? _scrollTimer;
   Timer? _autoCloseTimer; 
-  Timer? _searchDebounceTimer; // ✅ 添加搜索防抖定时器
+  Timer? _searchDebounceTimer;
   bool _isRefreshing = false;
   final GlobalKey _sortButtonKey = GlobalKey();
-  String _lastCommittedSearchText = ''; // ✅ 记录最后一次提交的搜索文本 
+  String _lastCommittedSearchText = '';
 
   bool get _externallyControlSearchVisible => widget.isSearchVisible != null;
   bool get _externallyControlSearchText => widget.searchText != null;
   String get _currentSearchText => _externallyControlSearchText ? widget.searchText! : _internalSearchText;
   bool get _currentSearchVisible => _externallyControlSearchVisible ? widget.isSearchVisible! : _internalSearchVisible;
 
-  // ✅ 修复：优先使用自定义 hasData，否则检查 dataManager.holdings
   bool get _hasData {
     if (widget.hasData != null) {
       return widget.hasData!;
@@ -352,20 +347,14 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   void didUpdateWidget(AdaptiveTopBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     _updateHideProgress();
-    // ✅ 修复：只在焦点不在输入框时才同步外部搜索文本，避免破坏拼音输入法状态
     if (_externallyControlSearchText && 
         widget.searchText != _internalSearchController.text &&
-        !_internalFocusNode.hasFocus) {  // ✅ 添加焦点检查
-      debugPrint('[AdaptiveTopBar] 🔄 didUpdateWidget: Syncing search text from "${_internalSearchController.text}" to "${widget.searchText}"');
+        !_internalFocusNode.hasFocus) {
       _internalSearchController.text = widget.searchText ?? '';
-      // ✅ 如果文本被清空，也清空选择区域
       if ((widget.searchText ?? '').isEmpty) {
         _internalSearchController.selection = TextSelection.collapsed(offset: 0);
       }
     } else if (_externallyControlSearchText && widget.searchText != _internalSearchController.text) {
-      debugPrint('[AdaptiveTopBar] ⚠️ didUpdateWidget: Skipping sync because focus is in input field');
-      debugPrint('[AdaptiveTopBar]    - widget.searchText: "${widget.searchText}"');
-      debugPrint('[AdaptiveTopBar]    - controller.text: "${_internalSearchController.text}"');
     }
   }
 
@@ -421,7 +410,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   void _startAutoCloseTimer() {
     _cancelAutoCloseTimer();
-    _autoCloseTimer = Timer(const Duration(seconds: 10), () { // ✅ 延长到10秒
+    _autoCloseTimer = Timer(const Duration(seconds: 10), () {
       if (mounted && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
         _setSearchVisible(false);
       }
@@ -440,44 +429,29 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   void _onSearchChanged(String value) {
-    debugPrint('[AdaptiveTopBar] 📝 _onSearchChanged called: "$value"');
     
-    // ✅ 取消之前的防抖定时器
     _searchDebounceTimer?.cancel();
-    debugPrint('[AdaptiveTopBar]    - Previous debounce timer cancelled');
     
-    // ✅ 设置新的防抖定时器，延迟 300ms 处理搜索
     _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-      debugPrint('[AdaptiveTopBar] ⏰ Debounce timer triggered after 300ms');
-      debugPrint('[AdaptiveTopBar]    - Current value: "$value"');
-      debugPrint('[AdaptiveTopBar]    - Last committed: "$_lastCommittedSearchText"');
       
-      // ✅ 确保只在文本真正变化且不是拼音输入中间状态时触发
       if (_lastCommittedSearchText != value) {
-        debugPrint('[AdaptiveTopBar]    - Value changed, proceeding...');
         _lastCommittedSearchText = value;
         
         if (_externallyControlSearchText) {
-          debugPrint('[AdaptiveTopBar]    - Calling external onSearchChanged callback');
           widget.onSearchChanged?.call(value);
         } else {
-          debugPrint('[AdaptiveTopBar]    - Updating internal search text');
           setState(() => _internalSearchText = value);
         }
       } else {
-        debugPrint('[AdaptiveTopBar]    - Value unchanged, skipping');
       }
     });
     
-    // ✅ 重置自动关闭计时器
     _resetAutoCloseTimer();
   }
 
   void _onSearchClear() {
-    // ✅ 取消防抖定时器
     _searchDebounceTimer?.cancel();
     
-    // ✅ 清空文本
     _internalSearchController.clear();
     _lastCommittedSearchText = '';
     
@@ -492,7 +466,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       widget.onSearchChanged?.call('');
     }
     
-    // ✅ 清空后保持焦点，继续输入
     if (!_internalFocusNode.hasFocus) {
       _internalFocusNode.requestFocus();
     }
@@ -504,13 +477,11 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Future<void> _onRefresh() async {
-    // ✅ 关键修复：如果有自定义的 onRefresh 回调，优先调用它
     if (widget.onRefresh != null) {
       widget.onRefresh!();
       return;
     }
     
-    // 否则执行默认的刷新逻辑
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
@@ -521,7 +492,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       return;
     }
 
-    if (mounted) setState(() => _isRefreshing = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isRefreshing = true);
     context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
 
     try {
@@ -546,7 +517,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     if (_isRefreshing) return;
     if (widget.dataManager == null || widget.fundService == null) return;
 
-    if (mounted) setState(() => _isRefreshing = true);  // ✅ 添加 mounted 检查
+    if (mounted) setState(() => _isRefreshing = true);
     context.showToast('强制刷新中，将重新获取所有基金净值...', duration: const Duration(seconds: 2));
 
     try {
@@ -573,19 +544,16 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Color _getBackgroundColor(double progress, bool isDarkMode) {
-    // iOS端透明度处理优化：使用更平滑的过渡
     if (progress >= 0.95) {
       return isDarkMode
           ? const Color(0xFF1C1C1E).withOpacity(0.95)
           : const Color(0xFFF2F2F7).withOpacity(0.95);
     } else if (progress >= 0.5) {
-      // 使用线性插值，避免突变
       final opacity = 0.5 + (progress - 0.5) * 0.9;
       return isDarkMode
           ? const Color(0xFF1C1C1E).withOpacity(opacity)
           : const Color(0xFFF2F2F7).withOpacity(opacity);
     } else {
-      // 保持最小透明度，避免完全透明导致的视觉问题
       return isDarkMode
           ? const Color(0xFF1C1C1E).withOpacity(0.5)
           : const Color(0xFFF2F2F7).withOpacity(0.5);
@@ -623,7 +591,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       return const SizedBox.shrink();
     }
     
-    // 检查是否为交易时间
     final isTradingTime = _checkIsTradingTime();
     
     return Row(
@@ -636,7 +603,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           refreshProgress: widget.valuationRefreshProgress,
           size: 32,
           onIntervalChanged: widget.onValuationRefreshIntervalChanged,
-          isTradingTime: isTradingTime, // 传递交易时间状态
+          isTradingTime: isTradingTime,
         ),
         if (widget.valuationUpdateTime != null && widget.valuationUpdateTime!.isNotEmpty) ...[
           const SizedBox(width: 4),
@@ -654,12 +621,10 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
   
-  /// 检查当前是否为交易时间
   bool _checkIsTradingTime() {
     final now = DateTime.now();
     final weekday = now.weekday;
     
-    // 周末不交易
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return false;
     }
@@ -668,7 +633,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     final minute = now.minute;
     final currentTime = hour * 60 + minute;
     
-    // 交易时间：9:30-11:30, 13:00-15:00
     final morningStart = 9 * 60 + 30;
     final morningEnd = 11 * 60 + 30;
     final afternoonStart = 13 * 60;
@@ -799,7 +763,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       );
     }
     if (widget.showValuationRefresh && widget.valuationRefreshIntervalSeconds != null) {
-      // 检查是否为交易时间
       final isTradingTime = _checkIsTradingTime();
       
       children.add(CountdownRefreshButton(
@@ -809,7 +772,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         refreshProgress: widget.valuationRefreshProgress,
         size: 32,
         onIntervalChanged: widget.onValuationRefreshIntervalChanged,
-        isTradingTime: isTradingTime, // 传递交易时间状态
+        isTradingTime: isTradingTime,
       ));
       if (widget.showReset || widget.showFilter || widget.showSearch || widget.showExpandCollapse) {
         children.add(const SizedBox(width: 4));
@@ -947,7 +910,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Widget _buildSearchButton() {
-    // ✅ 修复：搜索按钮始终可用，不受 _hasData 限制
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return GestureDetector(
       onTap: () => _setSearchVisible(!_currentSearchVisible),
@@ -967,7 +929,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         child: Icon(
           _currentSearchVisible ? CupertinoIcons.search_circle_fill : CupertinoIcons.search,
           size: widget.iconSize,
-          color: widget.iconColor,  // ✅ 始终使用主题色
+          color: widget.iconColor,
         ),
       ),
     );
@@ -1174,8 +1136,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         try {
           overlayEntry?.remove();
         } catch (e) {
-          debugPrint('移除菜单失败: $e');
-          // 可能已经被移除，忽略错误
         }
       }
     }
@@ -1186,8 +1146,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       try {
         overlayEntry?.remove();
       } catch (e) {
-        debugPrint('立即关闭菜单失败: $e');
-        // 可能已经被移除，忽略错误
       }
     }
     
@@ -1199,8 +1157,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             _closeMenuWithAnimation();
           }
         } catch (e) {
-          debugPrint('自动关闭菜单失败: $e');
-          // 定时器执行失败，静默处理
         }
       });
     }
@@ -1264,7 +1220,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   void dispose() {
     _scrollTimer?.cancel();
     _autoCloseTimer?.cancel();
-    _searchDebounceTimer?.cancel(); // ✅ 释放防抖定时器
+    _searchDebounceTimer?.cancel();
     _hideController.dispose();
     _internalSearchController.dispose();
     _internalFocusNode.dispose();
@@ -1631,8 +1587,6 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
         await _controller.reverse();
       }
     } catch (e) {
-      debugPrint('关闭动画失败: $e');
-      // 动画已取消或完成，忽略错误
     }
     if (mounted) {
       widget.onHide();

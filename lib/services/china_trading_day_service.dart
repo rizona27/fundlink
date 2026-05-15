@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';  // ✅ 添加 debugPrint
 import 'package:world_holidays/world_holidays.dart';
 import 'http_client_provider.dart';
 
@@ -94,7 +93,6 @@ class ChinaTradingDayService {
       if (_cache.containsKey(dateKey)) {
         isTrading = _cache[dateKey]!;
       } else {
-        // 使用与 _checkByWorldHolidays 相同的逻辑
         if (next.weekday == DateTime.saturday || next.weekday == DateTime.sunday) {
           isTrading = false;
         } else {
@@ -137,8 +135,6 @@ class ChinaTradingDayService {
         }
       }
     } catch (e) {
-      debugPrint('检查交易日失败 (${_formatDate(date)}): $e');
-      // API请求失败，返回null使用备用方案
     }
     
     return null;
