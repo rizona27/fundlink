@@ -95,24 +95,19 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
       for (var period in _periods) {
         final label = period['label'] as String;
         
-        if (_performanceData.containsKey(label) && _performanceData[label] != null) {
-          continue;
-        }
-        
         DateTime? startDate;
         DateTime? endDate;
+        bool shouldCalculate = false;
         
         if (period['special'] == 'ytd') {
           startDate = DateTime(latestDate.year, 1, 1);
           endDate = latestDate;
-          _performanceData[label] = 
-            _calculateReturn(historyPoints, startDate, endDate);
+          shouldCalculate = true;
           _calculatedPeriods.add(label); 
         } else if (period['special'] == 'inception') {
           startDate = _fundEstablishDate!;
           endDate = latestDate;
-          _performanceData[label] = 
-            _calculateReturn(historyPoints, startDate, endDate);
+          shouldCalculate = true;
           _calculatedPeriods.add(label); 
         } else {
           final days = period['days'] as int;
@@ -138,13 +133,19 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
           startDate = actualStartPoint?.date ?? historyPoints.first.date;
           endDate = latestDate;
           
+          if (!_performanceData.containsKey(label) || _performanceData[label] == null) {
+            shouldCalculate = true;
+            _calculatedPeriods.add(label); 
+          }
+        }
+        
+        if (shouldCalculate && startDate != null && endDate != null) {
           _performanceData[label] = 
             _calculateReturn(historyPoints, startDate!, endDate!);
-          _calculatedPeriods.add(label); 
         }
         
         if (startDate != null && endDate != null) {
-          _periodDateRanges[label] = '${_formatDate(startDate)} ~ ${_formatDate(endDate)}';
+          _periodDateRanges[label] = _formatDateRange(startDate, endDate);
         }
       }
       
@@ -199,6 +200,12 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateRange(DateTime startDate, DateTime endDate) {
+    final startStr = '[${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}]';
+    final endStr = '[${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}]';
+    return '$startStr ~ $endStr';
   }
 
   String _getPeriodText(int days) {
@@ -403,38 +410,51 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
       ),
       child: Row(
         children: [
-          Expanded(
+          Flexible(
             flex: 2,
+            fit: FlexFit.loose,
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 50),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                        ),
+                      ),
+                      if (isCalculated)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 2),
+                          child: Text(
+                            '*',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark 
+                                  ? CupertinoColors.systemGrey.withOpacity(0.5)
+                                  : CupertinoColors.systemGrey.withOpacity(0.6),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (isCalculated)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2),
-                    child: Text(
-                      '*',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark 
-                            ? CupertinoColors.systemGrey.withOpacity(0.5)
-                            : CupertinoColors.systemGrey.withOpacity(0.6),
-                      ),
-                    ),
-                  ),
+                const SizedBox(width: 8),
                 if (showDateRange)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
                     child: Text(
                       dateRange!,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         color: isDark 
                             ? CupertinoColors.systemGrey.withOpacity(0.6)
                             : CupertinoColors.systemGrey.withOpacity(0.7),
