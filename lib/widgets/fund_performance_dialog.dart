@@ -405,37 +405,32 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
         children: [
           Expanded(
             flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                  ),
+                ),
+                if (isCalculated)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Text(
+                      '*',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                        color: isDark 
+                            ? CupertinoColors.systemGrey.withOpacity(0.5)
+                            : CupertinoColors.systemGrey.withOpacity(0.6),
                       ),
                     ),
-                    if (isCalculated)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Text(
-                          '*',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isDark 
-                                ? CupertinoColors.systemGrey.withOpacity(0.5)
-                                : CupertinoColors.systemGrey.withOpacity(0.6),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                  ),
                 if (showDateRange)
                   Padding(
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.only(left: 6),
                     child: Text(
                       dateRange!,
                       style: TextStyle(

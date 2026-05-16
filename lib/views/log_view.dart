@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/material.dart';
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
 import '../widgets/adaptive_top_bar.dart';

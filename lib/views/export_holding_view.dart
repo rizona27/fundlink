@@ -1,14 +1,14 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
+import '../services/data_manager.dart';
 import '../services/file_export_service.dart';
-import '../widgets/toast.dart';
-import '../widgets/glass_button.dart';
-import '../utils/input_formatters.dart';
 import '../utils/desktop_focus_manager.dart';
+import '../utils/input_formatters.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/toast.dart';
 
 class ExportHoldingView extends StatefulWidget {
   const ExportHoldingView({super.key});

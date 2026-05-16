@@ -1,16 +1,18 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../constants/app_constants.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
-import '../widgets/toast.dart';
+import '../utils/desktop_focus_manager.dart';
+import '../utils/input_formatters.dart';
+import '../utils/view_utils.dart';
 import '../widgets/add_transaction_dialog.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
-import '../utils/input_formatters.dart';
-import '../utils/desktop_focus_manager.dart';
+import '../widgets/toast.dart';
 
 class EditHoldingView extends StatefulWidget {
   final FundHolding holding;
@@ -159,16 +161,6 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     }
   }
   
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-  
-  String _maskClientName(String name) {
-    if (name.isEmpty) return '';
-    if (name.length == 1) return '*';
-    if (name.length == 2) return '${name[0]}*';
-    return '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}';
-  }
 
   Future<void> _showEditRemarksDialog(FundHolding holding) async {
     final controller = TextEditingController(text: holding.remarks);
@@ -456,7 +448,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               children: [
                                 Text(
                                   _dataManager.isPrivacyMode 
-                                      ? _maskClientName(holding.clientName)
+                                      ? ViewUtils.maskClientName(holding.clientName)
                                       : holding.clientName, 
                                     style: TextStyle(
                                       fontSize: 13, 
@@ -746,7 +738,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
               ],
               const Spacer(),
               Text(
-                _formatDate(tx.tradeDate),
+                ViewUtils.formatDate(tx.tradeDate),
                 style: TextStyle(fontSize: 11, color: secondaryTextColor),
               ),
             ],

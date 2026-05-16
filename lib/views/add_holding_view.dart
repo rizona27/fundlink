@@ -1,19 +1,21 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/data_manager.dart';
-import '../services/fund_service.dart';
-import '../services/client_mapping_service.dart';
+import '../constants/app_constants.dart';
+import '../models/client_mapping.dart';
 import '../models/fund_holding.dart';
-import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
-import '../models/client_mapping.dart';
-import '../widgets/toast.dart';
-import '../widgets/glass_button.dart';
+import '../models/transaction_record.dart';
+import '../services/client_mapping_service.dart';
+import '../services/data_manager.dart';
+import '../services/fund_service.dart';
+import '../utils/error_handler.dart';
 import '../utils/input_formatters.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/toast.dart';
 
 class AddHoldingView extends StatefulWidget {
   const AddHoldingView({super.key});
@@ -128,14 +130,14 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   void _validateClientName(String value) {
     final trimmed = value.trim();
     setState(() {
-      _clientNameError = trimmed.isEmpty || trimmed.length > 20;
+      _clientNameError = trimmed.isEmpty || trimmed.length > AppConstants.maxClientNameLength;
     });
   }
 
   void _validateFundCode(String value) {
     final trimmed = value.trim();
     setState(() {
-      _fundCodeError = trimmed.isEmpty || !RegExp(r'^\d{6}$').hasMatch(trimmed);
+      _fundCodeError = trimmed.isEmpty || !RegExp(AppConstants.fundCodePattern).hasMatch(trimmed);
     });
   }
 
@@ -292,7 +294,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   }
 
   void _onFundCodeChanged(String value) {
-    final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final filtered = InputUtils.extractDigits(value);
     final newValue = filtered.length > 6 ? filtered.substring(0, 6) : filtered;
     if (newValue != _fundCodeController.text) {
       final cursor = _fundCodeController.selection.baseOffset;

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui show Color;
 import 'package:flutter/cupertino.dart';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 
 class FloatingTabBar extends StatefulWidget {
   final int currentIndex;

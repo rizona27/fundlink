@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../models/net_worth_point.dart';
 import '../services/fund_service.dart';
-import '../widgets/toast.dart';
+import '../utils/view_utils.dart';
 import '../widgets/glass_button.dart';
+import '../widgets/toast.dart';
 
 class HistoryDialog extends StatefulWidget {
   final String fundCode;
@@ -102,7 +103,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
       if (newItems.isNotEmpty) {
         final earliestDate = newItems.last.date;
         if (mounted) {
-          context.showToast('已加载到 ${_formatDate(earliestDate)} 的数据');
+          context.showToast('已加载到 ${ViewUtils.formatDate(earliestDate)} 的数据');
         }
       }
       if (mounted) {
@@ -317,7 +318,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
                               Expanded(
                                 flex: 3,
                                 child: Text(
-                                  _formatDate(point.date),
+                                  ViewUtils.formatDate(point.date),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: isDark
@@ -372,6 +373,4 @@ class _HistoryDialogState extends State<HistoryDialog> {
     );
   }
 
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

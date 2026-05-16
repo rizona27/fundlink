@@ -96,14 +96,13 @@ lib/
 ├── utils/
 │   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
 │   ├── desktop_focus_manager.dart         # 桌面端焦点管理工具，处理 Tab 键导航和焦点切换逻辑
-│   ├── error_message_mapper.dart          # 错误消息映射工具，将技术性错误转换为用户友好的提示，支持多种错误类型和解决建议
-│   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名、客户号等格式化器
+│   ├── error_handler.dart                 # 统一错误处理工具，捕获异常、记录日志、显示用户友好的错误提示
+│   ├── input_formatters.dart              # 输入格式化工具类，提供金额、整数、客户姓名、客户号等格式化器，包含 InputUtils 数字提取工具
 │   ├── memory_info_native.dart            # 原生平台内存信息实现（iOS/Android/macOS），使用 flutter_memory_info
 │   ├── memory_info_web.dart               # Web平台内存信息实现，使用 Performance API 或估算值
 │   ├── memory_monitor.dart                # 内存监控工具类，跨平台兼容，监控应用内存使用情况，防止内存泄漏
-│   ├── persistent_cache.dart              # 持久化缓存工具类，支持磁盘缓存和数据持久化，提升应用启动速度
-│   ├── security_utils.dart                # 安全工具类，错误消息脱敏、敏感数据掩码、输入清理
-│   └── smart_cache.dart                   # 智能 LRU 缓存工具类，支持 TTL 过期和容量限制，用于 API 数据缓存
+│   ├── smart_cache.dart                   # 智能 LRU 缓存工具类，支持 TTL 过期和容量限制，用于 API 数据缓存
+│   └── view_utils.dart                    # 视图工具类，提供日期格式化、数字格式化等常用 UI 辅助函数
 │
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略

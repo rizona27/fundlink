@@ -1,21 +1,22 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
-import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
+import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/ui_state_service.dart';
-import '../models/log_entry.dart';
-import '../widgets/theme_switch.dart';
 import '../utils/animation_config.dart';
+import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
-import 'manage_holdings_view.dart';
-import 'log_view.dart';
-import 'version_view.dart';
-import 'license_view.dart';
-import 'import_holding_view.dart';
 import 'export_holding_view.dart';
-import 'pending_transactions_view.dart';
+import 'import_holding_view.dart';
+import 'license_view.dart';
+import 'log_view.dart';
+import 'manage_holdings_view.dart';
 import 'mapping_dictionary_view.dart';
-import 'dart:async';
+import 'pending_transactions_view.dart';
+import 'version_view.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});

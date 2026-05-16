@@ -12,7 +12,7 @@ import '../constants/app_constants.dart';
 const String APP_VERSION = 'v1.3.1';
 
 const List<String> UPDATE_LOGS = [
-  'v1.3.1 - 新增一览、客户、排名、管理持仓页面返回顶部按钮动画',
+  'v1.3.1 - 新增各数据页返回顶部按钮动画',
   'v1.3.0 - 新增映射索引，自动匹配用户名/用户号对应关系',
   'v1.2.8 - 优化主题切换',
   'v1.2.7 - 优化估值查询逻辑，修复图表显示',

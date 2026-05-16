@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';

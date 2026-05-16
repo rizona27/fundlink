@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 import 'package:flutter/services.dart';
 import 'package:pinyin/pinyin.dart';
 import '../services/client_mapping_service.dart';
@@ -102,7 +104,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
+    _scrollThrottleTimer = Timer(AppConstants.scrollThrottleDuration, () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
         setState(() {
@@ -440,7 +442,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
                 
                 AnimatedOpacity(
                   opacity: _scrollOffset < 50 ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: AppConstants.fastAnimationDuration,
                   child: _scrollOffset < 50
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

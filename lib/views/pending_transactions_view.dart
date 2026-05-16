@@ -1,12 +1,13 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
+import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
-import '../widgets/toast.dart';
-import '../widgets/adaptive_top_bar.dart';
 import '../utils/desktop_focus_manager.dart';
+import '../utils/view_utils.dart';
+import '../widgets/adaptive_top_bar.dart';
+import '../widgets/toast.dart';
 
 class PendingTransactionsView extends StatefulWidget {
   const PendingTransactionsView({super.key});
@@ -175,9 +176,6 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
     }
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
 
   DateTime _getExpectedConfirmDate(TransactionRecord tx) {
     return DataManager.calculateConfirmDate(tx.tradeDate, tx.isAfter1500);
@@ -637,7 +635,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               ),
               const Spacer(),
               Text(
-                _formatDate(tx.tradeDate),
+                ViewUtils.formatDate(tx.tradeDate),
                 style: TextStyle(fontSize: 11, color: secondaryTextColor),
               ),
             ],
@@ -712,7 +710,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                     Text('预计确认', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                     const SizedBox(height: 2),
                     Text(
-                      _formatDate(expectedConfirmDate),
+                      ViewUtils.formatDate(expectedConfirmDate),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

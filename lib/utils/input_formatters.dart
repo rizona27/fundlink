@@ -1,6 +1,16 @@
 import 'package:flutter/services.dart';
 import '../constants/app_constants.dart';
 
+class InputUtils {
+  static String extractDigits(String input) {
+    return input.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+  
+  static String extractNumbersAndDots(String input) {
+    return input.replaceAll(RegExp(r'[^0-9.]'), '');
+  }
+}
+
 class AmountInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(

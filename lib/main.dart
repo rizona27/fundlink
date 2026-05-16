@@ -1,20 +1,22 @@
 import 'package:flutter/cupertino.dart';
-import 'utils/animation_config.dart';
-import 'package:flutter/material.dart' show Colors, RouteObserver, PageRoute;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'constants/app_constants.dart';
 import 'services/data_manager.dart';
 import 'services/version_check_service.dart';
+import 'utils/animation_config.dart';
+import 'utils/error_handler.dart';
 import 'utils/memory_monitor.dart';
 import 'views/client_view.dart';
+import 'views/config_view.dart';
+import 'views/splash_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
-import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
-import 'views/splash_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,16 +28,14 @@ void main() {
 
   if (!kReleaseMode) {
     final monitor = MemoryMonitor();
-    monitor.warningThresholdMB = 200;
-    monitor.criticalThresholdMB = 400;
+    monitor.warningThresholdMB = AppConstants.memoryWarningThresholdMB;
+    monitor.criticalThresholdMB = AppConstants.memoryCriticalThresholdMB;
     
-    monitor.onWarning = (snapshot) {
-    };
+    monitor.onWarning = (snapshot) {};
     
-    monitor.onCritical = (snapshot) {
-    };
+    monitor.onCritical = (snapshot) {};
     
-    monitor.startMonitoring(interval: const Duration(seconds: 10));
+    monitor.startMonitoring(interval: AppConstants.memoryMonitorInterval);
   }
 
   _requestPermissionsOnStart();
@@ -44,9 +44,7 @@ void main() {
 }
 
 Future<void> _requestPermissionsOnStart() async {
-  if (kIsWeb) {
-    return;
-  }
+  if (kIsWeb) return;
 
   try {
     PermissionStatus status;
@@ -62,6 +60,7 @@ Future<void> _requestPermissionsOnStart() async {
     } else {
     }
   } catch (e) {
+    ErrorHandler.handleError(e, context: '权限请求');
   }
 }
 
@@ -112,20 +111,20 @@ class _MyAppState extends State<MyApp> {
       bool success = await _tryCheckVersion(currentVersion, '首次尝试');
       
       if (!success) {
-        for (int i = 1; i <= 3; i++) {
-          await Future.delayed(const Duration(seconds: 3));
+        for (int i = 1; i <= AppConstants.versionCheckMaxRetries; i++) {
+          await Future.delayed(Duration(seconds: AppConstants.versionCheckRetryDelaySeconds));
           
           success = await _tryCheckVersion(currentVersion, '快速重试 #$i');
           if (success) return;
         }
         
-        await Future.delayed(const Duration(minutes: 5));
+        await Future.delayed(AppConstants.versionCheckLongRetryDelay);
         
         if (mounted) {
           success = await _tryCheckVersion(currentVersion, '5分钟后重试');
           if (success) return;
           
-          await Future.delayed(const Duration(minutes: 10));
+          await Future.delayed(AppConstants.versionCheckFinalRetryDelay);
           
           if (mounted) {
             await _tryCheckVersion(currentVersion, '10分钟后最终尝试');
@@ -133,6 +132,7 @@ class _MyAppState extends State<MyApp> {
         }
       }
     } catch (e) {
+      ErrorHandler.handleError(e, context: '版本检查');
     }
   }
   

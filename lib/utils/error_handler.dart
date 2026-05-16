@@ -1,4 +1,85 @@
-class ErrorMessageMapper {
+import 'package:flutter/foundation.dart';
+import '../models/log_entry.dart';
+import '../services/data_manager.dart';
+
+class ErrorHandler {
+  static void handleError(
+    Object error, {
+    String context = '',
+    DataManager? dataManager,
+    bool showLog = true,
+    bool showUserFriendly = false,
+  }) {
+    final message = context.isNotEmpty ? '$context: $error' : error.toString();
+    
+    if (showLog && dataManager != null) {
+      final logMessage = showUserFriendly 
+          ? '❌ ${getUserFriendlyErrorMessage(error)}'
+          : '❌ $message';
+      dataManager.addLog(logMessage, type: LogType.error).catchError((_) {});
+    }
+    
+    if (kDebugMode) {
+      debugPrint('[ERROR] $message');
+    }
+  }
+
+  static void handleWarning(
+    String message, {
+    DataManager? dataManager,
+    bool showLog = true,
+  }) {
+    if (showLog && dataManager != null) {
+      dataManager.addLog('⚠️ $message', type: LogType.warning).catchError((_) {});
+    }
+    
+    if (kDebugMode) {
+      debugPrint('[WARNING] $message');
+    }
+  }
+
+  static void handleInfo(
+    String message, {
+    DataManager? dataManager,
+    bool showLog = true,
+  }) {
+    if (showLog && dataManager != null) {
+      dataManager.addLog('ℹ️ $message', type: LogType.info).catchError((_) {});
+    }
+    
+    if (kDebugMode) {
+      debugPrint('[INFO] $message');
+    }
+  }
+
+  static Future<T> safeExecute<T>(
+    Future<T> Function() operation, {
+    String context = '',
+    DataManager? dataManager,
+    T? defaultValue,
+  }) async {
+    try {
+      return await operation();
+    } catch (e) {
+      handleError(e, context: context, dataManager: dataManager);
+      return defaultValue as T;
+    }
+  }
+
+  static T safeExecuteSync<T>(
+    T Function() operation, {
+    String context = '',
+    DataManager? dataManager,
+    T? defaultValue,
+  }) {
+    try {
+      return operation();
+    } catch (e) {
+      handleError(e, context: context, dataManager: dataManager);
+      return defaultValue as T;
+    }
+  }
+
   static String getUserFriendlyErrorMessage(Object error) {
     final errorStr = error.toString().toLowerCase();
     
@@ -129,5 +210,24 @@ class ErrorMessageMapper {
     }
     
     return message;
+  }
+
+  static String maskSensitiveData(String data, {int visibleChars = 2}) {
+    if (data.length <= visibleChars) {
+      return '*' * data.length;
+    }
+    return data.substring(0, visibleChars) + '*' * (data.length - visibleChars);
+  }
+
+  static String sanitizeInput(String input) {
+    String sanitized = input.replaceAll(RegExp(r'<[^>]*>'), '');
+    
+    sanitized = sanitized.replaceAll(RegExp(r'javascript:', caseSensitive: false), '');
+    
+    if (sanitized.length > 1000) {
+      sanitized = sanitized.substring(0, 1000);
+    }
+    
+    return sanitized.trim();
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 
 class PageScrollToTop extends StatefulWidget {
   final ScrollController scrollController;

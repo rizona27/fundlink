@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../constants/app_constants.dart';
 import '../models/fund_holding.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';

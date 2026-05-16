@@ -1,22 +1,24 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Divider;
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as excel;
+import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
-import '../services/data_manager.dart';
-import '../services/fund_service.dart';
-import '../services/file_import_service.dart';
-import '../services/client_mapping_service.dart';
-import '../models/transaction_record.dart';
+import '../constants/app_constants.dart';
 import '../models/log_entry.dart';
-import '../widgets/toast.dart';
+import '../models/transaction_record.dart';
+import '../services/client_mapping_service.dart';
+import '../services/data_manager.dart';
+import '../services/file_import_service.dart';
+import '../services/fund_service.dart';
+import '../utils/error_handler.dart';
+import '../utils/input_formatters.dart';
 import '../widgets/glass_button.dart';
-import '../utils/security_utils.dart';
+import '../widgets/toast.dart';
 
 class ImportHoldingView extends StatefulWidget {
   const ImportHoldingView({super.key});
@@ -721,7 +723,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   String _normalizeFundCode(String? code) {
     if (code == null) return '';
     String trimmed = code.trim();
-    final numericOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    final numericOnly = InputUtils.extractDigits(trimmed);
     if (numericOnly.isEmpty) return trimmed;
     if (numericOnly.length < 6) {
       return numericOnly.padLeft(6, '0');
@@ -1637,7 +1639,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       final dataManager = DataManagerProvider.of(context);
       dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
-        final friendlyMessage = SecurityUtils.getFriendlyErrorMessage(e);
+        final friendlyMessage = ErrorHandler.getUserFriendlyErrorMessage(e);
         context.showToast(friendlyMessage);
         showCupertinoDialog(
           context: context,
@@ -2143,7 +2145,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       _targetProgress = progress;
       _animationController.animateTo(
         progress,
-        duration: const Duration(milliseconds: 200),
+        duration: AppConstants.fastAnimationDuration,
         curve: Curves.easeOut,
       );
       

@@ -1,6 +1,6 @@
 import '../utils/animation_config.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart';
 import '../models/top_holding.dart';
 
 class TopHoldingsWidget extends StatelessWidget {

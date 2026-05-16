@@ -1,23 +1,24 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, ModalRoute;
+import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart';
+import '../constants/app_constants.dart';
+import '../main.dart';
+import '../mixins/scroll_to_top_mixin.dart';
+import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
-import '../models/fund_holding.dart';
-import '../models/log_entry.dart';
-import '../widgets/gradient_card.dart';
-import '../widgets/fund_card.dart';
-import '../widgets/empty_state.dart';
-import '../widgets/toast.dart';
-import '../widgets/adaptive_top_bar.dart';
-import '../widgets/glass_button.dart';
-import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/animation_config.dart';
+import '../utils/error_handler.dart';
+import '../widgets/adaptive_top_bar.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/fund_card.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/gradient_card.dart';
+import '../widgets/toast.dart';
 import 'add_holding_view.dart';
-import '../constants/app_constants.dart';
-import '../main.dart' show MyApp;
 
 class _ClientGroup {
   final String key;
@@ -163,7 +164,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
+    _scrollThrottleTimer = Timer(AppConstants.scrollThrottleDuration, () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
         setState(() {

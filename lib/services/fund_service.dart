@@ -1,13 +1,14 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
+import '../constants/app_constants.dart';
+import '../models/fund_info_cache.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
-import '../models/fund_info_cache.dart';
-import 'data_manager.dart';
-import '../constants/app_constants.dart';
+import '../services/data_manager.dart';
+import '../utils/error_handler.dart';
 
 class FundService {
   final DataManager? _dataManager;
@@ -156,7 +157,7 @@ class FundService {
       const maxRetries = 2; 
       Exception? lastException;
       
-      while (retryCount <= maxRetries) {
+      while (retryCount <= AppConstants.maxNetworkRetries) {
         try {
           response = await _sharedClient.get(
             url,
@@ -164,7 +165,7 @@ class FundService {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': '*/*',
             },
-          ).timeout(const Duration(seconds: 20)); 
+          ).timeout(AppConstants.networkRequestTimeout);
           
           if (response.statusCode == 200) {
             break;
@@ -173,8 +174,8 @@ class FundService {
           lastException = e is Exception ? e : Exception(e.toString());
           retryCount++;
           
-          if (retryCount <= maxRetries) {
-            await Future.delayed(Duration(milliseconds: 500 * retryCount));
+          if (retryCount <= AppConstants.maxNetworkRetries) {
+            await Future.delayed(Duration(milliseconds: AppConstants.networkRetryDelayBase.inMilliseconds * retryCount));
           }
         }
       }

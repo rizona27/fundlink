@@ -60,4 +60,46 @@ class AppConstants {
   static const int maxDecimalPlaces = 4;
   static const int maxIntegerDigits = 10;
   static const String numberPattern = r'^[0-9]*\.?[0-9]*$';
+
+  static const Duration networkRequestTimeout = Duration(seconds: 20);
+  static const int maxNetworkRetries = 2;
+  static const Duration networkRetryDelayBase = Duration(milliseconds: 500);
+  
+  static const Duration cacheCleanupInterval = Duration(minutes: 5);
+  static const int profitCacheMaxSize = 50;
+  static const Duration profitCacheTtl = Duration(minutes: 30);
+  static const int transactionHistoryCacheMaxSize = 30;
+  static const Duration transactionHistoryCacheTtl = Duration(hours: 1);
+  
+  static const Duration memoryMonitorInterval = Duration(seconds: 10);
+  static const int memoryWarningThresholdMB = 200;
+  static const int memoryCriticalThresholdMB = 400;
+  
+  static const Duration toastDuration = Duration(seconds: 2);
+  static const Duration toastAnimationDuration = Duration(milliseconds: 300);
+  
+  static const Duration scrollThrottleDuration = Duration(milliseconds: 16);
+  
+  static const int maxClientNameLength = 20;
+  static const int maxRemarksLength = 30;
+  static const String fundCodePattern = r'^\d{6}$';
+  
+  static const double cardTapOpacity = 0.7;
+  static const double cardTapScale = 0.98;
+  static const double buttonPressedScale = 0.95;
+  
+  static const double toastMaxWidth = 320.0;
+  static const double toastBottomOffset = 100.0;
+  static const double toastBorderRadius = 12.0;
+  
+  static const Duration pageTransitionDuration = Duration(milliseconds: 300);
+  static const Duration dialogTransitionDuration = Duration(milliseconds: 300);
+  static const Duration expandAnimationDuration = Duration(milliseconds: 400);
+  
+  static const int searchDebounceMs = 400;
+  static const int versionCheckInitialDelaySeconds = 1;
+  static const int versionCheckRetryDelaySeconds = 3;
+  static const int versionCheckMaxRetries = 3;
+  static const Duration versionCheckLongRetryDelay = Duration(minutes: 5);
+  static const Duration versionCheckFinalRetryDelay = Duration(minutes: 10);
 }

@@ -1,22 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/widgets.dart' show WidgetsBinding;
+import '../constants/app_constants.dart';
 import '../models/fund_holding.dart';
-import '../models/transaction_record.dart';
+import '../models/fund_info_cache.dart';
 import '../models/log_entry.dart';
 import '../models/profit_result.dart';
-import '../models/fund_info_cache.dart';
-import '../services/fund_service.dart';
+import '../models/transaction_record.dart';
 import '../services/china_trading_day_service.dart';
-import '../services/version_check_service.dart';
-import '../services/database_repository.dart';
 import '../services/database_helper.dart';
-import '../widgets/theme_switch.dart' show ThemeMode;
-import '../constants/app_constants.dart';
+import '../services/database_repository.dart';
+import '../services/fund_service.dart';
+import '../services/version_check_service.dart';
+import '../utils/error_handler.dart';
 import '../utils/smart_cache.dart';
+import '../widgets/theme_switch.dart' show ThemeMode;
 
 extension ThemeModeDisplayName on ThemeMode {
   String get displayName {
@@ -55,18 +55,16 @@ class DataManager extends ChangeNotifier {
   bool _isAutoConfirming = false;
   
   final SmartCache<String, ProfitResult> _profitCache = SmartCache(
-    maxSize: 50,
-    ttl: const Duration(minutes: 30),
+    maxSize: AppConstants.profitCacheMaxSize,
+    ttl: AppConstants.profitCacheTtl,
   );
   
   final SmartCache<String, List<TransactionRecord>> _transactionHistoryCache = SmartCache(
-    maxSize: 30,
-    ttl: const Duration(hours: 1),
+    maxSize: AppConstants.transactionHistoryCacheMaxSize,
+    ttl: AppConstants.transactionHistoryCacheTtl,
   );
   
   Timer? _cacheCleanupTimer;
-  static const int memoryWarningThresholdMB = 200;
-  static const int memoryCriticalThresholdMB = 400;
   
   VersionInfo? _latestVersionInfo;
   
@@ -156,7 +154,7 @@ class DataManager extends ChangeNotifier {
   void _startCacheCleanup() {
     if (_disposed) return;
     
-    _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _cacheCleanupTimer = Timer.periodic(AppConstants.cacheCleanupInterval, (_) {
       if (!_disposed) {
         _cleanupExpiredCaches();
       }
@@ -188,6 +186,7 @@ class DataManager extends ChangeNotifier {
         await addLog('内存优化：已清理缓存', type: LogType.info);
       }
     } catch (e) {
+      ErrorHandler.handleError(e, context: '内存检查清理', dataManager: this);
     }
   }
   

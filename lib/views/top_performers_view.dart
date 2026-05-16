@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';

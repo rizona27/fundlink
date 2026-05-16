@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 
 class Search extends StatelessWidget {
   final TextEditingController controller;

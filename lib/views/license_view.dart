@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../widgets/adaptive_top_bar.dart';
-import 'package:flutter/material.dart' show Colors;
 
 class LicenseView extends StatelessWidget {
   const LicenseView({super.key});

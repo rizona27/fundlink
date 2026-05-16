@@ -1,23 +1,23 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import '../utils/animation_config.dart';
-import 'package:flutter/material.dart' show ModalRoute, Colors, Divider;
+import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
+import '../main.dart';
+import '../mixins/scroll_to_top_mixin.dart';
+import '../models/fund_holding.dart';
+import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
-import '../models/fund_holding.dart';
-import '../models/log_entry.dart';
-import '../widgets/empty_state.dart';
+import '../utils/animation_config.dart';
 import '../widgets/adaptive_top_bar.dart';
-import '../widgets/gradient_card.dart';
-import '../widgets/glass_button.dart';
-import '../widgets/toast.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/fund_performance_dialog.dart';
-import '../mixins/scroll_to_top_mixin.dart';
+import '../widgets/glass_button.dart';
+import '../widgets/gradient_card.dart';
+import '../widgets/toast.dart';
 import 'add_holding_view.dart';
 import 'fund_detail_view.dart';
-import '../constants/app_constants.dart';
-import '../main.dart' show MyApp;
 
 class SummaryView extends StatefulWidget {
   const SummaryView({super.key});
@@ -133,7 +133,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
       return;
     }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
+    _scrollThrottleTimer = Timer(AppConstants.scrollThrottleDuration, () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
         setState(() {

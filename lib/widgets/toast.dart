@@ -1,10 +1,11 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class Toast {
   static OverlayEntry? _currentOverlayEntry;
 
-  static void show(BuildContext context, String message, {Duration duration = const Duration(seconds: 2)}) {
+  static void show(BuildContext context, String message, {Duration duration = AppConstants.toastDuration}) {
     _removeCurrentOverlay();
 
     final overlayState = Overlay.of(context);
@@ -96,7 +97,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 100,
+      bottom: AppConstants.toastBottomOffset,
       left: 0,
       right: 0,
       child: FadeTransition(
@@ -106,10 +107,10 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
           child: Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              constraints: const BoxConstraints(maxWidth: 320),
+              constraints: BoxConstraints(maxWidth: AppConstants.toastMaxWidth),
               decoration: BoxDecoration(
                 color: CupertinoColors.systemGrey6,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppConstants.toastBorderRadius),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.15),
@@ -135,7 +136,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
 }
 
 extension ToastExtension on BuildContext {
-  void showToast(String message, {Duration duration = const Duration(seconds: 2)}) {
+  void showToast(String message, {Duration duration = AppConstants.toastDuration}) {
     Toast.show(this, message, duration: duration);
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
