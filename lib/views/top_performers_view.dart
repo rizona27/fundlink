@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show RouteAware, PageRoute, ModalRoute, Colors;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
@@ -14,6 +14,7 @@ import '../widgets/scroll_to_top_button.dart';
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
+import '../main.dart' show MyApp;
 
 class TopPerformersView extends StatefulWidget {
   const TopPerformersView({super.key});
@@ -22,7 +23,7 @@ class TopPerformersView extends StatefulWidget {
   State<TopPerformersView> createState() => _TopPerformersViewState();
 }
 
-class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin {
+class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin, RouteAware {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -96,14 +97,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _onScrollUpdate(_scrollController.offset);
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScrollToTopButton.show(
-        context: context,
-        scrollController: _scrollController,
-        showThreshold: 100.0,
-        rightMargin: 16.0,
-      );
-    });
   }
 
   Future<void> _loadState() async {
@@ -151,10 +144,48 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     } else {
       _updateCachedItems();
     }
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      MyApp.routeObserver.subscribe(this, route);
+    }
     
     Future.microtask(() {
       if (mounted) {
         setState(() {});
+      }
+    });
+  }
+
+  @override
+  void didPush() {
+    _ensureButton();
+  }
+
+  @override
+  void didPopNext() {
+    _ensureButton();
+  }
+
+  void _ensureButton() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        if (!ScrollToTopButton.exists('top_performers_view')) {
+          ScrollToTopButton.show(
+            context: context,
+            scrollController: _scrollController,
+            pageId: 'top_performers_view',
+            showThreshold: 100.0,
+            rightMargin: 16.0,
+          );
+        } else {
+          ScrollToTopButton.rebuild(pageId: 'top_performers_view');
+        }
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.position.notifyListeners();
+          }
+        });
       }
     });
   }
@@ -185,7 +216,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   @override
   void dispose() {
-    ScrollToTopButton.hide(scrollController: _scrollController);
+    MyApp.routeObserver.unsubscribe(this);
+    ScrollToTopButton.hide(pageId: 'top_performers_view');
     _scrollThrottleTimer?.cancel();
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel(); 

@@ -377,7 +377,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         _setSearchVisible(true);
         return;
       }
-      
+
       final rawOffset = widget.scrollOffset.isNaN ? 0 : widget.scrollOffset;
       double rawProgress = 1.0 - (rawOffset / 150).clamp(0.0, 1.0);
       double targetProgress = Curves.easeOutCubic.transform(rawProgress);

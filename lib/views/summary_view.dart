@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../utils/animation_config.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show RouteAware, PageRoute, ModalRoute, Colors, Divider;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
@@ -17,6 +17,7 @@ import '../widgets/scroll_to_top_button.dart';
 import 'add_holding_view.dart';
 import 'fund_detail_view.dart';
 import '../constants/app_constants.dart';
+import '../main.dart' show MyApp;
 
 class SummaryView extends StatefulWidget {
   const SummaryView({super.key});
@@ -25,7 +26,7 @@ class SummaryView extends StatefulWidget {
   State<SummaryView> createState() => _SummaryViewState();
 }
 
-class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, RouteAware {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -116,15 +117,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _loadSortState();
     _loadValuationRefreshInterval();
     _startMarketStatusTimer();
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScrollToTopButton.show(
-        context: context,
-        scrollController: _scrollController,
-        showThreshold: 100.0,
-        rightMargin: 16.0,
-      );
-    });
+
     
     Future.microtask(() {
       if (mounted) {
@@ -196,6 +189,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _fundService = FundService(_dataManager);
     
     _autoConfirmPendingTransactions();
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      MyApp.routeObserver.subscribe(this, route);
+    }
     
     Future.microtask(() {
       if (mounted) {
@@ -205,9 +203,43 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   @override
+  void didPush() {
+    _ensureButton();
+  }
+
+  @override
+  void didPopNext() {
+    _ensureButton();
+  }
+
+  void _ensureButton() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        if (!ScrollToTopButton.exists('summary_view')) {
+          ScrollToTopButton.show(
+            context: context,
+            scrollController: _scrollController,
+            pageId: 'summary_view',
+            showThreshold: 100.0,
+            rightMargin: 16.0,
+          );
+        } else {
+          ScrollToTopButton.rebuild(pageId: 'summary_view');
+        }
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.position.notifyListeners();
+          }
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    MyApp.routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
-    ScrollToTopButton.hide(scrollController: _scrollController);
+    ScrollToTopButton.hide(pageId: 'summary_view');
     _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
     _scrollController.dispose();

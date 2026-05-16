@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart' show Colors, RouteAware, PageRoute, ModalRoute;
 import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
@@ -13,6 +13,7 @@ import '../widgets/scroll_to_top_button.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
 import '../utils/animation_config.dart';
+import '../main.dart' show MyApp;
 
 class ManageHoldingsView extends StatefulWidget {
   const ManageHoldingsView({super.key});
@@ -21,7 +22,7 @@ class ManageHoldingsView extends StatefulWidget {
   State<ManageHoldingsView> createState() => _ManageHoldingsViewState();
 }
 
-class _ManageHoldingsViewState extends State<ManageHoldingsView> {
+class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware {
   late DataManager _dataManager;
 
   String _searchText = '';
@@ -57,14 +58,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
         _onScrollUpdate(_scrollController.offset);
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScrollToTopButton.show(
-        context: context,
-        scrollController: _scrollController,
-        showThreshold: 100.0,
-        rightMargin: 16.0,
-      );
-    });
   }
 
   @override
@@ -72,6 +65,44 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
     _dataManager.addListener(_onDataManagerChanged);
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      MyApp.routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPush() {
+    _ensureButton();
+  }
+
+  @override
+  void didPopNext() {
+    _ensureButton();
+  }
+
+  void _ensureButton() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        if (!ScrollToTopButton.exists('manage_holdings_view')) {
+          ScrollToTopButton.show(
+            context: context,
+            scrollController: _scrollController,
+            pageId: 'manage_holdings_view',
+            showThreshold: 100.0,
+            rightMargin: 16.0,
+          );
+        } else {
+          ScrollToTopButton.rebuild(pageId: 'manage_holdings_view');
+        }
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.position.notifyListeners();
+          }
+        });
+      }
+    });
   }
 
   void _onDataManagerChanged() {
@@ -85,7 +116,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   @override
   void dispose() {
-    ScrollToTopButton.hide(scrollController: _scrollController);
+    MyApp.routeObserver.unsubscribe(this);
+    ScrollToTopButton.hide(pageId: 'manage_holdings_view');
     _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     _scrollController.dispose();

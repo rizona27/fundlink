@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart' show Colors, RouteAware, PageRoute, ModalRoute;
 import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
@@ -17,6 +17,7 @@ import '../widgets/scroll_to_top_button.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import '../constants/app_constants.dart';
+import '../main.dart' show MyApp;
 
 class _ClientGroup {
   final String key;
@@ -39,7 +40,7 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, RouteAware {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
@@ -62,20 +63,11 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   void initState() {
     super.initState();
-    _loadState();
+    _loadState(); 
     _scrollController.addListener(() {
       if (mounted) {
         _onScrollUpdate(_scrollController.offset);
       }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndFixGarbledFundNames();
-      ScrollToTopButton.show(
-        context: context,
-        scrollController: _scrollController,
-        showThreshold: 100.0,
-        rightMargin: 16.0,
-      );
     });
   }
 
@@ -170,7 +162,8 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
-    ScrollToTopButton.hide(scrollController: _scrollController);
+    MyApp.routeObserver.unsubscribe(this);
+    ScrollToTopButton.hide(pageId: 'client_view');
     _cancelAllTimers();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
@@ -195,10 +188,48 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     if (hasPinned) {
       _showPinnedSection = true;
     }
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      MyApp.routeObserver.subscribe(this, route);
+    }
     
     Future.microtask(() {
       if (mounted) {
         setState(() {});
+      }
+    });
+  }
+
+  @override
+  void didPush() {
+    _ensureButton();
+  }
+
+  @override
+  void didPopNext() {
+    _ensureButton();
+  }
+
+  void _ensureButton() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        if (!ScrollToTopButton.exists('client_view')) {
+          ScrollToTopButton.show(
+            context: context,
+            scrollController: _scrollController,
+            pageId: 'client_view',
+            showThreshold: 100.0,
+            rightMargin: 16.0,
+          );
+        } else {
+          ScrollToTopButton.rebuild(pageId: 'client_view');
+        }
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.position.notifyListeners();
+          }
+        });
       }
     });
   }

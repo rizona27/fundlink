@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'utils/animation_config.dart';
-import 'package:flutter/material.dart' show Colors;
+import 'package:flutter/material.dart' show Colors, RouteObserver, PageRoute;
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:permission_handler/permission_handler.dart';
@@ -14,6 +14,7 @@ import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
+import 'widgets/scroll_to_top_button.dart';
 import 'views/splash_view.dart';
 
 void main() {
@@ -67,6 +68,8 @@ Future<void> _requestPermissionsOnStart() async {
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -187,6 +190,7 @@ class _MyAppState extends State<MyApp> {
       dataManager: _dataManager,
       child: CupertinoApp(
         title: '基金持仓管理',
+        navigatorObservers: [MyApp.routeObserver],
         theme: CupertinoThemeData(
           brightness: currentIsDarkMode ? Brightness.dark : Brightness.light,
           primaryColor: const Color(0xFF007AFF),
@@ -223,6 +227,13 @@ class MainTabView extends StatefulWidget {
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
   final GlobalKey<FloatingTabBarState> _tabBarKey = GlobalKey<FloatingTabBarState>();
+
+  final List<String> _pageIds = [
+    'summary_view',
+    'client_view', 
+    'top_performers_view',
+    '',
+  ];
 
   final List<Widget> _pages = const [
     SummaryView(),
