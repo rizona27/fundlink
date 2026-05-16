@@ -28,8 +28,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   final Set<String> _expandedClients = {};
   int _dataVersion = 0;
   double _scrollOffset = 0;
-  final ScrollController _scrollController = ScrollController();
   Timer? _scrollThrottleTimer;
+  final ScrollController _scrollController = ScrollController();
   
   List<String>? _cachedSortedKeys;
   String? _lastSearchTextForSort;
@@ -41,11 +41,9 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-        if (_scrollOffset != normalizedOffset) {
-          setState(() {
-            _scrollOffset = normalizedOffset;
-          });
-        }
+        setState(() {
+          _scrollOffset = normalizedOffset;
+        });
       }
       _scrollThrottleTimer = null;
     });
@@ -54,6 +52,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(() {
+      if (mounted) {
+        _onScrollUpdate(_scrollController.offset);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScrollToTopButton.show(
         context: context,
@@ -82,10 +85,10 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> {
 
   @override
   void dispose() {
+    ScrollToTopButton.hide(scrollController: _scrollController);
     _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     _scrollController.dispose();
-    ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 

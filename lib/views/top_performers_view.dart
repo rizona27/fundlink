@@ -91,6 +91,11 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
         _updateCachedItems();
       }
     };
+    _scrollController.addListener(() {
+      if (mounted) {
+        _onScrollUpdate(_scrollController.offset);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScrollToTopButton.show(
         context: context,
@@ -180,11 +185,11 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   @override
   void dispose() {
+    ScrollToTopButton.hide(scrollController: _scrollController);
     _scrollThrottleTimer?.cancel();
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel(); 
     _scrollController.dispose();
-    ScrollToTopButton.hide(scrollController: _scrollController);
     _minAmountController.dispose();
     _maxAmountController.dispose();
     _minProfitController.dispose();

@@ -62,7 +62,12 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   void initState() {
     super.initState();
-    _loadState(); 
+    _loadState();
+    _scrollController.addListener(() {
+      if (mounted) {
+        _onScrollUpdate(_scrollController.offset);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndFixGarbledFundNames();
       ScrollToTopButton.show(
@@ -155,11 +160,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-        if (_scrollOffset != normalizedOffset) {
-          setState(() {
-            _scrollOffset = normalizedOffset;
-          });
-        }
+        setState(() {
+          _scrollOffset = normalizedOffset;
+        });
       }
       _scrollThrottleTimer = null;
     });
@@ -167,10 +170,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
+    ScrollToTopButton.hide(scrollController: _scrollController);
     _cancelAllTimers();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
-    ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 
@@ -490,67 +493,70 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   itemCount: 1 + groups.length,
                   itemBuilder: (context, index) {
                     if (index == 0) {
-                      return AnimatedSize(
-                        duration: const Duration(milliseconds: 500),
-                        curve: Curves.easeInOutCubic,
-                        alignment: Alignment.topCenter,
-                        child: Opacity(
-                          opacity: _showPinnedSection ? 1.0 : 0.0,
-                          child: _showPinnedSection
-                              ? Column(
-                        children: [
-                          GradientCard(
-                            title: '置顶',
-                            gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
-                            isExpanded: _isPinnedSectionExpanded,
-                            isDarkMode: isDarkMode,
-                            onTap: _togglePinnedSection,
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '数量: ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.2,
-                                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                      return RepaintBoundary(
+                        key: const ValueKey('repaint_pinned'),
+                        child: AnimatedSize(
+                          duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeInOutCubic,
+                          alignment: Alignment.topCenter,
+                          child: Opacity(
+                            opacity: _showPinnedSection ? 1.0 : 0.0,
+                            child: _showPinnedSection
+                                ? Column(
+                          children: [
+                            GradientCard(
+                              title: '置顶',
+                              gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+                              isExpanded: _isPinnedSectionExpanded,
+                              isDarkMode: isDarkMode,
+                              onTap: _togglePinnedSection,
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '数量: ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.2,
+                                      color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${_filteredPinnedHoldings.length}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    fontStyle: FontStyle.italic,
-                                    height: 1.2,
-                                    color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                                  Text(
+                                    '${_filteredPinnedHoldings.length}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      fontStyle: FontStyle.italic,
+                                      height: 1.2,
+                                      color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '支',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.2,
-                                    color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                  Text(
+                                    '支',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.2,
+                                      color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          AnimationConfig.listExpandTransition(
-                            isExpanded: _isPinnedSectionExpanded,
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 8),
-                                ..._buildPinnedCards(),
-                              ],
+                            AnimationConfig.listExpandTransition(
+                              isExpanded: _isPinnedSectionExpanded,
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 8),
+                                  ..._buildPinnedCards(),
+                                ],
+                              ),
                             ),
+                            const SizedBox(height: 16),
+                          ],
+                        )
+                                : const SizedBox.shrink(),
                           ),
-                          const SizedBox(height: 16),
-                        ],
-                      )
-                              : const SizedBox.shrink(),
                         ),
                       );
                     }

@@ -377,19 +377,23 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         _setSearchVisible(true);
         return;
       }
-      double rawProgress = 1.0 - (widget.scrollOffset / 150).clamp(0.0, 1.0);
+      
+      final rawOffset = widget.scrollOffset.isNaN ? 0 : widget.scrollOffset;
+      double rawProgress = 1.0 - (rawOffset / 150).clamp(0.0, 1.0);
       double targetProgress = Curves.easeOutCubic.transform(rawProgress);
 
       if ((targetProgress - _lastProgress).abs() > 0.01) {
         _lastProgress = targetProgress;
-        _hideController.animateTo(targetProgress,
-          duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOutCubic,
-        );
+        if (_hideController.isAnimating) {
+          _hideController.stop();
+        }
+        _hideController.value = targetProgress;
       }
       if (targetProgress < 0.05 && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
         Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) _setSearchVisible(false);
+          if (mounted && !_currentSearchVisible) {
+            _setSearchVisible(false);
+          }
         });
       }
     });

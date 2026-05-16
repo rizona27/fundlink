@@ -38,7 +38,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   int _valuationRefreshIntervalSeconds = 180;
   Timer? _valuationTimer;
-  Timer? _marketStatusTimer; 
+  Timer? _marketStatusTimer;
+  Timer? _scrollThrottleTimer; 
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
   
@@ -83,7 +84,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   double _scrollOffset = 0;
-  Timer? _scrollThrottleTimer;
   final ScrollController _scrollController = ScrollController(); 
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
@@ -108,6 +108,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         });
       }
     };
+    _scrollController.addListener(() {
+      if (mounted) {
+        _onScrollUpdate(_scrollController.offset);
+      }
+    });
     _loadSortState();
     _loadValuationRefreshInterval();
     _startMarketStatusTimer();
@@ -135,11 +140,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       if (mounted) {
         final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-        if (_scrollOffset != normalizedOffset) {
-          setState(() {
-            _scrollOffset = normalizedOffset;
-          });
-        }
+        setState(() {
+          _scrollOffset = normalizedOffset;
+        });
       }
       _scrollThrottleTimer = null;
     });
@@ -204,10 +207,10 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ScrollToTopButton.hide(scrollController: _scrollController);
     _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
     _scrollController.dispose();
-    ScrollToTopButton.hide(scrollController: _scrollController);
     super.dispose();
   }
 
