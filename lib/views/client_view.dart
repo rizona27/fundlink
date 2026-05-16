@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, RouteAware, PageRoute, ModalRoute;
+import 'package:flutter/material.dart' show Colors, ModalRoute;
 import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
@@ -13,7 +13,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
-import '../widgets/scroll_to_top_button.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
 import '../constants/app_constants.dart';
@@ -40,7 +40,7 @@ class ClientView extends StatefulWidget {
   State<ClientView> createState() => _ClientViewState();
 }
 
-class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, RouteAware {
+class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, ScrollToTopMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   String _searchText = '';
@@ -54,9 +54,23 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   final ScrollController _scrollController = ScrollController();
   
   bool _showPinnedSection = false;
+  double _pinnedSectionHeight = 0.0;
+
+  @override
+  ScrollController get scrollController => _scrollController;
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  double Function()? get scrollToPosition {
+    return () {
+      if (_showPinnedSection && _isPinnedSectionExpanded) {
+        return _pinnedSectionHeight > 0 ? _pinnedSectionHeight : 0.0;
+      }
+      return 0.0;
+    };
+  }
 
   static const String _keyPinnedSectionExpanded = AppConstants.keyPinnedSectionExpanded;
 
@@ -162,8 +176,6 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
-    MyApp.routeObserver.unsubscribe(this);
-    ScrollToTopButton.hide(pageId: 'client_view');
     _cancelAllTimers();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
@@ -190,46 +202,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     }
 
     final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      MyApp.routeObserver.subscribe(this, route);
-    }
     
     Future.microtask(() {
       if (mounted) {
         setState(() {});
-      }
-    });
-  }
-
-  @override
-  void didPush() {
-    _ensureButton();
-  }
-
-  @override
-  void didPopNext() {
-    _ensureButton();
-  }
-
-  void _ensureButton() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        if (!ScrollToTopButton.exists('client_view')) {
-          ScrollToTopButton.show(
-            context: context,
-            scrollController: _scrollController,
-            pageId: 'client_view',
-            showThreshold: 100.0,
-            rightMargin: 16.0,
-          );
-        } else {
-          ScrollToTopButton.rebuild(pageId: 'client_view');
-        }
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.position.notifyListeners();
-          }
-        });
       }
     });
   }
@@ -424,257 +400,270 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     final hasData = hasPinned || hasGroups;
     final enableButtons = hasData;
 
-    return Container(
-      color: backgroundColor,
-      child: SafeArea(
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollUpdateNotification) {
-              _onScrollUpdate(notification.metrics.pixels);
-            }
-            return false;
-          },
-          child: Column(
-            children: [
-              AdaptiveTopBar(
-                scrollOffset: _scrollOffset,
-                showBack: false,
-                showRefresh: true,
-                showExpandCollapse: true,
-                showSearch: true,
-                showReset: false,
-                showFilter: false,
-                showSort: false,
-                isAllExpanded: _areAnyCardsExpanded,
-                searchText: _searchText,
-                dataManager: _dataManager,
-                fundService: _fundService,
-                onRefresh: () async {
-                  await _dataManager.refreshAllHoldingsForce(_fundService, null);
-                  if (mounted) {
-                    setState(() {});
-                    context.showToast('刷新完成');
-                  }
-                },
-                onLongPressRefresh: () async {
-                  await _dataManager.refreshAllHoldingsForce(_fundService, null);
-                  if (mounted) {
-                    setState(() {});
-                    context.showToast('强制刷新完成');
-                  }
-                },
-                onToggleExpandAll: enableButtons
-                    ? () {
-                  setState(() {
-                    if (_areAnyCardsExpanded) {
-                      _collapseAll();
-                    } else {
-                      _expandAll();
-                    }
-                  });
+    return buildWithScrollToTop(
+      Container(
+        color: backgroundColor,
+        child: SafeArea(
+          child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollUpdateNotification) {
+                  _onScrollUpdate(notification.metrics.pixels);
                 }
-                    : null,
-                onSearchChanged: (text) { 
+                return false;
+              },
+              child: Column(
+                children: [
+                  AdaptiveTopBar(
+                    scrollOffset: _scrollOffset,
+                    showBack: false,
+                    showRefresh: true,
+                    showExpandCollapse: true,
+                    showSearch: true,
+                    showReset: false,
+                    showFilter: false,
+                    showSort: false,
+                    isAllExpanded: _areAnyCardsExpanded,
+                    searchText: _searchText,
+                    dataManager: _dataManager,
+                    fundService: _fundService,
+                    onRefresh: () async {
+                      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                      if (mounted) {
+                        setState(() {});
+                        context.showToast('刷新完成');
+                      }
+                    },
+                    onLongPressRefresh: () async {
+                      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                      if (mounted) {
+                        setState(() {});
+                        context.showToast('强制刷新完成');
+                      }
+                    },
+                    onToggleExpandAll: enableButtons
+                        ? () {
+                      setState(() {
+                        if (_areAnyCardsExpanded) {
+                          _collapseAll();
+                        } else {
+                          _expandAll();
+                        }
+                      });
+                    }
+                        : null,
+                    onSearchChanged: (text) { 
                         if (mounted) {
                           setState(() => _searchText = text);
                         }
                       },
-                onSearchClear: () { 
+                    onSearchClear: () { 
                         if (mounted) {
                           setState(() => _searchText = '');
                         }
                       },
-                backgroundColor: Colors.transparent,
-                iconColor: CupertinoTheme.of(context).primaryColor,
-                iconSize: 24,
-                buttonSpacing: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                useMenuStyle: true,
-              ),
-              Expanded(
-                child: !hasData
-                    ? EmptyState(
-                  icon: CupertinoIcons.person,
-                  title: '点击开始添加吧～',
-                  message: '',
-                  titleFontWeight: FontWeight.normal,
-                  titleFontSize: 18,
-                  customButton: GlassButton(
-                    label: 'Go!',
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(builder: (_) => const AddHoldingView()),
-                      );
-                    },
-                    isPrimary: false,
-                    width: null,
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                    backgroundColor: Colors.transparent,
+                    iconColor: CupertinoTheme.of(context).primaryColor,
+                    iconSize: 24,
+                    buttonSpacing: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    useMenuStyle: true,
                   ),
-                )
-                    : ListView.builder(
-                  controller: _scrollController,
-                  key: ValueKey('list_${_searchText}'),
-                  cacheExtent: 500,
-                  padding: EdgeInsets.only(
-                    left: 12,
-                    right: 12,
-                    top: 8,
-                    bottom: totalBottomPadding,
-                  ),
-                  itemCount: 1 + groups.length,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return RepaintBoundary(
-                        key: const ValueKey('repaint_pinned'),
-                        child: AnimatedSize(
-                          duration: const Duration(milliseconds: 500),
-                          curve: Curves.easeInOutCubic,
-                          alignment: Alignment.topCenter,
-                          child: Opacity(
-                            opacity: _showPinnedSection ? 1.0 : 0.0,
-                            child: _showPinnedSection
-                                ? Column(
-                          children: [
-                            GradientCard(
-                              title: '置顶',
-                              gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
-                              isExpanded: _isPinnedSectionExpanded,
-                              isDarkMode: isDarkMode,
-                              onTap: _togglePinnedSection,
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '数量: ',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      height: 1.2,
-                                      color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                  Expanded(
+                    child: !hasData
+                        ? EmptyState(
+                      icon: CupertinoIcons.person,
+                      title: '点击开始添加吧～',
+                      message: '',
+                      titleFontWeight: FontWeight.normal,
+                      titleFontSize: 18,
+                      customButton: GlassButton(
+                        label: 'Go!',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                          );
+                        },
+                        isPrimary: false,
+                        width: null,
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                      ),
+                    )
+                        : ListView.builder(
+                      controller: _scrollController,
+                      key: ValueKey('list_${_searchText}'),
+                      cacheExtent: 500,
+                      padding: EdgeInsets.only(
+                        left: 12,
+                        right: 12,
+                        top: 8,
+                        bottom: totalBottomPadding,
+                      ),
+                      itemCount: 1 + groups.length,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return RepaintBoundary(
+                            key: const ValueKey('repaint_pinned'),
+                            child: AnimatedSize(
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeInOutCubic,
+                              alignment: Alignment.topCenter,
+                              child: Opacity(
+                                opacity: _showPinnedSection ? 1.0 : 0.0,
+                                child: _showPinnedSection
+                                    ? LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      if (mounted) {
+                                        setState(() {
+                                          _pinnedSectionHeight = constraints.maxHeight;
+                                        });
+                                      }
+                                    });
+                                    return Column(
+                                  children: [
+                                    GradientCard(
+                                      title: '置顶',
+                                      gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+                                      isExpanded: _isPinnedSectionExpanded,
+                                      isDarkMode: isDarkMode,
+                                      onTap: _togglePinnedSection,
+                                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            '数量: ',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              height: 1.2,
+                                              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${_filteredPinnedHoldings.length}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              fontStyle: FontStyle.italic,
+                                              height: 1.2,
+                                              color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                                            ),
+                                          ),
+                                          Text(
+                                            '支',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              height: 1.2,
+                                              color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    '${_filteredPinnedHoldings.length}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FontStyle.italic,
-                                      height: 1.2,
-                                      color: _colorForHoldingCount(_filteredPinnedHoldings.length),
+                                    AnimationConfig.listExpandTransition(
+                                      isExpanded: _isPinnedSectionExpanded,
+                                      child: Column(
+                                        children: [
+                                          const SizedBox(height: 8),
+                                          ..._buildPinnedCards(),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    '支',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      height: 1.2,
-                                      color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                                    ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 16),
+                                  ],
+                                );
+                                  },
+                                )
+                                    : const SizedBox.shrink(),
                               ),
                             ),
-                            AnimationConfig.listExpandTransition(
-                              isExpanded: _isPinnedSectionExpanded,
+                          );
+                        }
+                        
+                        final groupIndex = index - 1;
+                        if (groupIndex >= 0 && groupIndex < groups.length) {
+                          final isLastGroup = groupIndex == groups.length - 1;
+                          return RepaintBoundary(
+                            key: ValueKey('repaint_${groups[groupIndex].key}'),
+                            child: Container(
+                              key: ValueKey('client_${groups[groupIndex].key}'),
+                              margin: EdgeInsets.only(bottom: isLastGroup ? 0 : 8),
                               child: Column(
                                 children: [
-                                  const SizedBox(height: 8),
-                                  ..._buildPinnedCards(),
+                                  GradientCard(
+                                    title: groups[groupIndex].displayName,
+                                    clientId: groups[groupIndex].clientId.isNotEmpty ? groups[groupIndex].clientId : null,
+                                    gradient: _getGradientForOriginalName(groups[groupIndex].holdings.first.clientName),
+                                    isExpanded: _expandedClients.contains(groups[groupIndex].key),
+                                    isDarkMode: isDarkMode,
+                                    onTap: () {
+                                      final wasExpanded = _expandedClients.contains(groups[groupIndex].key);
+                                      _toggleClientExpand(groups[groupIndex].key);
+                                      
+                                      if (!wasExpanded) {
+                                        final allGroups = _clientGroups;
+                                        if (allGroups.isNotEmpty && groups[groupIndex].key == allGroups.last.key) {
+                                          Future.delayed(const Duration(milliseconds: 100), () {
+                                            _scrollToBottom();
+                                          });
+                                        }
+                                      }
+                                    },
+                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '持仓数: ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.2,
+                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${groups[groupIndex].holdings.length}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            fontStyle: FontStyle.italic,
+                                            height: 1.2,
+                                            color: _colorForHoldingCount(groups[groupIndex].holdings.length),
+                                          ),
+                                        ),
+                                        Text(
+                                          '支',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.2,
+                                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    maxTitleLength: 10,
+                                  ),
+                                  AnimationConfig.listExpandTransition(
+                                    isExpanded: _expandedClients.contains(groups[groupIndex].key),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(left: 16, top: 8), 
+                                      child: _buildFundCards(groups[groupIndex].holdings),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                          ],
-                        )
-                                : const SizedBox.shrink(),
-                          ),
-                        ),
-                      );
-                    }
-                    
-                    final groupIndex = index - 1;
-                    if (groupIndex >= 0 && groupIndex < groups.length) {
-                      final isLastGroup = groupIndex == groups.length - 1;
-                      return RepaintBoundary(
-                        key: ValueKey('repaint_${groups[groupIndex].key}'),
-                        child: Container(
-                          key: ValueKey('client_${groups[groupIndex].key}'),
-                          margin: EdgeInsets.only(bottom: isLastGroup ? 0 : 8),
-                          child: Column(
-                            children: [
-                              GradientCard(
-                                title: groups[groupIndex].displayName,
-                                clientId: groups[groupIndex].clientId.isNotEmpty ? groups[groupIndex].clientId : null,
-                                gradient: _getGradientForOriginalName(groups[groupIndex].holdings.first.clientName),
-                                isExpanded: _expandedClients.contains(groups[groupIndex].key),
-                                isDarkMode: isDarkMode,
-                                onTap: () {
-                                  final wasExpanded = _expandedClients.contains(groups[groupIndex].key);
-                                  _toggleClientExpand(groups[groupIndex].key);
-                                  
-                                  if (!wasExpanded) {
-                                    final allGroups = _clientGroups;
-                                    if (allGroups.isNotEmpty && groups[groupIndex].key == allGroups.last.key) {
-                                      Future.delayed(const Duration(milliseconds: 100), () {
-                                        _scrollToBottom();
-                                      });
-                                    }
-                                  }
-                                },
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '持仓数: ',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        height: 1.2,
-                                        color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${groups[groupIndex].holdings.length}',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FontStyle.italic,
-                                        height: 1.2,
-                                        color: _colorForHoldingCount(groups[groupIndex].holdings.length),
-                                      ),
-                                    ),
-                                    Text(
-                                      '支',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        height: 1.2,
-                                        color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxTitleLength: 10,
-                              ),
-                              AnimationConfig.listExpandTransition(
-                                isExpanded: _expandedClients.contains(groups[groupIndex].key),
-                                child: Container(
-                                  margin: const EdgeInsets.only(left: 16, top: 8), 
-                                  child: _buildFundCards(groups[groupIndex].holdings),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
     );
   }
 

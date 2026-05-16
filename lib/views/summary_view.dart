@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../utils/animation_config.dart';
-import 'package:flutter/material.dart' show RouteAware, PageRoute, ModalRoute, Colors, Divider;
+import 'package:flutter/material.dart' show ModalRoute, Colors, Divider;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
@@ -13,7 +13,7 @@ import '../widgets/gradient_card.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 import '../widgets/fund_performance_dialog.dart';
-import '../widgets/scroll_to_top_button.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 import 'add_holding_view.dart';
 import 'fund_detail_view.dart';
 import '../constants/app_constants.dart';
@@ -26,7 +26,7 @@ class SummaryView extends StatefulWidget {
   State<SummaryView> createState() => _SummaryViewState();
 }
 
-class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, RouteAware {
+class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, ScrollToTopMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -85,11 +85,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   double _scrollOffset = 0;
-  final ScrollController _scrollController = ScrollController(); 
+  final ScrollController _scrollController = ScrollController();
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
   bool get _hasData => _dataManager.holdings.isNotEmpty;
   bool get _showValuationRefresh => _sortKey == SortKey.latestNav && _hasData;
+
+  @override
+  ScrollController get scrollController => _scrollController;
 
   @override
   bool get wantKeepAlive => true;
@@ -191,9 +194,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     _autoConfirmPendingTransactions();
 
     final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      MyApp.routeObserver.subscribe(this, route);
-    }
     
     Future.microtask(() {
       if (mounted) {
@@ -203,43 +203,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   @override
-  void didPush() {
-    _ensureButton();
-  }
-
-  @override
-  void didPopNext() {
-    _ensureButton();
-  }
-
-  void _ensureButton() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        if (!ScrollToTopButton.exists('summary_view')) {
-          ScrollToTopButton.show(
-            context: context,
-            scrollController: _scrollController,
-            pageId: 'summary_view',
-            showThreshold: 100.0,
-            rightMargin: 16.0,
-          );
-        } else {
-          ScrollToTopButton.rebuild(pageId: 'summary_view');
-        }
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.position.notifyListeners();
-          }
-        });
-      }
-    });
-  }
-
-  @override
   void dispose() {
-    MyApp.routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
-    ScrollToTopButton.hide(pageId: 'summary_view');
     _cancelAllTimers();
     _dataManager.removeListener(_dataListener);
     _scrollController.dispose();
@@ -856,13 +821,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
     final enableButtons = hasData;
 
-    return Stack(
-      children: [
-        Container(
-          color: backgroundColor,
-          child: SafeArea(
-            child: Column(
-              children: [
+    return buildWithScrollToTop(
+      Container(
+        color: backgroundColor,
+        child: SafeArea(
+          child: Column(
+            children: [
             AdaptiveTopBar(
               scrollOffset: _scrollOffset,
               showBack: false,
@@ -1135,8 +1099,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
           ],
         ),
       ),
-        ),
-      ],
+    ),
     );
   }
 }

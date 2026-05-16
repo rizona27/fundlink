@@ -160,9 +160,9 @@ lib/
 │   ├── fund_performance_dialog.dart       # 基金业绩详情弹窗组件，展示多周期业绩表现
 │   ├── glass_button.dart                  # 全局磨玻璃风格按钮组件
 │   ├── gradient_card.dart                 # 渐变卡片组件，客户分组、基金分组标题
+│   ├── page_scroll_to_top.dart            # 页面内回到顶部按钮组件，每个页面独立实例，支持平滑滚动和淡入淡出动画
 │   ├── paginated_list_view.dart           # 分页列表组件，支持懒加载和无限滚动
 │   ├── refresh_button.dart                # 刷新按钮组件，封装刷新逻辑
-│   ├── scroll_to_top_button.dart          # 返回顶部按钮组件，使用 Overlay 方式实现，支持淡入淡出动画
 │   ├── search.dart                        # 顶部搜索栏组件，防抖支持条件搜索
 │   ├── stock_candle_chart.dart            # 股票 K 线蜡烛图组件，支持日 K/周 K/月 K 切换
 │   ├── stock_chart_widget.dart            # 股票图表容器组件，封装 K 线图和成交量图
@@ -172,6 +172,9 @@ lib/
 │   ├── top_holdings_widget.dart           # 前十大重仓股展示组件
 │   ├── transaction_history_dialog.dart    # 交易历史对话框，展示某客户某基金的所有交易记录
 │   └── update_dialog.dart                 # 版本更新提示对话框，显示新版本信息和下载选项
+│
+├── mixins/
+│   └── scroll_to_top_mixin.dart           # 回到顶部按钮混入，简化页面集成，提供 buildWithScrollToTop 方法自动包装 Stack 和按钮
 ```
 
 ## ⚖️ 开源协议

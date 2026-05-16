@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, RouteAware, PageRoute, ModalRoute;
+import 'package:flutter/material.dart' show Colors;
 import 'package:pinyin/pinyin.dart';
 import '../services/data_manager.dart';
 import '../models/fund_holding.dart';
@@ -9,7 +9,7 @@ import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/scroll_to_top_button.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
 import '../utils/animation_config.dart';
@@ -22,7 +22,7 @@ class ManageHoldingsView extends StatefulWidget {
   State<ManageHoldingsView> createState() => _ManageHoldingsViewState();
 }
 
-class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware {
+class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTopMixin {
   late DataManager _dataManager;
 
   String _searchText = '';
@@ -31,6 +31,9 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
   final ScrollController _scrollController = ScrollController();
+  
+  @override
+  ScrollController get scrollController => _scrollController;
   
   List<String>? _cachedSortedKeys;
   String? _lastSearchTextForSort;
@@ -67,42 +70,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware
     _dataManager.addListener(_onDataManagerChanged);
 
     final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      MyApp.routeObserver.subscribe(this, route);
-    }
-  }
-
-  @override
-  void didPush() {
-    _ensureButton();
-  }
-
-  @override
-  void didPopNext() {
-    _ensureButton();
-  }
-
-  void _ensureButton() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        if (!ScrollToTopButton.exists('manage_holdings_view')) {
-          ScrollToTopButton.show(
-            context: context,
-            scrollController: _scrollController,
-            pageId: 'manage_holdings_view',
-            showThreshold: 100.0,
-            rightMargin: 16.0,
-          );
-        } else {
-          ScrollToTopButton.rebuild(pageId: 'manage_holdings_view');
-        }
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.position.notifyListeners();
-          }
-        });
-      }
-    });
   }
 
   void _onDataManagerChanged() {
@@ -116,8 +83,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware
 
   @override
   void dispose() {
-    MyApp.routeObserver.unsubscribe(this);
-    ScrollToTopButton.hide(pageId: 'manage_holdings_view');
     _scrollThrottleTimer?.cancel();
     _dataManager.removeListener(_onDataManagerChanged);
     _scrollController.dispose();
@@ -373,14 +338,13 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware
 
     final hasData = _dataManager.holdings.isNotEmpty;
 
-    return Stack(
-      children: [
-        CupertinoPageScaffold(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        color: backgroundColor,
-        child: SafeArea(
-          child: NotificationListener<ScrollNotification>(
+    return buildWithScrollToTop(
+      CupertinoPageScaffold(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          color: backgroundColor,
+          child: SafeArea(
+            child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is ScrollUpdateNotification) {
                 _onScrollUpdate(notification.metrics.pixels);
@@ -540,7 +504,6 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with RouteAware
         ),
       ),
     ),
-      ],
     );
   }
 

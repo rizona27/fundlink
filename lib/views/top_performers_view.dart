@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show RouteAware, PageRoute, ModalRoute, Colors;
+import 'package:flutter/material.dart' show Colors;
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
@@ -10,7 +10,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
-import '../widgets/scroll_to_top_button.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
@@ -23,7 +23,7 @@ class TopPerformersView extends StatefulWidget {
   State<TopPerformersView> createState() => _TopPerformersViewState();
 }
 
-class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin, RouteAware {
+class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin, ScrollToTopMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -59,6 +59,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   bool _isInitialized = false;
 
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  ScrollController get scrollController => _scrollController;
 
   final FocusNode _minAmountFocusNode = FocusNode();
   final FocusNode _maxAmountFocusNode = FocusNode();
@@ -146,46 +149,10 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     }
 
     final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      MyApp.routeObserver.subscribe(this, route);
-    }
     
     Future.microtask(() {
       if (mounted) {
         setState(() {});
-      }
-    });
-  }
-
-  @override
-  void didPush() {
-    _ensureButton();
-  }
-
-  @override
-  void didPopNext() {
-    _ensureButton();
-  }
-
-  void _ensureButton() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        if (!ScrollToTopButton.exists('top_performers_view')) {
-          ScrollToTopButton.show(
-            context: context,
-            scrollController: _scrollController,
-            pageId: 'top_performers_view',
-            showThreshold: 100.0,
-            rightMargin: 16.0,
-          );
-        } else {
-          ScrollToTopButton.rebuild(pageId: 'top_performers_view');
-        }
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.position.notifyListeners();
-          }
-        });
       }
     });
   }
@@ -216,8 +183,6 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   @override
   void dispose() {
-    MyApp.routeObserver.unsubscribe(this);
-    ScrollToTopButton.hide(pageId: 'top_performers_view');
     _scrollThrottleTimer?.cancel();
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel(); 
@@ -561,24 +526,25 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final hasData = _hasData;
     final items = _cachedItems;
 
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      behavior: HitTestBehavior.translucent,
-      child: Container(
-        color: backgroundColor,
-        child: SafeArea(
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollUpdateNotification) {
-              _onScrollUpdate(notification.metrics.pixels);
-            }
-            return false;
-          },
-          child: Column(
-            children: [
-              AdaptiveTopBar(
+    return buildWithScrollToTop(
+      GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        behavior: HitTestBehavior.translucent,
+        child: Container(
+          color: backgroundColor,
+          child: SafeArea(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollUpdateNotification) {
+                  _onScrollUpdate(notification.metrics.pixels);
+                }
+                return false;
+              },
+              child: Column(
+                children: [
+                  AdaptiveTopBar(
                 scrollOffset: _scrollOffset,
                 showRefresh: false,
                 showExpandCollapse: false,
@@ -602,80 +568,82 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 iconSize: 24,
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              ),
-              AnimatedSize(
+                  ),
+                  AnimatedSize(
                 duration: _animationDuration,
                 curve: _animationCurve,
                 child: _showFilter && hasData ? _buildFilterBar(isDarkMode) : const SizedBox.shrink(),
-              ),
-              Expanded(
-                child: !hasData
-                    ? EmptyState(
-                  key: const ValueKey('empty'),
-                  icon: CupertinoIcons.star,
-                  title: '点击开始添加吧～',
-                  message: '',
-                  titleFontWeight: FontWeight.normal,
-                  titleFontSize: 18,
-                  customButton: GlassButton(
-                    label: 'Go!',
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(builder: (_) => const AddHoldingView()),
-                      );
-                    },
-                    isPrimary: false,
-                    width: null,
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   ),
-                )
-                    : items.isEmpty
-                    ? Center(
-                  key: const ValueKey('no_results'),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        CupertinoIcons.slider_horizontal_3,
-                        size: 48,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.3)
-                            : CupertinoColors.systemGrey.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '没有找到匹配的数据',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDarkMode
-                              ? CupertinoColors.white.withOpacity(0.5)
-                              : CupertinoColors.systemGrey,
+                  Expanded(
+                    child: !hasData
+                        ? EmptyState(
+                          key: const ValueKey('empty'),
+                          icon: CupertinoIcons.star,
+                          title: '点击开始添加吧～',
+                          message: '',
+                          titleFontWeight: FontWeight.normal,
+                          titleFontSize: 18,
+                          customButton: GlassButton(
+                            label: 'Go!',
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                CupertinoPageRoute(builder: (_) => const AddHoldingView()),
+                              );
+                            },
+                            isPrimary: false,
+                            width: null,
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                          ),
+                        )
+                        : items.isEmpty
+                        ? Center(
+                          key: const ValueKey('no_results'),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CupertinoIcons.slider_horizontal_3,
+                                size: 48,
+                                color: isDarkMode
+                                    ? CupertinoColors.white.withOpacity(0.3)
+                                    : CupertinoColors.systemGrey.withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '没有找到匹配的数据',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDarkMode
+                                      ? CupertinoColors.white.withOpacity(0.5)
+                                      : CupertinoColors.systemGrey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : Column(
+                          key: const ValueKey('results'),
+                          children: [
+                            _buildHeaderRow(isDarkMode),
+                            Expanded(
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: EdgeInsets.only(bottom: totalBottomPadding),
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  return _buildHoldingRow(items[index], index, isDarkMode);
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
                   ),
-                )
-                    : Column(
-                  key: const ValueKey('results'),
-                  children: [
-                    _buildHeaderRow(isDarkMode),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: EdgeInsets.only(bottom: totalBottomPadding),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          return _buildHoldingRow(items[index], index, isDarkMode);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

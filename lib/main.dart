@@ -14,7 +14,6 @@ import 'views/top_performers_view.dart';
 import 'views/config_view.dart';
 import 'widgets/floating_tab_bar.dart';
 import 'widgets/theme_switch.dart' as theme;
-import 'widgets/scroll_to_top_button.dart';
 import 'views/splash_view.dart';
 
 void main() {
