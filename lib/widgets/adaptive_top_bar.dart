@@ -306,7 +306,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   late String _internalSearchText;
   late AnimationController _hideController;
   double _lastProgress = 1.0;
-  Timer? _scrollTimer;
   Timer? _autoCloseTimer; 
   Timer? _searchDebounceTimer;
   bool _isRefreshing = false;
@@ -369,34 +368,30 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       return;
     }
 
-    _scrollTimer?.cancel();
-    _scrollTimer = Timer(const Duration(milliseconds: 16), () {
-      if (!mounted) return;
-      final hasText = _currentSearchText.isNotEmpty;
-      if (hasText && !_currentSearchVisible) {
-        _setSearchVisible(true);
-        return;
+    final hasText = _currentSearchText.isNotEmpty;
+    if (hasText && !_currentSearchVisible) {
+      _setSearchVisible(true);
+      return;
+    }
+
+    final rawOffset = widget.scrollOffset.isNaN ? 0 : widget.scrollOffset;
+    double rawProgress = 1.0 - (rawOffset / 150).clamp(0.0, 1.0);
+    double targetProgress = Curves.easeOutCubic.transform(rawProgress);
+
+    if ((targetProgress - _lastProgress).abs() > 0.01) {
+      _lastProgress = targetProgress;
+      if (_hideController.isAnimating) {
+        _hideController.stop();
       }
-
-      final rawOffset = widget.scrollOffset.isNaN ? 0 : widget.scrollOffset;
-      double rawProgress = 1.0 - (rawOffset / 150).clamp(0.0, 1.0);
-      double targetProgress = Curves.easeOutCubic.transform(rawProgress);
-
-      if ((targetProgress - _lastProgress).abs() > 0.01) {
-        _lastProgress = targetProgress;
-        if (_hideController.isAnimating) {
-          _hideController.stop();
+      _hideController.value = targetProgress;
+    }
+    if (targetProgress < 0.05 && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !_currentSearchVisible) {
+          _setSearchVisible(false);
         }
-        _hideController.value = targetProgress;
-      }
-      if (targetProgress < 0.05 && _currentSearchVisible && _currentSearchText.isEmpty && !_internalFocusNode.hasFocus) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted && !_currentSearchVisible) {
-            _setSearchVisible(false);
-          }
-        });
-      }
-    });
+      });
+    }
   }
 
   void _setSearchVisible(bool visible) {
@@ -1222,7 +1217,6 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   @override
   void dispose() {
-    _scrollTimer?.cancel();
     _autoCloseTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _hideController.dispose();
@@ -1237,6 +1231,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final bgColor = widget.backgroundColor ?? _getBackgroundColor(progress, isDarkMode);
     final blurAmount = (1 - progress) * 8;
+
+    final bool shouldDisableInteraction = progress < 0.95;
 
     return GestureDetector(
       onTap: () {
@@ -1258,19 +1254,22 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                     opacity: progress,
                     child: Transform.translate(
                       offset: Offset(0, -16 * (1 - progress)),
-                      child: Container(
-                        height: widget.maxHeight * progress,
-                        padding: widget.padding,
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16 * progress)),
-                        ),
-                        child: Row(
-                          children: [
-                            widget.useMenuStyle ? _buildLeftForMenuStyle() : Row(children: _buildLeftChildren()),
-                            const Spacer(),
-                            widget.useMenuStyle ? _buildRightForMenuStyle() : Row(children: _buildRightChildren()),
-                          ],
+                      child: IgnorePointer(
+                        ignoring: shouldDisableInteraction,
+                        child: Container(
+                          height: widget.maxHeight * progress,
+                          padding: widget.padding,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(16 * progress)),
+                          ),
+                          child: Row(
+                            children: [
+                              widget.useMenuStyle ? _buildLeftForMenuStyle() : Row(children: _buildLeftChildren()),
+                              const Spacer(),
+                              widget.useMenuStyle ? _buildRightForMenuStyle() : Row(children: _buildRightChildren()),
+                            ],
+                          ),
                         ),
                       ),
                     ),

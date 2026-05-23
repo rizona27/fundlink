@@ -130,18 +130,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _onScrollUpdate(double offset) {
-    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
-      return;
-    }
-    _scrollThrottleTimer = Timer(AppConstants.scrollThrottleDuration, () {
-      if (mounted) {
-        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+    if (mounted) {
+      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
         setState(() {
           _scrollOffset = normalizedOffset;
         });
       }
-      _scrollThrottleTimer = null;
-    });
+    }
   }
 
   Future<void> _loadSortState() async {

@@ -4,6 +4,7 @@ import '../services/data_manager.dart';
 import '../models/log_entry.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../utils/animation_config.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 
 class LogView extends StatefulWidget {
   const LogView({super.key});
@@ -12,7 +13,7 @@ class LogView extends StatefulWidget {
   State<LogView> createState() => _LogViewState();
 }
 
-class _LogViewState extends State<LogView> {
+class _LogViewState extends State<LogView> with ScrollToTopMixin {
   late DataManager _dataManager;
   Set<LogType> _selectedLogTypes = {};
   String _searchKeyword = '';
@@ -21,6 +22,9 @@ class _LogViewState extends State<LogView> {
   static const int _pageSize = 20;
   int _displayCount = 20;
   bool _isLoadingMore = false;
+
+  @override
+  ScrollController get scrollController => _scrollController;
 
   @override
   void initState() {
@@ -152,6 +156,28 @@ class _LogViewState extends State<LogView> {
     return '${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
   }
 
+  String _removeEmoji(String text) {
+    return text.replaceAllMapped(
+      RegExp(
+        '[\u{1F600}-\u{1F64F}]'
+            '|[\u{1F300}-\u{1F5FF}]'
+            '|[\u{1F680}-\u{1F6FF}]'
+            '|[\u{1F1E0}-\u{1F1FF}]'
+            '|[\u{2600}-\u{26FF}]'
+            '|[\u{2700}-\u{27BF}]'
+            '|[\u{FE00}-\u{FE0F}]'
+            '|[\u{1F900}-\u{1F9FF}]'
+            '|[\u{1FA00}-\u{1FA6F}]'
+            '|[\u{1FA70}-\u{1FAFF}]'
+            '|[\u{200D}]'
+            '|[\u{20E3}]'
+        ,
+        unicode: true,
+      ),
+          (match) => '',
+    );
+  }
+
   Color _getLogTextColor(LogType type, bool isDarkMode) {
     switch (type) {
       case LogType.success:
@@ -176,96 +202,89 @@ class _LogViewState extends State<LogView> {
     final displayedLogs = _displayedLogs;
     final totalCount = _getFilteredLogs().length;
 
-    return CupertinoPageScaffold(
-      backgroundColor: backgroundColor,
-      child: SafeArea(
-        child: Column(
-          children: [
-            AdaptiveTopBar(
-              scrollOffset: 0,
-              showBack: true,
-              onBack: () => Navigator.of(context).pop(),
-              showRefresh: false,
-              showExpandCollapse: false,
-              showSearch: true,
-              showReset: false,
-              showFilter: false,
-              showSort: false,
-              isAllExpanded: false,
-              searchText: _searchKeyword,
-              searchPlaceholder: '搜索日志内容或类型',
-              dataManager: _dataManager,
-              fundService: null,
-              hasData: totalCount > 0,
-              onToggleExpandAll: null,
-              onSearchChanged: (value) {
-                setState(() {
-                  _searchKeyword = value;
-                  _resetPagination();
-                });
-              },
-              onSearchClear: () {
-                setState(() {
-                  _searchKeyword = '';
-                  _resetPagination();
-                });
-              },
-              backgroundColor: backgroundColor,
-              iconColor: CupertinoTheme.of(context).primaryColor,
-              iconSize: 24,
-              buttonSpacing: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-            Expanded(
-              child: CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _buildFilterSection(isDarkMode),
-                  ),
-                  _buildContent(isDarkMode, displayedLogs, totalCount),
-                ],
+    return buildWithScrollToTop(
+      CupertinoPageScaffold(
+        backgroundColor: backgroundColor,
+        child: SafeArea(
+          child: Column(
+            children: [
+              AdaptiveTopBar(
+                scrollOffset: 0,
+                showBack: true,
+                onBack: () => Navigator.of(context).pop(),
+                showRefresh: false,
+                showExpandCollapse: false,
+                showSearch: true,
+                showReset: false,
+                showFilter: false,
+                showSort: false,
+                isAllExpanded: false,
+                searchText: _searchKeyword,
+                searchPlaceholder: '搜索日志内容或类型',
+                dataManager: _dataManager,
+                fundService: null,
+                hasData: totalCount > 0,
+                onToggleExpandAll: null,
+                onSearchChanged: (value) {
+                  setState(() {
+                    _searchKeyword = value;
+                    _resetPagination();
+                  });
+                },
+                onSearchClear: () {
+                  setState(() {
+                    _searchKeyword = '';
+                    _resetPagination();
+                  });
+                },
+                backgroundColor: backgroundColor,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+                iconSize: 24,
+                buttonSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-            ),
-          ],
+              _buildFilterSection(isDarkMode),
+              Expanded(
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    _buildContent(isDarkMode, displayedLogs, totalCount),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildFilterSection(bool isDarkMode) {
+    final sortedTypes = LogType.values.toList()..sort((a, b) {
+      final aSelected = _selectedLogTypes.contains(a);
+      final bSelected = _selectedLogTypes.contains(b);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      return 0;
+    });
+
     return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? CupertinoColors.systemGrey6.withOpacity(0.4)
-            : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDarkMode
-              ? CupertinoColors.white.withOpacity(0.1)
-              : CupertinoColors.systemGrey4.withOpacity(0.5),
-          width: 0.5,
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: LogType.values.map((type) {
-                    return _buildLogTypeChip(type, isDarkMode);
-                  }).toList(),
-                ),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: sortedTypes.map((type) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _buildLogTypeChip(type, isDarkMode),
+                );
+              }).toList(),
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -274,12 +293,9 @@ class _LogViewState extends State<LogView> {
                       ? CupertinoIcons.checkmark_circle_fill
                       : CupertinoIcons.circle,
                   label: _isAllSelected ? '取消全选' : '全选',
-                  gradient: _isAllSelected
-                      ? [const Color(0xFF6366F1), const Color(0xFF8B5CF6)]
-                      : null,
-                  textColor: _isAllSelected
-                      ? CupertinoColors.white
-                      : (isDarkMode ? CupertinoColors.white : CupertinoColors.label),
+                  textColor: isDarkMode 
+                      ? CupertinoColors.white.withOpacity(0.7)
+                      : CupertinoColors.systemGrey,
                   onPressed: _toggleAllSelection,
                 ),
               ),
@@ -288,12 +304,7 @@ class _LogViewState extends State<LogView> {
                 child: _buildActionButton(
                   icon: CupertinoIcons.trash,
                   label: '清空日志',
-                  gradient: [
-                    CupertinoColors.systemRed.withOpacity(0.15),
-                    CupertinoColors.systemRed.withOpacity(0.08)
-                  ],
-                  textColor: CupertinoColors.systemRed,
-                  borderColor: CupertinoColors.systemRed.withOpacity(0.3),
+                  textColor: CupertinoColors.systemRed.withOpacity(0.7),
                   onPressed: _clearAllLogs,
                 ),
               ),
@@ -358,31 +369,26 @@ class _LogViewState extends State<LogView> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required List<Color>? gradient,
     required Color textColor,
     required VoidCallback onPressed,
-    Color? borderColor,
   }) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        gradient: gradient != null
-            ? LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: gradient,
-        )
-            : null,
-        borderRadius: BorderRadius.circular(20),
+        color: isDarkMode
+            ? CupertinoColors.systemGrey6.withOpacity(0.3)
+            : CupertinoColors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: borderColor ??
-              (gradient != null
-                  ? gradient.first.withOpacity(0.5)
-                  : CupertinoColors.systemGrey4.withOpacity(0.5)),
+          color: isDarkMode
+              ? CupertinoColors.white.withOpacity(0.1)
+              : CupertinoColors.systemGrey4.withOpacity(0.3),
           width: 0.5,
         ),
       ),
       child: CupertinoButton(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: EdgeInsets.zero,
         minSize: 0,
         onPressed: onPressed,
         child: Row(
@@ -533,17 +539,17 @@ class _LogViewState extends State<LogView> {
     final typeColor = log.type.color;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isDarkMode
-            ? CupertinoColors.systemGrey6.withOpacity(0.3)
-            : CupertinoColors.white,
-        borderRadius: BorderRadius.circular(10),
+            ? CupertinoColors.systemGrey6.withOpacity(0.2)
+            : CupertinoColors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDarkMode
-              ? CupertinoColors.white.withOpacity(0.08)
-              : CupertinoColors.systemGrey4.withOpacity(0.3),
+              ? CupertinoColors.white.withOpacity(0.05)
+              : CupertinoColors.systemGrey4.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -552,39 +558,32 @@ class _LogViewState extends State<LogView> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: typeColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  typeStr,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: typeColor,
-                  ),
+              Text(
+                typeStr,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: typeColor,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 timeStr,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   color: isDarkMode
-                      ? CupertinoColors.systemGrey
-                      : CupertinoColors.systemGrey2,
+                      ? CupertinoColors.systemGrey.withOpacity(0.6)
+                      : CupertinoColors.systemGrey2.withOpacity(0.7),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
-            log.message,
+            _removeEmoji(log.message),
             style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
+              fontSize: 12,
+              height: 1.3,
               color: textColor,
             ),
           ),

@@ -242,8 +242,8 @@ class _MainTabViewState extends State<MainTabView> {
   ];
 
   final List<BottomNavigationBarItem> _tabItems = const [
-    BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_fill), label: '一览'),
-    BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_2_fill), label: '客户'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_fill), label: '基金'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_2_fill), label: '持仓'),
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.star_fill), label: '排名'),
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.ellipsis_circle), label: '更多'),
   ];

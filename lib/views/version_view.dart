@@ -11,9 +11,10 @@ import '../services/version_check_service.dart';
 import '../services/ui_state_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.3.1';
+const String APP_VERSION = 'v1.3.2';
 
 const List<String> UPDATE_LOGS = [
+  'v1.3.2 - 优化持仓置顶/回滚顶部按钮，重构日志/设置菜单',
   'v1.3.1 - 新增各数据页返回顶部按钮动画',
   'v1.3.0 - 新增映射索引，自动匹配用户名/用户号对应关系',
   'v1.2.8 - 优化主题切换',
@@ -994,16 +995,15 @@ class _VersionViewState extends State<VersionView> {
   }
 
   int _calculateSignalLevel(int latency) {
-    if (latency <= 30) return 10;
-    if (latency <= 80) return 9;
-    if (latency <= 150) return 8;
-    if (latency <= 250) return 7;
-    if (latency <= 400) return 6;
-    if (latency <= 600) return 5;
-    if (latency <= 900) return 4;
-    if (latency <= 1300) return 3;
-    if (latency <= 2000) return 2;
-    if (latency <= 3000) return 1;
+    if (latency <= 500) return 10;
+    if (latency <= 700) return 9;
+    if (latency <= 1000) return 8;
+    if (latency <= 1400) return 7;
+    if (latency <= 1900) return 6;
+    if (latency <= 2500) return 5;
+    if (latency <= 3200) return 4;
+    if (latency <= 4000) return 3;
+    if (latency <= 5000) return 2;
     return 0;
   }
 

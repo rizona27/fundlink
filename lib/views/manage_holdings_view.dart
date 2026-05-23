@@ -39,18 +39,14 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
   String? _lastSearchTextForSort;
 
   void _onScrollUpdate(double offset) {
-    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
-      return;
-    }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
-      if (mounted) {
-        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+    if (mounted) {
+      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
         setState(() {
           _scrollOffset = normalizedOffset;
         });
       }
-      _scrollThrottleTimer = null;
-    });
+    }
   }
 
   @override

@@ -158,12 +158,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onScrollUpdate(double offset) {
-    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
-      return;
-    }
-    _scrollThrottleTimer = Timer(const Duration(milliseconds: 16), () {
-      if (mounted) {
-        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+    if (mounted) {
+      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
+      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
         setState(() {
           _scrollOffset = normalizedOffset;
         });
@@ -177,8 +174,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           });
         }
       }
-      _scrollThrottleTimer = null;
-    });
+    }
   }
 
   @override
