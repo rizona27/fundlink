@@ -96,7 +96,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 
   void _startAnimation(double containerWidth) {
     if (_animationStarted) return;
-    
+
     final textPainter = TextPainter(
       text: TextSpan(text: widget.text, style: widget.textStyle),
       maxLines: 1,
@@ -105,29 +105,29 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     textPainter.layout();
     final textWidth = textPainter.width;
     _containerWidth = containerWidth;
-    
+
     final totalDistance = textWidth + containerWidth;
     final duration = Duration(milliseconds: (totalDistance / widget.velocity * 1000).round());
-    
+
     _controller.duration = duration;
     final animation = Tween<double>(begin: containerWidth, end: -textWidth).animate(_controller);
     animation.addListener(() {
       if (mounted) setState(() => _offset = animation.value);
     });
-    
+
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         _controller.forward(from: 0);
       }
     });
-    
+
     setState(() {
       _offset = containerWidth;
       _animationStarted = true;
     });
     _controller.forward();
   }
-  
+
   void _pauseAnimation() {
     if (!_isPaused && _controller.isAnimating) {
       _controller.stop();
@@ -136,7 +136,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
       });
     }
   }
-  
+
   void _resumeAnimation() {
     if (_isPaused && !_controller.isAnimating) {
       _controller.forward();
@@ -157,13 +157,13 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerWidth = constraints.maxWidth;
-        
+
         if (!_animationStarted && containerWidth > 0 && mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_animationStarted) _startAnimation(containerWidth);
           });
         }
-        
+
         if (!_animationStarted) {
           return Center(
             child: Text(
@@ -174,7 +174,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
             ),
           );
         }
-        
+
         return MouseRegion(
           onEnter: (_) => _pauseAnimation(),
           onExit: (_) => _resumeAnimation(),
@@ -214,7 +214,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 class _VersionUpdateButton extends StatefulWidget {
   final VoidCallback? onSmartNavigate;
   final bool hasUpdate;
-  
+
   const _VersionUpdateButton({this.onSmartNavigate, this.hasUpdate = false});
 
   @override
@@ -226,7 +226,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   Future<void> _handleUpdateTap() async {
     if (_isChecking) return;
-    
+
     if (mounted) {
       setState(() {
         _isChecking = true;
@@ -236,13 +236,13 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
     try {
       final dataManager = DataManagerProvider.of(context);
       final versionInfo = dataManager.latestVersionInfo;
-      
+
       if (versionInfo != null) {
         await _showUpdateDialog(versionInfo);
       } else {
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-        
+
         if (mounted) {
           showCupertinoDialog(
             context: context,
@@ -258,13 +258,13 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
             ),
           );
         }
-        
+
         final newVersionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
-        
+
         if (mounted) {
           Navigator.of(context).pop();
         }
-        
+
         if (newVersionInfo != null && mounted) {
           dataManager.setLatestVersionInfo(newVersionInfo);
           await _showUpdateDialog(newVersionInfo);
@@ -290,7 +290,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
       widget.onSmartNavigate!();
       return;
     }
-    
+
     final url = Uri.parse(AppConstants.nasBackendUrl);
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -299,7 +299,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   Future<void> _showUpdateDialog(VersionInfo versionInfo) async {
     if (!mounted) return;
-    
+
     if (!versionInfo.hasUpdate) {
       final shouldOpen = await showCupertinoDialog<bool>(
         context: context,
@@ -319,7 +319,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
           ],
         ),
       );
-      
+
       if (shouldOpen == true && mounted) {
         await _smartNavigate();
       }
@@ -353,7 +353,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
           ],
         ),
       );
-      
+
       if (shouldOpen == true && mounted) {
         await _smartNavigate();
       }
@@ -362,12 +362,12 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   Future<void> _openProjectUrl() async {
     final versionViewState = context.findAncestorStateOfType<_VersionViewState>();
-    
+
     if (versionViewState != null) {
       await versionViewState._handleUpdateTap();
       return;
     }
-    
+
     final url = Uri.parse(AppConstants.nasBackendUrl);
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -377,31 +377,31 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    
+
     return GestureDetector(
       onTap: _handleUpdateTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: _isChecking 
+          color: _isChecking
               ? (widget.hasUpdate ? const Color(0xFFFF9500).withOpacity(0.5) : const Color(0xFF007AFF).withOpacity(0.5))
               : (widget.hasUpdate ? const Color(0xFFFF9500) : const Color(0xFF007AFF)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: _isChecking
             ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CupertinoActivityIndicator(radius: 7),
-              )
+          width: 14,
+          height: 14,
+          child: CupertinoActivityIndicator(radius: 7),
+        )
             : Text(
-                widget.hasUpdate ? 'Update' : 'Homepage',
-                style: TextStyle(
-                  color: CupertinoColors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          widget.hasUpdate ? 'Update' : 'Homepage',
+          style: TextStyle(
+            color: CupertinoColors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -420,11 +420,11 @@ class _VersionViewState extends State<VersionView> {
   bool? _githubConnected;
   int? _nasLatency;
   int? _githubLatency;
-  
+
   Timer? _connectivityTimer;
   bool _hasCheckedConnectivity = false;
   bool _hasUpdate = false;
-  
+
   late Color _mailColor;
 
   @override
@@ -436,21 +436,21 @@ class _VersionViewState extends State<VersionView> {
       0.7,
       0.6,
     ).toColor();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkVersionOnStartup();
       _loadPreviousConnectivity();
       _scheduleConnectivityCheck();
     });
   }
-  
+
   Future<void> _loadPreviousConnectivity() async {
     final uiState = UIStateService();
     final nasConnected = await uiState.getBool('connectivity_nas_connected');
     final githubConnected = await uiState.getBool('connectivity_github_connected');
     final nasLatency = await uiState.getInt('connectivity_nas_latency');
     final githubLatency = await uiState.getInt('connectivity_github_latency');
-    
+
     if (mounted && nasConnected != null) {
       setState(() {
         _nasConnected = nasConnected;
@@ -460,7 +460,7 @@ class _VersionViewState extends State<VersionView> {
       });
     }
   }
-  
+
   Future<void> _saveConnectivityResult() async {
     final uiState = UIStateService();
     await uiState.saveBool('connectivity_nas_connected', _nasConnected ?? false);
@@ -468,13 +468,13 @@ class _VersionViewState extends State<VersionView> {
     await uiState.saveInt('connectivity_nas_latency', _nasLatency ?? 0);
     await uiState.saveInt('connectivity_github_latency', _githubLatency ?? 0);
   }
-  
+
   @override
   void dispose() {
     _connectivityTimer?.cancel();
     super.dispose();
   }
-  
+
   void _scheduleConnectivityCheck() {
     _connectivityTimer = Timer(const Duration(seconds: 30), () {
       if (mounted) {
@@ -497,9 +497,9 @@ class _VersionViewState extends State<VersionView> {
       final dataManager = DataManagerProvider.of(context);
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-      
+
       final versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
-      
+
       if (mounted && versionInfo != null) {
         dataManager.setLatestVersionInfo(versionInfo);
         setState(() {
@@ -512,7 +512,7 @@ class _VersionViewState extends State<VersionView> {
 
   Future<void> _checkConnectivity() async {
     if (_isCheckingConnectivity) return;
-    
+
     setState(() {
       _isCheckingConnectivity = true;
       _nasConnected = null;
@@ -523,9 +523,9 @@ class _VersionViewState extends State<VersionView> {
 
     final nasFuture = _testConnection('${AppConstants.nasBackendUrl}/api/version');
     final githubFuture = _testConnection(AppConstants.githubReleaseApiUrl);
-    
+
     final results = await Future.wait([nasFuture, githubFuture]);
-    
+
     if (mounted) {
       setState(() {
         _nasConnected = results[0].connected;
@@ -547,7 +547,7 @@ class _VersionViewState extends State<VersionView> {
         headers: {'User-Agent': AppConstants.userAgentApp},
       ).timeout(const Duration(seconds: 5));
       final endTime = DateTime.now();
-      
+
       final latency = endTime.difference(startTime).inMilliseconds;
       return (connected: response.statusCode == 200, latency: latency);
     } catch (e) {
@@ -556,34 +556,34 @@ class _VersionViewState extends State<VersionView> {
   }
 
   Future<void> _handleUpdateTap() async {
-    
+
     if (_nasConnected != null || _githubConnected != null) {
       if (_nasConnected == true) {
-        
+
         final uri = Uri.parse(AppConstants.nasBackendUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
         return;
       }
-      
+
       if (_githubConnected == true) {
-        
+
         final uri = Uri.parse(AppConstants.githubReleasePageUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
         return;
       }
-      
-      
+
+
       final uri = Uri.parse(AppConstants.githubReleasePageUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
       return;
     }
-    
+
     final state = context.findAncestorStateOfType<_VersionUpdateButtonState>();
     if (state != null) {
       await state._handleUpdateTap();
@@ -714,7 +714,7 @@ class _VersionViewState extends State<VersionView> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _buildFeatureItemWithText(CupertinoIcons.chart_bar_fill, '基金一览：查看基金业绩指标、对比基准', isDarkMode),
+                        _buildFeatureItemWithText(CupertinoIcons.chart_bar_fill, '基金一览：查看基金业绩指标，对比基准', isDarkMode),
                         const SizedBox(height: 8),
                         _buildFeatureItemWithText(CupertinoIcons.person_2_fill, '客户持仓：增删客户持仓情况，分析收益', isDarkMode),
                         const SizedBox(height: 8),
@@ -729,33 +729,6 @@ class _VersionViewState extends State<VersionView> {
                         _buildUpdateLogMarquee(isDarkMode),
                         const SizedBox(height: 24),
                         Align(
-                          alignment: Alignment.centerRight,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Mail:',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  fontStyle: FontStyle.italic,
-                                  color: _mailColor, 
-                                ),
-                              ),
-                              Text(
-                                'rizona.cn@gmail.com',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  fontStyle: FontStyle.italic,
-                                  color: _mailColor, 
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 27),
-                        Align(
                           alignment: Alignment.center,
                           child: Text(
                             '本项目仅供个人学习与技术交流使用\n数据仅供参考，不构成任何投资建议',
@@ -767,7 +740,7 @@ class _VersionViewState extends State<VersionView> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 27),
+                        const SizedBox(height: 4),
                         Center(
                           child: Text(
                             '© 2026 Developed by Rizona.',
@@ -828,7 +801,7 @@ class _VersionViewState extends State<VersionView> {
   Widget _buildFeatureItem(IconData icon, String label, bool isDarkMode, [double? fontSize, double? iconSize]) {
     final textSize = fontSize ?? 13.0;
     final iSize = iconSize ?? 14.0;
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -910,17 +883,17 @@ class _VersionViewState extends State<VersionView> {
             ),
             const SizedBox(width: 8),
             Icon(
-              _isCheckingConnectivity 
+              _isCheckingConnectivity
                   ? CupertinoIcons.ellipsis
                   : (_nasConnected == true && _githubConnected == true
-                      ? CupertinoIcons.checkmark_seal_fill
-                      : CupertinoIcons.ellipsis),
+                  ? CupertinoIcons.checkmark_seal_fill
+                  : CupertinoIcons.ellipsis),
               size: 16,
               color: _isCheckingConnectivity
                   ? (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)
                   : (_nasConnected == true && _githubConnected == true
-                      ? const Color(0xFF34C759)
-                      : (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)),
+                  ? const Color(0xFF34C759)
+                  : (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)),
             ),
           ],
         ),
@@ -930,7 +903,7 @@ class _VersionViewState extends State<VersionView> {
             final screenWidth = constraints.maxWidth;
             final effectiveWidth = screenWidth > 500 ? 500 : screenWidth;
             final fontSize = effectiveWidth > 400 ? 13.0 : 11.0;
-            
+
             return ConstrainedBox(
               constraints: BoxConstraints(maxWidth: 500),
               child: GridView.count(
@@ -965,12 +938,12 @@ class _VersionViewState extends State<VersionView> {
   }
 
   Widget _buildConnectivityItem(
-    String label,
-    bool? connected,
-    int? latency,
-    bool isDarkMode,
-    double fontSize,
-  ) {
+      String label,
+      bool? connected,
+      int? latency,
+      bool isDarkMode,
+      double fontSize,
+      ) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1012,17 +985,17 @@ class _VersionViewState extends State<VersionView> {
     const barWidth = 2.0;
     const barHeight = 12.0;
     const spacing = 1.0;
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(totalBars, (index) {
         final isActive = index < level;
         Color barColor;
-        
+
         if (failed) {
           barColor = const Color(0xFFFF3B30);
         } else if (!isActive) {
-          barColor = isDarkMode 
+          barColor = isDarkMode
               ? CupertinoColors.systemGrey.withOpacity(0.3)
               : CupertinoColors.systemGrey4;
         } else {
@@ -1043,7 +1016,7 @@ class _VersionViewState extends State<VersionView> {
             )!;
           }
         }
-        
+
         return Container(
           width: barWidth,
           height: barHeight,
@@ -1089,7 +1062,7 @@ class _VersionViewState extends State<VersionView> {
         Container(
           height: 36,
           decoration: BoxDecoration(
-            color: isDarkMode 
+            color: isDarkMode
                 ? const Color(0xFF2C2C2E).withOpacity(0.6)
                 : CupertinoColors.white.withOpacity(0.8),
             borderRadius: BorderRadius.circular(10),
@@ -1110,7 +1083,7 @@ class _VersionViewState extends State<VersionView> {
                     ? CupertinoColors.white.withOpacity(0.8)
                     : CupertinoColors.systemGrey.withOpacity(0.9),
               ),
-              velocity: 30.0, 
+              velocity: 30.0,
             ),
           ),
         ),
@@ -1153,7 +1126,7 @@ class _VersionViewState extends State<VersionView> {
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: isDarkMode 
+            color: isDarkMode
                 ? const Color(0xFF2C2C2E).withOpacity(0.6)
                 : CupertinoColors.white.withOpacity(0.8),
             borderRadius: BorderRadius.circular(10),
@@ -1207,6 +1180,33 @@ class _VersionViewState extends State<VersionView> {
                   ),
                 ),
               )).toList(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Mail:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic,
+                        color: _mailColor,
+                      ),
+                    ),
+                    Text(
+                      ' rizona.cn@gmail.com',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic,
+                        color: _mailColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1234,7 +1234,7 @@ class _VersionViewState extends State<VersionView> {
                   color: Colors.transparent,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isDarkMode 
+                      color: isDarkMode
                           ? const Color(0xFF1C1C1E)
                           : CupertinoColors.white,
                       borderRadius: BorderRadius.circular(16),
@@ -1269,8 +1269,8 @@ class _VersionViewState extends State<VersionView> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: isDarkMode 
-                                      ? CupertinoColors.white 
+                                  color: isDarkMode
+                                      ? CupertinoColors.white
                                       : CupertinoColors.label,
                                 ),
                               ),
@@ -1346,24 +1346,24 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
 
   void _startAnimation(double containerHeight) {
     if (_animationStarted) return;
-    
+
     final textPainter = TextPainter(
       text: TextSpan(text: widget.items.join('\n'), style: widget.itemTextStyle),
       textDirection: TextDirection.ltr,
     );
-    textPainter.layout(maxWidth: 300); 
-    final totalTextHeight = textPainter.height + (widget.items.length - 1) * 8; 
-    
+    textPainter.layout(maxWidth: 300);
+    final totalTextHeight = textPainter.height + (widget.items.length - 1) * 8;
+
     _containerHeight = containerHeight;
     final totalDistance = totalTextHeight + containerHeight;
     final duration = Duration(milliseconds: (totalDistance / widget.velocity * 1000).round());
-    
+
     _controller.duration = duration;
     final animation = Tween<double>(begin: containerHeight, end: -totalTextHeight).animate(_controller);
     animation.addListener(() {
       if (mounted) setState(() => _offset = animation.value);
     });
-    
+
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         Future.delayed(const Duration(seconds: 2), () {
@@ -1373,14 +1373,14 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
         });
       }
     });
-    
+
     setState(() {
       _offset = containerHeight;
       _animationStarted = true;
     });
     _controller.forward();
   }
-  
+
   void _pauseAnimation() {
     if (!_isPaused && _controller.isAnimating) {
       _controller.stop();
@@ -1389,7 +1389,7 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
       });
     }
   }
-  
+
   void _resumeAnimation() {
     if (_isPaused && !_controller.isAnimating) {
       _controller.forward();
@@ -1410,13 +1410,13 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerHeight = constraints.maxHeight;
-        
+
         if (!_animationStarted && containerHeight > 0 && mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_animationStarted) _startAnimation(containerHeight);
           });
         }
-        
+
         if (!_animationStarted) {
           return Center(
             child: Column(
@@ -1431,7 +1431,7 @@ class _VerticalMarqueeTextState extends State<_VerticalMarqueeText> with SingleT
             ),
           );
         }
-        
+
         return MouseRegion(
           onEnter: (_) => _pauseAnimation(),
           onExit: (_) => _resumeAnimation(),

@@ -49,11 +49,13 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
       vsync: this,
     )..value = _normalOpacity;
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        _startAutoFade();
-      }
-    });
+    if (_isDesktopPlatform) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          _startAutoFade();
+        }
+      });
+    }
 
     for (int i = 0; i < widget.items.length; i++) {
       final scaleCtrl = AnimationController(
@@ -80,7 +82,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     if (!_isScrolling) {
       _isScrolling = true;
       _cancelAutoFade(); 
-      if (_opacityController.value != _scrollingOpacity) {
+      if (_isDesktopPlatform && _opacityController.value != _scrollingOpacity) {
         _opacityController.animateTo(_scrollingOpacity, curve: Curves.easeOut);
       }
     }
@@ -118,11 +120,13 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     _isScrolling = false;
     if (_opacityController.value != _normalOpacity) {
       _opacityController.animateTo(_normalOpacity, curve: Curves.easeOut);
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && !_isScrolling && !_isHovered) {
-          _startAutoFade();
-        }
-      });
+      if (_isDesktopPlatform) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted && !_isScrolling && !_isHovered) {
+            _startAutoFade();
+          }
+        });
+      }
     }
   }
 
@@ -165,8 +169,8 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     final Color backgroundColor = isDarkMode
-        ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.85)  
-        : CupertinoColors.white.withValues(alpha: 0.85);      
+        ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.95)  
+        : CupertinoColors.white.withValues(alpha: 0.95);      
 
     final inactiveIconColor = isDarkMode
         ? CupertinoColors.white.withValues(alpha: 0.55)

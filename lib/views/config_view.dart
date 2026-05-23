@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,11 +31,23 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   Brightness? _lastBrightness;
   Timer? _animationTimer;
   double _backgroundOpacity = 1.0;
-  
+
   bool _isHoldingsManagementExpanded = true;
   bool _isCommonToolsExpanded = false;
   bool _isAppSettingsExpanded = false;
   bool _isAboutExpanded = false;
+
+  Timer? _gradientTimer;
+  double _gradientOffset = 0.0;
+  static const List<Color> _gradientColors = [
+    Color(0xFFD4A5A5),
+    Color(0xFFE8B89D),
+    Color(0xFFE2C8A0),
+    Color(0xFFB5C9B4),
+    Color(0xFFA3B8C8),
+    Color(0xFF9EA8C4),
+    Color(0xFFC4B0D4),
+  ];
 
   @override
   bool get wantKeepAlive => true;
@@ -46,12 +59,32 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       if (mounted) {
         _dataManager = DataManagerProvider.of(context);
         _lastBrightness = CupertinoTheme.brightnessOf(context);
-        
+
         await _loadSectionStates();
+        _startGradientAnimation();
       }
     });
   }
-  
+
+  void _startGradientAnimation() {
+    _gradientTimer?.cancel();
+    _gradientTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _gradientOffset = (_gradientOffset + 0.004) % 1.0;
+      });
+    });
+  }
+
+  bool get _allSectionsCollapsed =>
+      !_isHoldingsManagementExpanded &&
+          !_isCommonToolsExpanded &&
+          !_isAppSettingsExpanded &&
+          !_isAboutExpanded;
+
   Future<void> _loadSectionStates() async {
     final uiState = UIStateService();
     if (mounted) {
@@ -59,7 +92,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       final commonToolsExpanded = await uiState.getBool('section_common_tools_expanded');
       final appSettingsExpanded = await uiState.getBool('section_app_settings_expanded');
       final aboutExpanded = await uiState.getBool('section_about_expanded');
-      
+
       setState(() {
         _isHoldingsManagementExpanded = holdingsManagementExpanded ?? true;
         _isCommonToolsExpanded = commonToolsExpanded ?? false;
@@ -68,24 +101,44 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       });
     }
   }
-  
+
   void _saveSectionState(String key, bool value) {
     UIStateService().saveBool(key, value);
+  }
+
+  void _toggleSection(String key, bool currentValue) {
+    setState(() {
+      switch (key) {
+        case 'holdings':
+          _isHoldingsManagementExpanded = !currentValue;
+          break;
+        case 'common':
+          _isCommonToolsExpanded = !currentValue;
+          break;
+        case 'app':
+          _isAppSettingsExpanded = !currentValue;
+          break;
+        case 'about':
+          _isAboutExpanded = !currentValue;
+          break;
+      }
+    });
+    _saveSectionState('section_${key}_expanded', !currentValue);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _dataManager = DataManagerProvider.of(context);
-    
+
     final currentBrightness = CupertinoTheme.brightnessOf(context);
     if (_lastBrightness != null && currentBrightness != _lastBrightness) {
       _lastBrightness = currentBrightness;
-      
+
       setState(() {
         _backgroundOpacity = 0.0;
       });
-      
+
       _animationTimer?.cancel();
       _animationTimer = Timer(AnimationConfig.durationSlow, () {
         if (mounted) {
@@ -100,6 +153,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   @override
   void dispose() {
     _animationTimer?.cancel();
+    _gradientTimer?.cancel();
     super.dispose();
   }
 
@@ -141,12 +195,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       icon: '工具',
       isDarkMode: isDarkMode,
       isExpanded: _isCommonToolsExpanded,
-      onToggle: () {
-        setState(() {
-          _isCommonToolsExpanded = !_isCommonToolsExpanded;
-        });
-        _saveSectionState('section_common_tools_expanded', _isCommonToolsExpanded);
-      },
+      onToggle: () => _toggleSection('common', _isCommonToolsExpanded),
       children: [
         _buildMenuItem(
           icon: CupertinoIcons.cloud_download,
@@ -196,12 +245,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       icon: '设置',
       isDarkMode: isDarkMode,
       isExpanded: _isAppSettingsExpanded,
-      onToggle: () {
-        setState(() {
-          _isAppSettingsExpanded = !_isAppSettingsExpanded;
-        });
-        _saveSectionState('section_app_settings_expanded', _isAppSettingsExpanded);
-      },
+      onToggle: () => _toggleSection('app', _isAppSettingsExpanded),
       children: [
         _buildSwitchItem(
           icon: CupertinoIcons.lock_fill,
@@ -238,12 +282,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       icon: '持仓',
       isDarkMode: isDarkMode,
       isExpanded: _isHoldingsManagementExpanded,
-      onToggle: () {
-        setState(() {
-          _isHoldingsManagementExpanded = !_isHoldingsManagementExpanded;
-        });
-        _saveSectionState('section_holdings_management_expanded', _isHoldingsManagementExpanded);
-      },
+      onToggle: () => _toggleSection('holdings', _isHoldingsManagementExpanded),
       children: [
         _buildMenuItem(
           icon: CupertinoIcons.plus_circle_fill,
@@ -303,12 +342,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       icon: '关于',
       isDarkMode: isDarkMode,
       isExpanded: _isAboutExpanded,
-      onToggle: () {
-        setState(() {
-          _isAboutExpanded = !_isAboutExpanded;
-        });
-        _saveSectionState('section_about_expanded', _isAboutExpanded);
-      },
+      onToggle: () => _toggleSection('about', _isAboutExpanded),
       children: [
         _buildMenuItem(
           icon: CupertinoIcons.info_circle_fill,
@@ -424,18 +458,18 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             curve: AnimationConfig.curveEaseInOutCubic,
             child: isExpanded
                 ? Column(
-                    children: [
-                      Divider(
-                        height: 0,
-                        indent: 60,
-                        endIndent: 16,
-                        color: isDarkMode
-                            ? CupertinoColors.white.withOpacity(0.1)
-                            : CupertinoColors.systemGrey4,
-                      ),
-                      ...children,
-                    ],
-                  )
+              children: [
+                Divider(
+                  height: 0,
+                  indent: 60,
+                  endIndent: 16,
+                  color: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.1)
+                      : CupertinoColors.systemGrey4,
+                ),
+                ...children,
+              ],
+            )
                 : const SizedBox.shrink(),
           ),
         ],
@@ -783,26 +817,83 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildFooter(bool isDarkMode) {
+    final isCollapsed = _allSectionsCollapsed;
+
+    final greyColor = isDarkMode
+        ? CupertinoColors.white.withOpacity(0.3)
+        : CupertinoColors.systemGrey.withOpacity(0.4);
+
     return Center(
       child: Column(
         children: [
-          Icon(
-            CupertinoIcons.heart_fill,
-            size: 16,
-            color: isDarkMode
-                ? CupertinoColors.white.withOpacity(0.3)
-                : CupertinoColors.systemGrey.withOpacity(0.4),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedOpacity(
+                opacity: isCollapsed ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeInOut,
+                child: Icon(
+                  CupertinoIcons.heart_fill,
+                  size: 16,
+                  color: CupertinoColors.systemRed,
+                ),
+              ),
+              AnimatedOpacity(
+                opacity: isCollapsed ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeInOut,
+                child: Icon(
+                  CupertinoIcons.heart_fill,
+                  size: 16,
+                  color: greyColor,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Happiness around the corner.',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDarkMode
-                  ? CupertinoColors.white.withOpacity(0.4)
-                  : CupertinoColors.systemGrey.withOpacity(0.5),
-              fontStyle: FontStyle.italic,
-            ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedOpacity(
+                opacity: isCollapsed ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeInOut,
+                child: ShaderMask(
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      colors: _gradientColors,
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      transform: GradientRotation(_gradientOffset * 2 * 3.14159),
+                    ).createShader(bounds);
+                  },
+                  child: Text(
+                    'Happiness around the corner.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedOpacity(
+                opacity: isCollapsed ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeInOut,
+                child: Text(
+                  'Happiness around the corner.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.4)
+                        : CupertinoColors.systemGrey.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -811,13 +902,13 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildVersionBadge(bool isDarkMode) {
     final versionInfo = _dataManager.latestVersionInfo;
-    
+
     if (versionInfo == null) {
       return const SizedBox.shrink();
     }
-    
+
     final hasUpdate = versionInfo.hasUpdate;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -837,7 +928,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildVersionWithBadge(bool isDarkMode) {
     final versionInfo = _dataManager.latestVersionInfo;
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
