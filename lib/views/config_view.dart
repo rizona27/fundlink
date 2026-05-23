@@ -31,8 +31,9 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   Timer? _animationTimer;
   double _backgroundOpacity = 1.0;
   
-  bool _isHoldingsExpanded = true;
-  bool _isGeneralExpanded = true;
+  bool _isHoldingsManagementExpanded = true;
+  bool _isCommonToolsExpanded = false;
+  bool _isAppSettingsExpanded = false;
   bool _isAboutExpanded = false;
 
   @override
@@ -54,13 +55,15 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
   Future<void> _loadSectionStates() async {
     final uiState = UIStateService();
     if (mounted) {
-      final holdingsExpanded = await uiState.getBool('section_holdings_expanded');
-      final generalExpanded = await uiState.getBool('section_general_expanded');
+      final holdingsManagementExpanded = await uiState.getBool('section_holdings_management_expanded');
+      final commonToolsExpanded = await uiState.getBool('section_common_tools_expanded');
+      final appSettingsExpanded = await uiState.getBool('section_app_settings_expanded');
       final aboutExpanded = await uiState.getBool('section_about_expanded');
       
       setState(() {
-        _isHoldingsExpanded = holdingsExpanded ?? true;
-        _isGeneralExpanded = generalExpanded ?? true;
+        _isHoldingsManagementExpanded = holdingsManagementExpanded ?? true;
+        _isCommonToolsExpanded = commonToolsExpanded ?? false;
+        _isAppSettingsExpanded = appSettingsExpanded ?? false;
         _isAboutExpanded = aboutExpanded ?? false;
       });
     }
@@ -118,7 +121,9 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             children: [
               _buildHoldingsManagementSection(isDarkMode),
               const SizedBox(height: 16),
-              _buildGeneralSection(isDarkMode),
+              _buildCommonToolsSection(isDarkMode),
+              const SizedBox(height: 16),
+              _buildAppSettingsSection(isDarkMode),
               const SizedBox(height: 16),
               _buildAboutSection(isDarkMode),
               const SizedBox(height: 32),
@@ -130,21 +135,72 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildGeneralSection(bool isDarkMode) {
-    final isDesktop = defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-    
+  Widget _buildCommonToolsSection(bool isDarkMode) {
     return _buildSection(
-      title: '基础配置',
-      icon: '通用',
+      title: '数据日志',
+      icon: '工具',
       isDarkMode: isDarkMode,
-      isExpanded: _isGeneralExpanded,
+      isExpanded: _isCommonToolsExpanded,
       onToggle: () {
         setState(() {
-          _isGeneralExpanded = !_isGeneralExpanded;
+          _isCommonToolsExpanded = !_isCommonToolsExpanded;
         });
-        _saveSectionState('section_general_expanded', _isGeneralExpanded);
+        _saveSectionState('section_common_tools_expanded', _isCommonToolsExpanded);
+      },
+      children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.cloud_download,
+          title: '导入数据',
+          subtitle: '从文件导入持仓数据',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const ImportHoldingView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.cloud_upload,
+          title: '导出数据',
+          subtitle: '导出持仓数据到文件',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const ExportHoldingView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.doc_text_search,
+          title: '查看日志',
+          subtitle: '系统和操作记录',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const LogView()),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppSettingsSection(bool isDarkMode) {
+    return _buildSection(
+      title: '偏好设置',
+      icon: '设置',
+      isDarkMode: isDarkMode,
+      isExpanded: _isAppSettingsExpanded,
+      onToggle: () {
+        setState(() {
+          _isAppSettingsExpanded = !_isAppSettingsExpanded;
+        });
+        _saveSectionState('section_app_settings_expanded', _isAppSettingsExpanded);
       },
       children: [
         _buildSwitchItem(
@@ -178,15 +234,15 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildHoldingsManagementSection(bool isDarkMode) {
     return _buildSection(
-      title: '数据管理',
-      icon: '数据',
+      title: '持仓管理',
+      icon: '持仓',
       isDarkMode: isDarkMode,
-      isExpanded: _isHoldingsExpanded,
+      isExpanded: _isHoldingsManagementExpanded,
       onToggle: () {
         setState(() {
-          _isHoldingsExpanded = !_isHoldingsExpanded;
+          _isHoldingsManagementExpanded = !_isHoldingsManagementExpanded;
         });
-        _saveSectionState('section_holdings_expanded', _isHoldingsExpanded);
+        _saveSectionState('section_holdings_management_expanded', _isHoldingsManagementExpanded);
       },
       children: [
         _buildMenuItem(
@@ -215,11 +271,12 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           },
         ),
         _buildDivider(isDarkMode),
-        _buildMenuItem(
+        _buildMenuItemWithBadge(
           icon: CupertinoIcons.clock_fill,
           title: '待确认交易',
           subtitle: '查看和管理待确认交易',
           isDarkMode: isDarkMode,
+          badgeCount: _getPendingTransactionCount(),
           onTap: () {
             Navigator.push(
               context,
@@ -229,47 +286,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         ),
         _buildDivider(isDarkMode),
         _buildMenuItem(
-          icon: CupertinoIcons.cloud_download,
-          title: '导入数据',
-          subtitle: '从文件导入持仓数据',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const ImportHoldingView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.cloud_upload,
-          title: '导出数据',
-          subtitle: '导出持仓数据到文件',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const ExportHoldingView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.book,
-          title: '映射索引',
-          subtitle: '客户号姓名匹配',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const MappingDictionaryView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
           icon: CupertinoIcons.trash,
-          title: '清空持仓',
+          title: '清空数据',
           subtitle: '删除所有数据（不可恢复）',
           isDarkMode: isDarkMode,
           isDestructive: true,
@@ -281,7 +299,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildAboutSection(bool isDarkMode) {
     return _buildSection(
-      title: '关于',
+      title: '关于程序',
       icon: '关于',
       isDarkMode: isDarkMode,
       isExpanded: _isAboutExpanded,
@@ -303,19 +321,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const VersionView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.doc_text_search,
-          title: '查看日志',
-          subtitle: '系统和操作记录',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const LogView()),
             );
           },
         ),
@@ -367,12 +372,16 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             onPressed: onToggle,
             child: Row(
               children: [
-                Container(
+                AnimatedContainer(
+                  duration: AnimationConfig.durationVerySlow,
+                  curve: Curves.easeInOut,
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: _getIconGradient(icon),
+                      colors: isExpanded
+                          ? _getIconGradient(icon)
+                          : _getGrayscaleGradient(),
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -436,19 +445,23 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   List<Color> _getIconGradient(String icon) {
     final gradients = {
-      '通用': [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
-      '数据': [const Color(0xFF10B981), const Color(0xFF34D399)],
-      '日志': [const Color(0xFFF59E0B), const Color(0xFFFBBF24)],
+      '持仓': [const Color(0xFF10B981), const Color(0xFF34D399)],
+      '工具': [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+      '设置': [const Color(0xFFF59E0B), const Color(0xFFFBBF24)],
       '关于': [const Color(0xFFEC4899), const Color(0xFFF472B6)],
     };
     return gradients[icon] ?? [const Color(0xFF6B7280), const Color(0xFF9CA3AF)];
   }
 
+  List<Color> _getGrayscaleGradient() {
+    return [const Color(0xFFD1D5DB), const Color(0xFF9CA3AF)];
+  }
+
   IconData _getIconData(String icon) {
     final icons = {
-      '通用': CupertinoIcons.slider_horizontal_3,
-      '数据': CupertinoIcons.folder,
-      '日志': CupertinoIcons.doc_text,
+      '持仓': CupertinoIcons.square_stack_3d_up,
+      '工具': CupertinoIcons.wrench,
+      '设置': CupertinoIcons.slider_horizontal_3,
       '关于': CupertinoIcons.info,
     };
     return icons[icon] ?? CupertinoIcons.settings;
@@ -536,6 +549,97 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         ],
       ),
     );
+  }
+
+  Widget _buildMenuItemWithBadge({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool isDarkMode,
+    required int badgeCount,
+    required VoidCallback onTap,
+  }) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      borderRadius: BorderRadius.zero,
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? CupertinoColors.systemGrey5.withOpacity(0.3)
+                  : CupertinoColors.systemGrey6,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: isDarkMode ? CupertinoColors.systemBlue : const Color(0xFF6366F1),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode
+                          ? CupertinoColors.white.withOpacity(0.6)
+                          : CupertinoColors.systemGrey,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (badgeCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemRed,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$badgeCount',
+                style: const TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          Icon(
+            CupertinoIcons.chevron_forward,
+            size: 14,
+            color: isDarkMode
+                ? CupertinoColors.white.withOpacity(0.4)
+                : CupertinoColors.systemGrey.withOpacity(0.6),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getPendingTransactionCount() {
+    return _dataManager.getPendingTransactions().length;
   }
 
   Widget _buildSwitchItem({

@@ -245,7 +245,7 @@ class _MainTabViewState extends State<MainTabView> {
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_fill), label: '一览'),
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_2_fill), label: '客户'),
     BottomNavigationBarItem(icon: Icon(CupertinoIcons.star_fill), label: '排名'),
-    BottomNavigationBarItem(icon: Icon(CupertinoIcons.settings), label: '设置'),
+    BottomNavigationBarItem(icon: Icon(CupertinoIcons.ellipsis_circle), label: '更多'),
   ];
 
   final List<Color> _activeColors = [
