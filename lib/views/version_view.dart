@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../widgets/adaptive_top_bar.dart';
 import '../services/data_manager.dart';
 import '../services/version_check_service.dart';
+import '../services/ui_state_service.dart';
 import '../constants/app_constants.dart';
 
 const String APP_VERSION = 'v1.3.1';
@@ -210,8 +212,9 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 
 class _VersionUpdateButton extends StatefulWidget {
   final VoidCallback? onSmartNavigate;
+  final bool hasUpdate;
   
-  const _VersionUpdateButton({this.onSmartNavigate});
+  const _VersionUpdateButton({this.onSmartNavigate, this.hasUpdate = false});
 
   @override
   State<_VersionUpdateButton> createState() => _VersionUpdateButtonState();
@@ -372,14 +375,16 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    
     return GestureDetector(
       onTap: _handleUpdateTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: _isChecking 
-              ? const Color(0xFF007AFF).withOpacity(0.5)
-              : const Color(0xFF007AFF),
+              ? (widget.hasUpdate ? const Color(0xFFFF9500).withOpacity(0.5) : const Color(0xFF007AFF).withOpacity(0.5))
+              : (widget.hasUpdate ? const Color(0xFFFF9500) : const Color(0xFF007AFF)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: _isChecking
@@ -388,8 +393,8 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
                 height: 14,
                 child: CupertinoActivityIndicator(radius: 7),
               )
-            : const Text(
-                'Update',
+            : Text(
+                widget.hasUpdate ? 'Update' : 'Homepage',
                 style: TextStyle(
                   color: CupertinoColors.white,
                   fontSize: 10,
@@ -414,17 +419,75 @@ class _VersionViewState extends State<VersionView> {
   bool? _githubConnected;
   int? _nasLatency;
   int? _githubLatency;
+  
+  Timer? _connectivityTimer;
+  bool _hasCheckedConnectivity = false;
+  bool _hasUpdate = false;
+  
+  late Color _mailColor;
 
   @override
   void initState() {
     super.initState();
+    _mailColor = HSLColor.fromAHSL(
+      1,
+      Random().nextDouble() * 360,
+      0.7,
+      0.6,
+    ).toColor();
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkVersionOnStartup();
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _checkConnectivity();
-        }
+      _loadPreviousConnectivity();
+      _scheduleConnectivityCheck();
+    });
+  }
+  
+  Future<void> _loadPreviousConnectivity() async {
+    final uiState = UIStateService();
+    final nasConnected = await uiState.getBool('connectivity_nas_connected');
+    final githubConnected = await uiState.getBool('connectivity_github_connected');
+    final nasLatency = await uiState.getInt('connectivity_nas_latency');
+    final githubLatency = await uiState.getInt('connectivity_github_latency');
+    
+    if (mounted && nasConnected != null) {
+      setState(() {
+        _nasConnected = nasConnected;
+        _githubConnected = githubConnected;
+        _nasLatency = nasLatency;
+        _githubLatency = githubLatency;
       });
+    }
+  }
+  
+  Future<void> _saveConnectivityResult() async {
+    final uiState = UIStateService();
+    await uiState.saveBool('connectivity_nas_connected', _nasConnected ?? false);
+    await uiState.saveBool('connectivity_github_connected', _githubConnected ?? false);
+    await uiState.saveInt('connectivity_nas_latency', _nasLatency ?? 0);
+    await uiState.saveInt('connectivity_github_latency', _githubLatency ?? 0);
+  }
+  
+  @override
+  void dispose() {
+    _connectivityTimer?.cancel();
+    super.dispose();
+  }
+  
+  void _scheduleConnectivityCheck() {
+    _connectivityTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted) {
+        _checkConnectivity();
+        _hasCheckedConnectivity = true;
+
+        if ((_nasConnected == false || _githubConnected == false) && mounted) {
+          Timer(const Duration(minutes: 1), () {
+            if (mounted) {
+              _checkConnectivity();
+            }
+          });
+        }
+      }
     });
   }
 
@@ -438,6 +501,9 @@ class _VersionViewState extends State<VersionView> {
       
       if (mounted && versionInfo != null) {
         dataManager.setLatestVersionInfo(versionInfo);
+        setState(() {
+          _hasUpdate = versionInfo.hasUpdate;
+        });
       }
     } catch (e) {
     }
@@ -467,6 +533,8 @@ class _VersionViewState extends State<VersionView> {
         _githubLatency = results[1].latency;
         _isCheckingConnectivity = false;
       });
+
+      _saveConnectivityResult();
     }
   }
 
@@ -526,13 +594,6 @@ class _VersionViewState extends State<VersionView> {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     double scrollOffset = 0;
-
-    final randomColor = HSLColor.fromAHSL(
-      1,
-      Random().nextDouble() * 360,
-      0.7,
-      0.6,
-    ).toColor();
 
     return CupertinoPageScaffold(
       backgroundColor: Colors.transparent,
@@ -633,6 +694,7 @@ class _VersionViewState extends State<VersionView> {
                                       const SizedBox(width: 8),
                                       _VersionUpdateButton(
                                         onSmartNavigate: _handleUpdateTap,
+                                        hasUpdate: _hasUpdate,
                                       ),
                                     ],
                                   ),
@@ -651,39 +713,15 @@ class _VersionViewState extends State<VersionView> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final screenWidth = constraints.maxWidth;
-                            final effectiveWidth = screenWidth > 500 ? 500 : screenWidth; 
-                            final crossAxisCount = effectiveWidth > 400 ? 3 : 2;
-                            final fontSize = effectiveWidth > 400 ? 13.0 : 11.0;
-                            final iconSize = effectiveWidth > 400 ? 16.0 : 12.0;
-                            
-                            return ConstrainedBox(
-                              constraints: BoxConstraints(maxWidth: 500),
-                              child: GridView.count(
-                                crossAxisCount: crossAxisCount,
-                                mainAxisSpacing: 8,
-                                crossAxisSpacing: 8,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                childAspectRatio: 8.0,
-                                children: [
-                                  _buildFeatureItem(CupertinoIcons.doc_plaintext, '基金持仓管理', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.square_grid_2x2, '多维度视图', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.chart_bar, '实时净值估算', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.arrow_clockwise, '基金详情回溯', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.moon_stars, '主题模式切换', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.lock_fill, '隐私保护模式', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.cloud_upload, '数据导入导出', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.clock, '待确认交易管理', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.arrow_up_right, '业绩走势对比', isDarkMode, fontSize, iconSize),
-                                  _buildFeatureItem(CupertinoIcons.star_fill, '收益排行分析', isDarkMode, fontSize, iconSize),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                        _buildFeatureItemWithText(CupertinoIcons.chart_bar_fill, '基金一览：查看基金业绩指标、对比基准', isDarkMode),
+                        const SizedBox(height: 8),
+                        _buildFeatureItemWithText(CupertinoIcons.person_2_fill, '客户持仓：增删客户持仓情况，分析收益', isDarkMode),
+                        const SizedBox(height: 8),
+                        _buildFeatureItemWithText(CupertinoIcons.star_fill, '业绩排名：不同维度排序筛选，确定范围', isDarkMode),
+                        const SizedBox(height: 8),
+                        _buildFeatureItemWithText(CupertinoIcons.cloud_upload, '数据管理：批量进行导入导出，统一维护', isDarkMode),
+                        const SizedBox(height: 8),
+                        _buildFeatureItemWithText(CupertinoIcons.lock_fill, '个性设定：隐私主题自由设置，适应需求', isDarkMode),
                         const SizedBox(height: 24),
                         _buildConnectivitySection(isDarkMode),
                         const SizedBox(height: 24),
@@ -700,7 +738,7 @@ class _VersionViewState extends State<VersionView> {
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   fontStyle: FontStyle.italic,
-                                  color: randomColor, 
+                                  color: _mailColor, 
                                 ),
                               ),
                               Text(
@@ -709,7 +747,7 @@ class _VersionViewState extends State<VersionView> {
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   fontStyle: FontStyle.italic,
-                                  color: randomColor, 
+                                  color: _mailColor, 
                                 ),
                               ),
                             ],
@@ -814,6 +852,47 @@ class _VersionViewState extends State<VersionView> {
     );
   }
 
+  Widget _buildSimpleText(String text, bool isDarkMode) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 13,
+        height: 1.4,
+        color: isDarkMode
+            ? CupertinoColors.white.withOpacity(0.7)
+            : CupertinoColors.systemGrey,
+      ),
+    );
+  }
+
+  Widget _buildFeatureItemWithText(IconData icon, String text, bool isDarkMode) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: isDarkMode
+              ? CupertinoColors.white.withOpacity(0.6)
+              : const Color(0xFF6366F1),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: isDarkMode
+                  ? CupertinoColors.white.withOpacity(0.7)
+                  : CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildConnectivitySection(bool isDarkMode) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,31 +908,18 @@ class _VersionViewState extends State<VersionView> {
               ),
             ),
             const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _checkConnectivity,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _isCheckingConnectivity
-                      ? const Color(0xFF007AFF).withOpacity(0.5)
-                      : const Color(0xFF007AFF),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: _isCheckingConnectivity
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CupertinoActivityIndicator(radius: 7),
-                      )
-                    : const Text(
-                        '检查',
-                        style: TextStyle(
-                          color: CupertinoColors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-              ),
+            Icon(
+              _isCheckingConnectivity 
+                  ? CupertinoIcons.ellipsis
+                  : (_nasConnected == true && _githubConnected == true
+                      ? CupertinoIcons.checkmark_seal_fill
+                      : CupertinoIcons.ellipsis),
+              size: 16,
+              color: _isCheckingConnectivity
+                  ? (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)
+                  : (_nasConnected == true && _githubConnected == true
+                      ? const Color(0xFF34C759)
+                      : (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)),
             ),
           ],
         ),
@@ -928,16 +994,16 @@ class _VersionViewState extends State<VersionView> {
   }
 
   int _calculateSignalLevel(int latency) {
-    if (latency <= 100) return 10;
-    if (latency <= 200) return 9;
-    if (latency <= 300) return 8;
-    if (latency <= 400) return 7;
-    if (latency <= 500) return 6;
+    if (latency <= 30) return 10;
+    if (latency <= 80) return 9;
+    if (latency <= 150) return 8;
+    if (latency <= 250) return 7;
+    if (latency <= 400) return 6;
     if (latency <= 600) return 5;
-    if (latency <= 800) return 4;
-    if (latency <= 1000) return 3;
-    if (latency <= 1500) return 2;
-    if (latency <= 2000) return 1;
+    if (latency <= 900) return 4;
+    if (latency <= 1300) return 3;
+    if (latency <= 2000) return 2;
+    if (latency <= 3000) return 1;
     return 0;
   }
 
@@ -1074,7 +1140,7 @@ class _VersionViewState extends State<VersionView> {
               GestureDetector(
                 onTap: () => _showFullHistoryDialog(context, isDarkMode),
                 child: Text(
-                  '查看更多',
+                  '...更多',
                   style: TextStyle(
                     fontSize: 14,
                     color: const Color(0xFF007AFF),
