@@ -1,10 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../utils/animation_config.dart';
 import '../mixins/scroll_to_top_mixin.dart';
+import '../widgets/toast.dart';
 
 class LogView extends StatefulWidget {
   const LogView({super.key});
@@ -189,9 +191,21 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
       case LogType.info:
         return isDarkMode ? CupertinoColors.white : CupertinoColors.label;
       case LogType.network:
-        return isDarkMode ? const Color(0xFFBF5AF2) : const Color(0xFF5856D6); 
+        return isDarkMode ? const Color(0xFFBF5AF2) : const Color(0xFF5856D6);
       case LogType.cache:
-        return isDarkMode ? const Color(0xFFFF375F) : const Color(0xFFFF2D55); 
+        return isDarkMode ? const Color(0xFFFF375F) : const Color(0xFFFF2D55);
+    }
+  }
+
+  Future<void> _copyLogToClipboard(LogEntry log) async {
+    final formatted = '''
+类型：${log.type.displayName}
+时间：${_formatTimestamp(log.timestamp)}
+内容：${_removeEmoji(log.message)}
+''';
+    await Clipboard.setData(ClipboardData(text: formatted));
+    if (mounted) {
+      context.showToast('已复制当前条目日志');
     }
   }
 
@@ -293,7 +307,7 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
                       ? CupertinoIcons.checkmark_circle_fill
                       : CupertinoIcons.circle,
                   label: _isAllSelected ? '取消全选' : '全选',
-                  textColor: isDarkMode 
+                  textColor: isDarkMode
                       ? CupertinoColors.white.withOpacity(0.7)
                       : CupertinoColors.systemGrey,
                   onPressed: _toggleAllSelection,
@@ -538,56 +552,59 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
     final typeStr = log.type.displayName;
     final typeColor = log.type.color;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? CupertinoColors.systemGrey6.withOpacity(0.2)
-            : CupertinoColors.white.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
+    return GestureDetector(
+      onTap: () => _copyLogToClipboard(log),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
           color: isDarkMode
-              ? CupertinoColors.white.withOpacity(0.05)
-              : CupertinoColors.systemGrey4.withOpacity(0.2),
-          width: 0.5,
+              ? CupertinoColors.systemGrey6.withOpacity(0.2)
+              : CupertinoColors.white.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDarkMode
+                ? CupertinoColors.white.withOpacity(0.05)
+                : CupertinoColors.systemGrey4.withOpacity(0.2),
+            width: 0.5,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                typeStr,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: typeColor,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  typeStr,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: typeColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                timeStr,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isDarkMode
-                      ? CupertinoColors.systemGrey.withOpacity(0.6)
-                      : CupertinoColors.systemGrey2.withOpacity(0.7),
+                const SizedBox(width: 8),
+                Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDarkMode
+                        ? CupertinoColors.systemGrey.withOpacity(0.6)
+                        : CupertinoColors.systemGrey2.withOpacity(0.7),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _removeEmoji(log.message),
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.3,
-              color: textColor,
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              _removeEmoji(log.message),
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.3,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

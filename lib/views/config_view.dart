@@ -761,6 +761,25 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
     );
   }
 
+/// Determines the expected brightness based on the theme mode.
+///
+/// This function takes a ThemeMode parameter and returns the corresponding brightness.
+/// For system theme mode, it retrieves the platform's default brightness.
+///
+/// @param mode The current theme mode (light, dark, or system)
+/// @return The expected brightness value (light or dark)
+  Brightness _getExpectedBrightness(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:    // When light theme is selected
+        return Brightness.light;  // Return light brightness
+      case ThemeMode.dark:     // When dark theme is selected
+        return Brightness.dark;   // Return dark brightness
+      case ThemeMode.system:   // When system theme is selected
+        // Get the platform's default brightness from the platform dispatcher
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    }
+  }
+
   Widget _buildThemeItem(bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -817,6 +836,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               initialMode: _dataManager.themeMode,
               onChanged: (mode) {
                 _dataManager.setThemeMode(mode);
+                final expectedBrightness = _getExpectedBrightness(mode);
                 String modeText;
                 switch (mode) {
                   case ThemeMode.light:
@@ -829,7 +849,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                     modeText = '跟随系统';
                     break;
                 }
-                context.showToast('主题模式:$modeText');
+                context.showToast('主题模式:$modeText', brightness: expectedBrightness);
                 setState(() {});
               },
             ),

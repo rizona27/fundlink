@@ -5,10 +5,24 @@ import '../constants/app_constants.dart';
 class Toast {
   static OverlayEntry? _currentOverlayEntry;
 
-  static void show(BuildContext context, String message, {Duration duration = AppConstants.toastDuration}) {
+  static void show(
+      BuildContext context,
+      String message, {
+        Duration duration = AppConstants.toastDuration,
+        Brightness? brightness,
+      }) {
     _removeCurrentOverlay();
 
     final overlayState = Overlay.of(context);
+
+    final isDark = brightness != null
+        ? brightness == Brightness.dark
+        : CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    final backgroundColor = isDark
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFF2F2F7);
+    final textColor = isDark ? CupertinoColors.white : CupertinoColors.black;
 
     OverlayEntry? overlayEntry;
 
@@ -16,6 +30,8 @@ class Toast {
       builder: (context) => _ToastWidget(
         message: message,
         duration: duration,
+        backgroundColor: backgroundColor,
+        textColor: textColor,
         onDismiss: () {
           if (overlayEntry != null && overlayEntry.mounted) {
             overlayEntry.remove();
@@ -42,11 +58,15 @@ class Toast {
 class _ToastWidget extends StatefulWidget {
   final String message;
   final Duration duration;
+  final Color backgroundColor;
+  final Color textColor;
   final VoidCallback onDismiss;
 
   const _ToastWidget({
     required this.message,
     required this.duration,
+    required this.backgroundColor,
+    required this.textColor,
     required this.onDismiss,
   });
 
@@ -96,7 +116,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final shadowColor = CupertinoColors.black.withOpacity(0.15);
 
     return Positioned(
       bottom: AppConstants.toastBottomOffset,
@@ -111,13 +131,11 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               constraints: BoxConstraints(maxWidth: AppConstants.toastMaxWidth),
               decoration: BoxDecoration(
-                color: CupertinoColors.tertiarySystemBackground,
+                color: widget.backgroundColor,
                 borderRadius: BorderRadius.circular(AppConstants.toastBorderRadius),
                 boxShadow: [
                   BoxShadow(
-                    color: isDarkMode
-                        ? Colors.black.withOpacity(0.4)
-                        : Colors.black.withOpacity(0.15),
+                    color: shadowColor,
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -125,9 +143,9 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
               ),
               child: Text(
                 widget.message,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: CupertinoColors.label,
+                  color: widget.textColor,
                 ),
                 textAlign: TextAlign.left,
               ),
@@ -140,7 +158,11 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
 }
 
 extension ToastExtension on BuildContext {
-  void showToast(String message, {Duration duration = AppConstants.toastDuration}) {
-    Toast.show(this, message, duration: duration);
+  void showToast(
+      String message, {
+        Duration duration = AppConstants.toastDuration,
+        Brightness? brightness,
+      }) {
+    Toast.show(this, message, duration: duration, brightness: brightness);
   }
 }

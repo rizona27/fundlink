@@ -105,54 +105,58 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final containerWidth = constraints.maxWidth;
+        final halfWidth = constraints.maxWidth * 0.5;
+        final containerWidth = halfWidth;
         final sliderWidth = containerWidth / 3;
         const margin = 2.0;
 
         final maxOffset = containerWidth - sliderWidth - (margin * 2);
 
-        return Container(
-          height: 36,
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Stack(
-            children: [
-              AnimatedBuilder(
-                animation: _animationController,
-                builder: (context, child) {
-                  final slideValue = _animationController.value;
-                  final leftOffset = slideValue * maxOffset;
-                  return Transform.translate(
-                    offset: Offset(leftOffset, 0),
-                    child: Container(
-                      width: sliderWidth,
-                      height: 32,
-                      margin: const EdgeInsets.all(margin),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: CupertinoColors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
+        return SizedBox(
+          width: containerWidth,
+          child: Container(
+            height: 36,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGrey5,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Stack(
+              children: [
+                AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    final slideValue = _animationController.value;
+                    final leftOffset = slideValue * maxOffset;
+                    return Transform.translate(
+                      offset: Offset(leftOffset, 0),
+                      child: Container(
+                        width: sliderWidth,
+                        height: 32,
+                        margin: const EdgeInsets.all(margin),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CupertinoColors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              Row(
-                children: [
-                  _buildOption(ThemeMode.light, '浅'),
-                  _buildOption(ThemeMode.system, '系统'),
-                  _buildOption(ThemeMode.dark, '深'),
-                ],
-              ),
-            ],
+                    );
+                  },
+                ),
+                Row(
+                  children: [
+                    _buildOption(ThemeMode.light, '浅'),
+                    _buildOption(ThemeMode.system, '系统'),
+                    _buildOption(ThemeMode.dark, '深'),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
