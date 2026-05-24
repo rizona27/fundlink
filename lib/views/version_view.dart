@@ -11,7 +11,7 @@ import '../services/version_check_service.dart';
 import '../services/ui_state_service.dart';
 import '../constants/app_constants.dart';
 
-const String APP_VERSION = 'v1.3.2';
+String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
   'v1.3.2 - 优化持仓置顶/回滚顶部按钮，重构日志/设置菜单',

@@ -1,3 +1,5 @@
+import 'package:package_info_plus/package_info_plus.dart';
+
 class AppConstants {
   AppConstants._();
 
@@ -19,8 +21,20 @@ class AppConstants {
   static const String keyClientMappings = 'client_mappings';
 
   static const String nasBackendUrl = 'https://fundlink.cr315.com';
-  
-  static const String userAgentApp = 'FundLink-App/1.2.0';
+
+  static String appVersion = '1.0.0';
+  static String appVersionWithPrefix = 'v1.0.0';
+  static String userAgentApp = 'FundLink-App/1.0.0';
+
+  static Future<void> init() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      appVersion = packageInfo.version;
+      appVersionWithPrefix = 'v${packageInfo.version}';
+      userAgentApp = 'FundLink-App/${packageInfo.version}';
+    } catch (e) {
+    }
+  }
   static const String userAgentVersionChecker = 'FundLink-Version-Checker';
   
   static const String githubRepoOwner = 'rizona27';
