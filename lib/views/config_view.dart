@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import '../constants/app_constants.dart';
+import 'package:flutter/material.dart' hide ThemeMode;
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/ui_state_service.dart';
@@ -15,9 +13,9 @@ import 'import_holding_view.dart';
 import 'license_view.dart';
 import 'log_view.dart';
 import 'manage_holdings_view.dart';
-import 'mapping_dictionary_view.dart';
 import 'pending_transactions_view.dart';
 import 'version_view.dart';
+import '../widgets/toast.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -94,7 +92,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       final aboutExpanded = await uiState.getBool('section_about_expanded');
 
       setState(() {
-        _isHoldingsManagementExpanded = holdingsManagementExpanded ?? true;
+        _isHoldingsManagementExpanded = holdingsManagementExpanded ?? false;
         _isCommonToolsExpanded = commonToolsExpanded ?? false;
         _isAppSettingsExpanded = appSettingsExpanded ?? false;
         _isAboutExpanded = aboutExpanded ?? false;
@@ -255,7 +253,13 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.togglePrivacyMode();
-            if (mounted) setState(() {});
+            if (mounted) {
+              final toastMsg = value
+                  ? '隐私模式开启:显示用户名'
+                  : '隐私模式关闭:隐藏用户名';
+              context.showToast(toastMsg);
+              setState(() {});
+            }
           },
         ),
         _buildDivider(isDarkMode),
@@ -267,7 +271,13 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.setShowHoldersOnSummaryCard(value);
-            if (mounted) setState(() {});
+            if (mounted) {
+              final toastMsg = value
+                  ? '基金卡片开启:显示持有人'
+                  : '基金卡片关闭:隐藏持有人';
+              context.showToast(toastMsg);
+              setState(() {});
+            }
           },
         ),
         _buildDivider(isDarkMode),
@@ -807,6 +817,19 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               initialMode: _dataManager.themeMode,
               onChanged: (mode) {
                 _dataManager.setThemeMode(mode);
+                String modeText;
+                switch (mode) {
+                  case ThemeMode.light:
+                    modeText = '浅色';
+                    break;
+                  case ThemeMode.dark:
+                    modeText = '深色';
+                    break;
+                  case ThemeMode.system:
+                    modeText = '跟随系统';
+                    break;
+                }
+                context.showToast('主题模式:$modeText');
                 setState(() {});
               },
             ),

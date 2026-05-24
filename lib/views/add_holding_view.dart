@@ -12,7 +12,6 @@ import '../models/transaction_record.dart';
 import '../services/client_mapping_service.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
-import '../utils/error_handler.dart';
 import '../utils/input_formatters.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';

@@ -11,7 +11,6 @@ import '../widgets/toast.dart';
 import '../utils/input_formatters.dart';
 import '../utils/desktop_focus_manager.dart';
 import 'import_holding_view.dart';
-import 'dart:async';
 
 class MappingDictionaryView extends StatefulWidget {
   const MappingDictionaryView({super.key});

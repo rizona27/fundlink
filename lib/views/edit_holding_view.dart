@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../constants/app_constants.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';

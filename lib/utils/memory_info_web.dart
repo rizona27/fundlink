@@ -1,4 +1,3 @@
-
 import 'dart:js_interop';
 
 @JS('performance.memory')

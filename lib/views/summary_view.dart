@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../constants/app_constants.dart';
-import '../main.dart';
 import '../mixins/scroll_to_top_mixin.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';

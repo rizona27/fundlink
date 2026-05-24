@@ -81,14 +81,14 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
         _selectedMode = mode;
       });
       _updateAnimation();
-      
+
       _textFadeTimer?.cancel();
       _textFadeTimer = Timer(const Duration(milliseconds: 400), () {
         if (mounted) {
           _textFadeController.forward(from: 0.0);
         }
       });
-      
+
       widget.onChanged(mode);
     }
   }
@@ -108,9 +108,9 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
         final containerWidth = constraints.maxWidth;
         final sliderWidth = containerWidth / 3;
         const margin = 2.0;
-        
+
         final maxOffset = containerWidth - sliderWidth - (margin * 2);
-        
+
         return Container(
           height: 36,
           decoration: BoxDecoration(
@@ -127,7 +127,7 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
                   return Transform.translate(
                     offset: Offset(leftOffset, 0),
                     child: Container(
-                      width: sliderWidth, 
+                      width: sliderWidth,
                       height: 32,
                       margin: const EdgeInsets.all(margin),
                       decoration: BoxDecoration(
@@ -147,9 +147,9 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
               ),
               Row(
                 children: [
-                  _buildOption(ThemeMode.light, '浅色'),
-                  _buildOption(ThemeMode.system, '跟随系统'),
-                  _buildOption(ThemeMode.dark, '深色'),
+                  _buildOption(ThemeMode.light, '浅'),
+                  _buildOption(ThemeMode.system, '系统'),
+                  _buildOption(ThemeMode.dark, '深'),
                 ],
               ),
             ],
@@ -162,26 +162,29 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
   Widget _buildOption(ThemeMode mode, String label) {
     final isSelected = _selectedMode == mode;
     return Expanded(
-      child: GestureDetector(
-        onTap: () => _selectMode(mode),
-        child: AnimatedBuilder(
-          animation: _textFadeController,
-          builder: (context, child) {
-            return AnimatedOpacity(
-              duration: const Duration(milliseconds: 400),
-              opacity: isSelected ? 1.0 : 0.6,
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12, 
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                    color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: GestureDetector(
+          onTap: () => _selectMode(mode),
+          child: AnimatedBuilder(
+            animation: _textFadeController,
+            builder: (context, child) {
+              return AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: isSelected ? 1.0 : 0.6,
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

@@ -14,7 +14,6 @@ import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
-import '../main.dart' show MyApp;
 
 class TopPerformersView extends StatefulWidget {
   const TopPerformersView({super.key});

@@ -13,7 +13,6 @@ import '../mixins/scroll_to_top_mixin.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
 import '../utils/animation_config.dart';
-import '../main.dart' show MyApp;
 
 class ManageHoldingsView extends StatefulWidget {
   const ManageHoldingsView({super.key});

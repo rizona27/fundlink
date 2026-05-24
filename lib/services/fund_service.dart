@@ -8,7 +8,6 @@ import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
 import '../services/data_manager.dart';
-import '../utils/error_handler.dart';
 
 class FundService {
   final DataManager? _dataManager;
