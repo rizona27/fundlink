@@ -96,6 +96,8 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
     return Positioned(
       bottom: AppConstants.toastBottomOffset,
       left: 0,
@@ -109,11 +111,13 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               constraints: BoxConstraints(maxWidth: AppConstants.toastMaxWidth),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey6,
+                color: CupertinoColors.tertiarySystemBackground,
                 borderRadius: BorderRadius.circular(AppConstants.toastBorderRadius),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
+                    color: isDarkMode
+                        ? Colors.black.withOpacity(0.4)
+                        : Colors.black.withOpacity(0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
