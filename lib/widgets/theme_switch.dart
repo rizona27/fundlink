@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 enum ThemeMode {
@@ -105,8 +106,12 @@ class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final halfWidth = constraints.maxWidth * 0.5;
-        final containerWidth = halfWidth;
+        double containerWidth = constraints.maxWidth;
+        final bool isMobile = defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS;
+        if (!isMobile) {
+          containerWidth = containerWidth * 0.5;
+        }
         final sliderWidth = containerWidth / 3;
         const margin = 2.0;
 
