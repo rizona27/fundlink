@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
@@ -24,19 +25,21 @@ class DatabaseRepository {
       );
       return rows.map((row) => FundHolding.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取持仓列表失败: $e');
       return [];
     }
   }
-  
+
   Future<List<FundHolding>> getPinnedHoldings() async {
     try {
       final rows = await _db.queryPinnedHoldings();
       return rows.map((row) => FundHolding.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取置顶持仓失败: $e');
       return [];
     }
   }
-  
+
   Future<int> insertHolding(FundHolding holding) async {
     return await _db.insertHolding(holding.toMap());
   }
@@ -67,28 +70,31 @@ class DatabaseRepository {
       );
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取交易记录失败: $e');
       return [];
     }
   }
-  
+
   Future<List<TransactionRecord>> getTransactionsByHoldingId(String holdingId) async {
     try {
       final rows = await _db.queryTransactionsByHoldingId(holdingId);
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取持仓交易记录失败: $e');
       return [];
     }
   }
-  
+
   Future<List<TransactionRecord>> getPendingTransactions() async {
     try {
       final rows = await _db.queryPendingTransactions();
       return rows.map((row) => TransactionRecord.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取待确认交易失败: $e');
       return [];
     }
   }
-  
+
   Future<int> insertTransaction(TransactionRecord transaction) async {
     return await _db.insertTransaction(transaction.toMap());
   }
@@ -107,10 +113,11 @@ class DatabaseRepository {
       final rows = await _db.queryLogs(limit: limit);
       return rows.map((row) => LogEntry.fromMap(row)).toList();
     } catch (e) {
+      debugPrint('[DatabaseRepository] 获取日志失败: $e');
       return [];
     }
   }
-  
+
   Future<int> insertLog(LogEntry log) async {
     return await _db.insertLog(log.toMap());
   }
@@ -229,6 +236,7 @@ class DatabaseRepository {
       await db.rawQuery('SELECT COUNT(*) as count FROM transactions');
       
     } catch (e) {
+      debugPrint('[DatabaseRepository] 数据库刷新失败: $e');
     }
   }
 }

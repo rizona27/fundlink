@@ -33,6 +33,7 @@ class AppConstants {
       appVersionWithPrefix = 'v${packageInfo.version}';
       userAgentApp = 'FundLink-App/${packageInfo.version}';
     } catch (e) {
+      // 使用默认版本号
     }
   }
   static const String userAgentVersionChecker = 'FundLink-Version-Checker';

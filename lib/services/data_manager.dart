@@ -163,18 +163,19 @@ class DataManager extends ChangeNotifier {
   
   Future<void> _cleanupExpiredCaches() async {
     if (_disposed) return;
-    
+
     try {
       final profitCleaned = _profitCache.cleanup();
       if (profitCleaned > 0) {
       }
-      
+
       final transactionCleaned = _transactionHistoryCache.cleanup();
       if (transactionCleaned > 0) {
       }
-      
+
       await _checkMemoryAndCleanup();
     } catch (e) {
+      debugPrint('[DataManager] 过期缓存清理失败: $e');
     }
   }
   
@@ -186,7 +187,7 @@ class DataManager extends ChangeNotifier {
         await addLog('内存优化：已清理缓存', type: LogType.info);
       }
     } catch (e) {
-      ErrorHandler.handleError(e, context: '内存检查清理', dataManager: this);
+      debugPrint('[DataManager] 内存检查清理失败: $e');
     }
   }
   
@@ -224,6 +225,7 @@ class DataManager extends ChangeNotifier {
       await saveVersionInfoToPrefs();
       await addLog('应用进入后台，数据已保存', type: LogType.info);
     } catch (e) {
+      debugPrint('[DataManager] 后台保存数据失败: $e');
     }
   }
   
@@ -348,6 +350,7 @@ class DataManager extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
+      debugPrint('[DataManager] 保存数据失败: $e');
     }
   }
   
@@ -360,7 +363,7 @@ class DataManager extends ChangeNotifier {
     } else {
       await _repository!.saveSetting('privacy_mode', _isPrivacyMode.toString());
       await _repository!.saveSetting('theme_mode', _themeModeToString(_themeMode));
-      await _repository!.saveSetting('show_holders_on_summary_card', _showHoldersOnSummaryCard.toString());
+      await _repository!.saveSetting('show_holders_on_summary', _showHoldersOnSummaryCard.toString());
     }
   }
   
@@ -403,6 +406,7 @@ class DataManager extends ChangeNotifier {
         _valuationCache = {};
       }
     } catch (e) {
+      debugPrint('[DataManager] 加载估值缓存失败: $e');
       _valuationCache = {};
     }
   }
@@ -416,6 +420,7 @@ class DataManager extends ChangeNotifier {
       final cacheStr = jsonEncode(_valuationCache);
       await _repository!.saveSetting('valuation_cache', cacheStr);
     } catch (e) {
+      debugPrint('[DataManager] 保存估值缓存失败: $e');
     }
   }
 
@@ -475,8 +480,10 @@ class DataManager extends ChangeNotifier {
       if (verifyStr != null && verifyStr.isNotEmpty) {
         final verifyMap = jsonDecode(verifyStr);
       } else {
+        debugPrint('[DataManager] 基金信息缓存验证读取失败');
       }
     } catch (e) {
+      debugPrint('[DataManager] 保存基金信息缓存失败: $e');
     }
   }
 
@@ -1012,6 +1019,7 @@ class DataManager extends ChangeNotifier {
       try {
         await _repository!.batchInsertHoldings(_holdings);
       } catch (e) {
+        debugPrint('[DataManager] 批量更新持仓失败: $e');
       }
     }
     notifyListeners();
