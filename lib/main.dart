@@ -1,9 +1,11 @@
+import 'dart:io' as io;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'constants/app_constants.dart';
 import 'services/data_manager.dart';
 import 'services/version_check_service.dart';
@@ -12,6 +14,7 @@ import 'utils/error_handler.dart';
 import 'utils/memory_monitor.dart';
 import 'views/client_view.dart';
 import 'views/config_view.dart';
+import 'views/import_holding_view.dart';
 import 'views/splash_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
@@ -43,6 +46,54 @@ void main() async {
   _requestPermissionsOnStart();
 
   runApp(const MyApp());
+
+  _initShareReceiving();
+}
+
+void _initShareReceiving() {
+  if (kIsWeb) return;
+
+  // Handle shares that launched the app (cold start)
+  ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> files) {
+    _handleSharedFiles(files);
+    ReceiveSharingIntent.instance.reset();
+  });
+
+  // Handle shares received while app is running
+  ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> files) {
+    _handleSharedFiles(files);
+  });
+}
+
+void _handleSharedFiles(List<SharedMediaFile> files) {
+  if (files.isEmpty) return;
+
+  SharedMediaFile? targetFile;
+  for (final file in files) {
+    final filePath = (file.path).toLowerCase();
+    if (filePath.endsWith('.csv') || filePath.endsWith('.xlsx') || filePath.endsWith('.xls')) {
+      targetFile = file;
+      break;
+    }
+  }
+  if (targetFile == null) return;
+
+  try {
+    final path = targetFile.path;
+    final ioFile = io.File(path);
+    final bytes = ioFile.readAsBytesSync();
+    final fileName = path.split('/').last;
+
+    MyApp.navigatorKey.currentState?.push(
+      CupertinoPageRoute(
+        builder: (context) => ImportHoldingView(
+          initialFile: (bytes: bytes, fileName: fileName),
+        ),
+      ),
+    );
+  } catch (e) {
+    debugPrint('[ShareIntent] 读取分享文件失败: $e');
+  }
 }
 
 Future<void> _requestPermissionsOnStart() async {
@@ -69,6 +120,7 @@ Future<void> _requestPermissionsOnStart() async {
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
   @override
@@ -190,6 +242,7 @@ class _MyAppState extends State<MyApp> {
     return DataManagerProvider(
       dataManager: _dataManager,
       child: CupertinoApp(
+        navigatorKey: MyApp.navigatorKey,
         title: '基金持仓管理',
         navigatorObservers: [MyApp.routeObserver],
         theme: CupertinoThemeData(

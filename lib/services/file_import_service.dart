@@ -50,6 +50,37 @@ class FileImportService {
   static String detectFileFormat(Uint8List bytes, String extension) {
     return _detectFileFormat(bytes, extension);
   }
+
+  static Future<bool> detectFullBackup(Uint8List bytes, String? extension) async {
+    try {
+      final ext = extension?.toLowerCase() ?? '';
+
+      if (ext == 'xlsx' || ext == 'xls') {
+        final excelFile = excel.Excel.decodeBytes(bytes);
+        return excelFile.tables.containsKey('Holdings') &&
+               excelFile.tables.containsKey('Transactions');
+      }
+
+      try {
+        final csvString = utf8.decode(bytes, allowMalformed: true);
+        if (csvString.contains('# FundLink Full Backup') ||
+            csvString.contains('=== HOLDINGS DATA ===')) {
+          return true;
+        }
+      } catch (_) {}
+
+      try {
+        final excelFile = excel.Excel.decodeBytes(bytes);
+        return excelFile.tables.containsKey('Holdings') &&
+               excelFile.tables.containsKey('Transactions');
+      } catch (_) {}
+
+      return false;
+    } catch (e) {
+      print('检测备份文件失败: $e');
+      return false;
+    }
+  }
   
   static String _detectFileFormat(Uint8List bytes, String extension) {
     if (extension == 'xlsx' || extension == 'xls') {
@@ -328,9 +359,13 @@ class FileImportService {
       csvString = utf8.decode(bytes);
     } catch (e) {
       try {
-        csvString = latin1.decode(bytes);
+        csvString = gbk.decode(bytes);
       } catch (e2) {
-        throw Exception('文件编码无法识别');
+        try {
+          csvString = latin1.decode(bytes);
+        } catch (e3) {
+          throw Exception('文件编码无法识别');
+        }
       }
     }
     

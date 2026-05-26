@@ -13,6 +13,7 @@ import 'import_holding_view.dart';
 import 'license_view.dart';
 import 'log_view.dart';
 import 'manage_holdings_view.dart';
+import 'mapping_dictionary_view.dart';
 import 'pending_transactions_view.dart';
 import 'version_view.dart';
 import '../widgets/toast.dart';
@@ -195,6 +196,19 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
       isExpanded: _isCommonToolsExpanded,
       onToggle: () => _toggleSection('common', _isCommonToolsExpanded),
       children: [
+        _buildMenuItem(
+          icon: CupertinoIcons.book,
+          title: '映射索引',
+          subtitle: '管理映射关系',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const MappingDictionaryView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
         _buildMenuItem(
           icon: CupertinoIcons.cloud_download,
           title: '导入数据',

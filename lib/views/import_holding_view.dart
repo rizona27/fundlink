@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:excel/excel.dart' as excel;
+import 'package:fast_gbk/fast_gbk.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/cupertino.dart';
@@ -21,7 +24,9 @@ import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 
 class ImportHoldingView extends StatefulWidget {
-  const ImportHoldingView({super.key});
+  final ({Uint8List bytes, String fileName})? initialFile;
+
+  const ImportHoldingView({super.key, this.initialFile});
 
   @override
   State<ImportHoldingView> createState() => _ImportHoldingViewState();
@@ -36,7 +41,6 @@ enum ImportFileType {
 
 class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProviderStateMixin {
   int _currentStep = 1;
-  FilePickerResult? _fileResult;
   String? _fileName;
   List<String> _headers = [];
   List<List<dynamic>> _rawData = [];
@@ -72,6 +76,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   bool _shouldAbortImport = false;
   bool _isBackgroundImport = false;
   bool _isPaused = false;
+  bool _isDragging = false;
 
   bool get _allRequiredMapped => _fieldConfigs.where((f) => f.required).every((f) => f.mappedIndex != -1);
   int get _validRowsCount => _validData.length;
@@ -91,6 +96,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         setState(() => _importProgress = _animationController.value);
       }
     });
+
+    // Process initial file if provided (from share intent or drag-drop)
+    if (widget.initialFile != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final file = widget.initialFile!;
+          _fileName = file.fileName;
+          _processBytes(file.bytes, file.fileName);
+        }
+      });
+    }
   }
 
   @override
@@ -276,48 +292,108 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Widget _buildUploadStep(bool isDarkMode) {
+    final isDesktop = kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
+    Widget uploadContent = GestureDetector(
+      onTap: _isProcessing ? null : _pickFile,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 60),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: _isDragging
+              ? Border.all(color: const Color(0xFF8B9DC3), width: 2.5)
+              : null,
+          color: _isDragging
+              ? const Color(0xFF8B9DC3).withOpacity(0.05)
+              : null,
+        ),
+        child: Column(
+          children: [
+            Icon(
+              _isDragging
+                  ? CupertinoIcons.doc_plaintext
+                  : CupertinoIcons.cloud_upload,
+              size: 48,
+              color: const Color(0xFF8B9DC3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _fileName ??
+                  (isDesktop
+                      ? '点击选择CSV或Excel文件，或将文件拖拽到此处'
+                      : '点击选择CSV或Excel文件'),
+              style: TextStyle(
+                fontSize: 15,
+                color: _fileName != null
+                    ? const Color(0xFF8B9DC3)
+                    : (isDarkMode
+                        ? CupertinoColors.white.withOpacity(0.7)
+                        : CupertinoColors.systemGrey),
+              ),
+            ),
+            if (_fileName != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '已选择文件，点击"下一步"继续',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode
+                      ? CupertinoColors.white.withOpacity(0.5)
+                      : CupertinoColors.systemGrey,
+                ),
+              ),
+            ],
+            if (_isDragging) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '松开以导入文件',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF8B9DC3),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (isDesktop) {
+      uploadContent = DropTarget(
+        onDragDone: (details) async {
+          setState(() => _isDragging = false);
+          if (details.files.isEmpty) return;
+          final dropFile = details.files.first;
+          try {
+            final bytes = await dropFile.readAsBytes();
+            final name = dropFile.name;
+            if (mounted) {
+              setState(() {
+                _fileName = name;
+              });
+            }
+            await _processBytes(bytes, name);
+          } catch (e) {
+            if (mounted) {
+              context.showToast('读取文件失败: $e');
+            }
+          }
+        },
+        onDragEntered: (_) {
+          if (mounted) setState(() => _isDragging = true);
+        },
+        onDragExited: (_) {
+          if (mounted) setState(() => _isDragging = false);
+        },
+        child: uploadContent,
+      );
+    }
+
     return Column(
       children: [
-        GestureDetector(
-          onTap: _pickFile,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 60),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  CupertinoIcons.cloud_upload,
-                  size: 48,
-                  color: const Color(0xFF8B9DC3),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _fileName ?? '点击选择CSV或Excel文件',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: _fileName != null
-                        ? const Color(0xFF8B9DC3)
-                        : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey),
-                  ),
-                ),
-                if (_fileName != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '已选择文件，点击"下一步"继续',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDarkMode
-                          ? CupertinoColors.white.withOpacity(0.5)
-                          : CupertinoColors.systemGrey,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+        uploadContent,
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -607,7 +683,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     for (var config in _fieldConfigs) {
       config.mappedIndex = -1;
       for (int i = 0; i < _headers.length; i++) {
-        final header = _headers[i].toLowerCase();
+        final header = _headers[i].trim().toLowerCase();
 
         if (config.id == 'clientName') {
           if (header.contains('客户姓名') || header.contains('客户名') || header == '姓名' ||
@@ -1494,23 +1570,29 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       withData: true,
     );
     if (result != null) {
-      final fileSize = result.files.single.size;
+      final file = result.files.single;
+      final fileSize = file.size;
       const int maxFileSize = 5 * 1024 * 1024;
-      
+
       if (fileSize > maxFileSize) {
         if (mounted) {
           context.showToast('文件大小超过限制(最大5MB)');
         }
         return;
       }
-      
+
+      final bytes = file.bytes;
+      if (bytes == null) {
+        if (mounted) context.showToast('无法读取文件内容');
+        return;
+      }
+
       if (mounted) {
         setState(() {
-          _fileResult = result;
-          _fileName = result.files.single.name;
+          _fileName = file.name;
         });
       }
-      _processFile();
+      _processBytes(bytes, file.name);
     }
   }
 
@@ -1549,36 +1631,57 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   String _decodeCsvBytes(Uint8List bytes) {
+    // Strip UTF-8 BOM if present (0xEF, 0xBB, 0xBF)
+    int offset = 0;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      offset = 3;
+      debugPrint('[Import] 检测到 UTF-8 BOM，已跳过');
+    }
+
+    final effectiveBytes = offset > 0 ? bytes.sublist(offset) : bytes;
+
     try {
-      return utf8.decode(bytes);
+      return utf8.decode(effectiveBytes, allowMalformed: false);
     } catch (_) {
-      throw Exception('文件编码不是 UTF-8，请将 CSV 另存为 UTF-8 编码');
+      // Not valid UTF-8, try GBK
+    }
+
+    try {
+      return gbk.decode(bytes);
+    } catch (_) {
+      // Not GBK either, try Latin1
+    }
+
+    try {
+      return latin1.decode(bytes);
+    } catch (_) {
+      throw Exception('文件编码无法识别，请确保文件是有效的 CSV 格式\n支持的编码：UTF-8(含BOM), GBK, Latin1');
     }
   }
 
-  Future<void> _processFile() async {
-    if (_fileResult == null) return;
+  Future<void> _processBytes(Uint8List bytes, String fileName) async {
+    const int maxFileSize = 5 * 1024 * 1024;
+    if (bytes.length > maxFileSize) {
+      throw Exception('文件大小超过限制(最大5MB)');
+    }
+
     if (mounted) setState(() => _isProcessing = true);
     try {
-      final file = _fileResult!.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        throw Exception('无法读取文件内容');
-      }
-      final extension = file.extension?.toLowerCase();
+      final extension = fileName.split('.').last.toLowerCase();
 
-      final isFullBackup = await _detectFullBackup(bytes, extension);
-      
+      final isFullBackup = await FileImportService.detectFullBackup(bytes, extension);
+
       if (isFullBackup) {
         await _processFullBackup(bytes, extension);
         return;
       }
 
-      final isZipFile = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
-      final isExcelFile = extension == 'xlsx' || extension == 'xls' || isZipFile;
-      final isCsvFile = extension == 'csv' && !isZipFile;
+      final actualFormat = FileImportService.detectFileFormat(bytes, extension);
 
-      if (isExcelFile) {
+      if (actualFormat == 'excel') {
         try {
           final excelFile = excel.Excel.decodeBytes(bytes);
           if (excelFile.tables.isEmpty) {
@@ -1589,19 +1692,24 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
             throw Exception('Excel 工作表为空');
           }
           _headers = sheet.rows.first.map((cell) => _getCellValue(cell).trim()).toList();
-          _rawData = sheet.rows.skip(1).map((row) => row.map((cell) => _getCellValue(cell)).toList()).toList();
+          _rawData = sheet.rows.skip(1)
+              .map((row) => row.map((cell) => _getCellValue(cell)).toList())
+              .where((row) => row.any((cell) => cell.trim().isNotEmpty))
+              .toList();
         } catch (e) {
           try {
             final csvString = _decodeCsvBytes(bytes);
             final rows = const CsvToListConverter().convert(csvString);
             if (rows.isEmpty) throw Exception('CSV 文件为空');
             _headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
-            _rawData = rows.skip(1).toList();
+            _rawData = rows.skip(1)
+                .where((row) => row.any((cell) => cell?.toString().trim().isNotEmpty ?? false))
+                .toList();
           } catch (csvError) {
             throw Exception('文件格式错误：既不是有效的 Excel 文件，也不是有效的 CSV 文件\n原始错误: $e');
           }
         }
-      } else if (isCsvFile) {
+      } else if (actualFormat == 'csv') {
         try {
           final csvString = _decodeCsvBytes(bytes);
           final rows = const CsvToListConverter().convert(csvString);
@@ -1609,12 +1717,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
             throw Exception('CSV 文件为空');
           }
           _headers = rows.first.map((e) => e?.toString().trim() ?? '').toList();
-          _rawData = rows.skip(1).toList();
+          _rawData = rows.skip(1)
+              .where((row) => row.any((cell) => cell?.toString().trim().isNotEmpty ?? false))
+              .toList();
         } catch (e) {
           throw Exception('CSV 文件解析失败: $e');
         }
       } else {
-        throw Exception('不支持的文件格式: ${extension ?? "未知"}，请上传 CSV 或 Excel 文件');
+        throw Exception('不支持的文件格式: $extension，请上传 CSV 或 Excel 文件');
       }
 
       if (_headers.isEmpty) {
@@ -1627,7 +1737,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
       _detectedFileType = _detectFileType(_headers);
       debugPrint('[Import] 检测到文件类型: $_detectedFileType');
-      
+
       if (_detectedFileType == ImportFileType.mapping) {
         await _processMappingFile();
         return;
@@ -1660,82 +1770,35 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
   }
   
-  Future<bool> _detectFullBackup(Uint8List bytes, String? extension) async {
-    try {
-      extension = extension?.toLowerCase();
-      
-      if (extension == 'xlsx' || extension == 'xls') {
-        final excelFile = excel.Excel.decodeBytes(bytes);
-        return excelFile.tables.containsKey('Holdings') && 
-               excelFile.tables.containsKey('Transactions');
-      }
-      
-      if (extension == 'csv') {
-        final csvString = utf8.decode(bytes, allowMalformed: true);
-        return csvString.contains('# FundLink Full Backup') ||
-               csvString.contains('=== HOLDINGS DATA ===');
-      }
-      
-      try {
-        final csvString = utf8.decode(bytes, allowMalformed: true);
-        if (csvString.contains('# FundLink Full Backup') ||
-            csvString.contains('=== HOLDINGS DATA ===')) {
-          return true;
-        }
-      } catch (_) {}
-      
-      try {
-        final excelFile = excel.Excel.decodeBytes(bytes);
-        return excelFile.tables.containsKey('Holdings') && 
-               excelFile.tables.containsKey('Transactions');
-      } catch (_) {}
-      
-      return false;
-    } catch (e) {
-      debugPrint('检测备份文件失败: $e');
-      return false;
-    }
-  }
-  
   ImportFileType _detectFileType(List<String> headers) {
     final lowerHeaders = headers.map((h) => h.toLowerCase()).toList();
-    
+
+    // Fund code is the key differentiator — only holding files have it
     bool hasFundCode = false;
-    bool hasAmountOrShares = false;
-    
     for (final header in lowerHeaders) {
-      if (header.contains('基金代码') || 
+      if (header.contains('基金代码') ||
           header.contains('产品代码') ||
           header.contains('fundcode') ||
           header.contains('fund_code') ||
           header.contains('fund code')) {
         hasFundCode = true;
-      }
-      
-      if (header.contains('购买金额') || 
-          header.contains('申购金额') ||
-          header.contains('成本') ||
-          header.contains('份额') ||
-          header.contains('amount') ||
-          header.contains('shares') ||
-          header.contains('purchase')) {
-        hasAmountOrShares = true;
+        break;
       }
     }
-    
-    if (hasFundCode && hasAmountOrShares) {
+
+    if (hasFundCode) {
       return ImportFileType.holding;
     }
-    
+
+    // No fund code — check if it's a mapping file (clientId + clientName)
     bool hasClientIdColumn = false;
     bool hasClientNameColumn = false;
-    int totalColumns = headers.length;
-    
+
     for (final header in lowerHeaders) {
-      if (header.contains('客户号') || 
-          header.contains('核心客户号') || 
-          header.contains('用户号') || 
-          header.contains('核心用户号') || 
+      if (header.contains('客户号') ||
+          header.contains('核心客户号') ||
+          header.contains('用户号') ||
+          header.contains('核心用户号') ||
           header.contains('客户代码') ||
           header.contains('clientid') ||
           header.contains('client_id') ||
@@ -1743,11 +1806,11 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           header.contains('userid')) {
         hasClientIdColumn = true;
       }
-      
-      if (header.contains('客户姓名') || 
-          header.contains('客户名') || 
-          header.contains('姓名') || 
-          header.contains('名字') || 
+
+      if (header.contains('客户姓名') ||
+          header.contains('客户名') ||
+          header.contains('姓名') ||
+          header.contains('名字') ||
           header.contains('核心用户名') ||
           header.contains('clientname') ||
           header.contains('client_name') ||
@@ -1758,11 +1821,30 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         hasClientNameColumn = true;
       }
     }
-    
-    if (hasClientIdColumn && hasClientNameColumn && totalColumns <= 5) {
+
+    if (hasClientIdColumn && hasClientNameColumn) {
       return ImportFileType.mapping;
     }
-    
+
+    // Secondary check: amount/shares columns suggest a holding file
+    bool hasAmountOrShares = false;
+    for (final header in lowerHeaders) {
+      if (header.contains('购买金额') ||
+          header.contains('申购金额') ||
+          header.contains('成本') ||
+          header.contains('份额') ||
+          header.contains('amount') ||
+          header.contains('shares') ||
+          header.contains('purchase')) {
+        hasAmountOrShares = true;
+        break;
+      }
+    }
+
+    if (hasAmountOrShares) {
+      return ImportFileType.holding;
+    }
+
     return ImportFileType.holding;
   }
   
@@ -1778,9 +1860,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       int clientNameIndex = -1;
       
       for (int i = 0; i < _headers.length; i++) {
-        final header = _headers[i].toLowerCase();
-        
-        if (clientIdIndex == -1 && 
+        final header = _headers[i].trim().toLowerCase();
+
+        if (clientIdIndex == -1 &&
             (header.contains('客户号') || 
              header.contains('核心客户号') || 
              header.contains('用户号') || 

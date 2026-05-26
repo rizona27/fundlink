@@ -224,6 +224,9 @@ class FileExportService {
       case 'averageCost': return '平均成本';
       case 'currentNav': return '当前净值';
       case 'navDate': return '净值日期';
+      case 'purchaseDate': return '购买日期';
+      case 'purchaseAmount': return '购买金额';
+      case 'purchaseShares': return '购买份额';
       case 'profit': return '绝对收益';
       case 'profitRate': return '绝对收益率(%)';
       case 'annualizedProfitRate': return '年化收益率(%)';
@@ -249,6 +252,16 @@ class FileExportService {
       case 'averageCost': return holding.averageCost.toStringAsFixed(4);
       case 'currentNav': return holding.currentNav.toStringAsFixed(4);
       case 'navDate': return holding.navDate.toIso8601String().split('T')[0];
+      case 'purchaseDate':
+        if (dataManager != null) {
+          final transactions = dataManager.getTransactionHistory(holding.clientId, holding.fundCode);
+          if (transactions.isNotEmpty) {
+            return transactions.first.tradeDate.toIso8601String().split('T')[0];
+          }
+        }
+        return '';
+      case 'purchaseAmount': return holding.totalCost.toStringAsFixed(2);
+      case 'purchaseShares': return holding.totalShares.toStringAsFixed(4);
       case 'profit': return holding.profit.toStringAsFixed(2);
       case 'profitRate': return holding.profitRate.toStringAsFixed(2);
       case 'annualizedProfitRate': 
