@@ -49,8 +49,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   double? _maxDays;
 
   bool _showFilter = false;
-  double _scrollOffset = 0;
-  Timer? _scrollThrottleTimer;
+  final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier(0.0);
   Timer? _filterDebounceTimer;
   bool _autoCollapseEnabled = true;
 
@@ -157,30 +156,24 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   }
 
   void _onScrollUpdate(double offset) {
-    if (mounted) {
-      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
-        setState(() {
-          _scrollOffset = normalizedOffset;
-        });
-        if (_showFilter && offset > _filterAutoCollapseThreshold && _autoCollapseEnabled) {
-          setState(() {
-            _showFilter = false;
-          });
-          _autoCollapseEnabled = false;
-          Future.delayed(AnimationConfig.durationVerySlow, () {
-            if (mounted) _autoCollapseEnabled = true;
-          });
-        }
-      }
+    _scrollOffsetNotifier.value = offset < 1.0 ? 0.0 : offset;
+
+    if (_showFilter && offset > _filterAutoCollapseThreshold && _autoCollapseEnabled) {
+      setState(() {
+        _showFilter = false;
+      });
+      _autoCollapseEnabled = false;
+      Future.delayed(AnimationConfig.durationVerySlow, () {
+        if (mounted) _autoCollapseEnabled = true;
+      });
     }
   }
 
   @override
   void dispose() {
-    _scrollThrottleTimer?.cancel();
+    _scrollOffsetNotifier.dispose();
     _filterDebounceTimer?.cancel();
-    _filterAutoCollapseTimer?.cancel(); 
+    _filterAutoCollapseTimer?.cancel();
     _scrollController.dispose();
     _minAmountController.dispose();
     _maxAmountController.dispose();
@@ -539,8 +532,11 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
               },
               child: Column(
                 children: [
-                  AdaptiveTopBar(
-                scrollOffset: _scrollOffset,
+                  ValueListenableBuilder<double>(
+                    valueListenable: _scrollOffsetNotifier,
+                    builder: (context, offset, child) {
+                      return AdaptiveTopBar(
+                scrollOffset: offset,
                 showRefresh: false,
                 showExpandCollapse: false,
                 showSearch: false,
@@ -563,7 +559,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 iconSize: 24,
                 buttonSpacing: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
+                  );
+                },
+              ),
                   AnimatedSize(
                 duration: _animationDuration,
                 curve: _animationCurve,

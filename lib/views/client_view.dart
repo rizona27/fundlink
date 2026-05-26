@@ -46,12 +46,16 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   late FundService _fundService;
   String _searchText = '';
   final Set<String> _expandedClients = {};
+  List<_ClientGroup>? _cachedClientGroups;
+  String? _lastGroupsSearchText;
+  int? _lastGroupsHoldingsLength;
+
+  final Map<String, List<Color>> _gradientCache = {};
   bool _isPinnedSectionExpanded = false;
-  double _scrollOffset = 0;
+  final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier(0.0);
   bool _autoFixTriggered = false;
   DateTime? _lastAutoFixTime;
   Timer? _debounceTimer;
-  Timer? _scrollThrottleTimer;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -155,31 +159,19 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   }
 
   void _onScrollUpdate(double offset) {
-    if (_scrollThrottleTimer != null && _scrollThrottleTimer!.isActive) {
-      return;
-    }
-    _scrollThrottleTimer = Timer(AppConstants.scrollThrottleDuration, () {
-      if (mounted) {
-        final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-        setState(() {
-          _scrollOffset = normalizedOffset;
-        });
-      }
-      _scrollThrottleTimer = null;
-    });
+    _scrollOffsetNotifier.value = offset < 1.0 ? 0.0 : offset;
   }
 
   @override
   void dispose() {
     _cancelAllTimers();
+    _scrollOffsetNotifier.dispose();
     _scrollController.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     super.dispose();
   }
 
   void _cancelAllTimers() {
-    _scrollThrottleTimer?.cancel();
-    _scrollThrottleTimer = null;
     _debounceTimer?.cancel();
     _debounceTimer = null;
   }
@@ -199,6 +191,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   }
 
   void _onDataManagerChanged() {
+    _cachedClientGroups = null;
+    _lastGroupsSearchText = null;
+    _lastGroupsHoldingsLength = null;
     if (mounted) {
       setState(() {});
     }
@@ -228,6 +223,13 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   }
 
   List<_ClientGroup> get _clientGroups {
+    final holdingsLen = _filteredHoldings.length;
+    if (_cachedClientGroups != null &&
+        _lastGroupsSearchText == _searchText &&
+        _lastGroupsHoldingsLength == holdingsLen) {
+      return _cachedClientGroups!;
+    }
+
     final map = <String, _ClientGroup>{};
     for (final holding in _filteredHoldings) {
       final key = holding.clientId.isNotEmpty ? holding.clientId : holding.clientName;
@@ -268,6 +270,10 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
 
       return fullPinyinA.compareTo(fullPinyinB);
     });
+
+    _cachedClientGroups = groups;
+    _lastGroupsSearchText = _searchText;
+    _lastGroupsHoldingsLength = holdingsLen;
     return groups;
   }
 
@@ -316,19 +322,25 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
     });
   }
 
+  static const List<Color> _softColors = [
+    Color(0xFFA8C4E0), Color(0xFFB8D0C4), Color(0xFFD4C4A8),
+    Color(0xFFE0B8C4), Color(0xFFC4B8E0), Color(0xFFA8D4D4),
+    Color(0xFFE0C8A8), Color(0xFFC8D4A8), Color(0xFFD4A8C4),
+    Color(0xFFA8D0E0), Color(0xFFE0C0B0), Color(0xFFB0C8E0),
+    Color(0xFFD0B8C8), Color(0xFFC0D4B0), Color(0xFFE0D0B0),
+  ];
+
   List<Color> _getGradientForOriginalName(String originalName) {
+    final cached = _gradientCache[originalName];
+    if (cached != null) return cached;
+
     int hash = 0;
     for (int i = 0; i < originalName.length; i++) hash = (hash << 5) - hash + originalName.codeUnitAt(i);
     hash = hash.abs();
-    final softColors = [
-      const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
-      const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
-      const Color(0xFFE0C8A8), const Color(0xFFC8D4A8), const Color(0xFFD4A8C4),
-      const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
-      const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
-    ];
-    final mainColor = softColors[hash % softColors.length];
-    return [mainColor, mainColor.withOpacity(0.3)];
+    final mainColor = _softColors[hash % _softColors.length];
+    final result = [mainColor, Color.fromRGBO(mainColor.red, mainColor.green, mainColor.blue, 0.3)];
+    _gradientCache[originalName] = result;
+    return result;
   }
 
   Color _colorForHoldingCount(int count) {
@@ -419,8 +431,11 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
             },
             child: Column(
               children: [
-                AdaptiveTopBar(
-                  scrollOffset: _scrollOffset,
+                ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffsetNotifier,
+                  builder: (context, offset, child) {
+                    return AdaptiveTopBar(
+                  scrollOffset: offset,
                   showBack: false,
                   showRefresh: true,
                   showExpandCollapse: true,
@@ -473,7 +488,9 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   buttonSpacing: 12,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   useMenuStyle: true,
-                ),
+                );
+              },
+            ),
                 Expanded(
                   child: !hasData
                       ? EmptyState(
@@ -689,32 +706,27 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       return const SizedBox.shrink();
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: holdings.length,
-      itemBuilder: (context, index) {
-        final holding = holdings[index];
-        return Column(
-          children: [
-            RepaintBoundary(
-              key: ValueKey('card_${holding.id}'),
-              child: FundCard(
-                holding: holding,
-                hideClientInfo: hideClientInfo,
-                onCopyClientId: () {
-                  _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
-                  context.showToast('客户号已复制');
-                },
-                onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
-                onShowToast: context.showToast,
-                onPinToggle: () => _dataManager.togglePinStatus(holding.id),
-              ),
-            ),
-            if (index < holdings.length - 1) const SizedBox(height: 8),
-          ],
-        );
-      },
-    );
+    final children = <Widget>[];
+    for (int i = 0; i < holdings.length; i++) {
+      final holding = holdings[i];
+      children.add(RepaintBoundary(
+        key: ValueKey('card_${holding.id}'),
+        child: FundCard(
+          holding: holding,
+          hideClientInfo: hideClientInfo,
+          onCopyClientId: () {
+            _dataManager.addLog('复制客户号: ${holding.clientId}', type: LogType.info);
+            context.showToast('客户号已复制');
+          },
+          onGenerateReport: () => _dataManager.addLog('生成报告: ${holding.clientName} - ${holding.fundName}', type: LogType.info),
+          onShowToast: context.showToast,
+          onPinToggle: () => _dataManager.togglePinStatus(holding.id),
+        ),
+      ));
+      if (i < holdings.length - 1) {
+        children.add(const SizedBox(height: 8));
+      }
+    }
+    return Column(children: children);
   }
 }

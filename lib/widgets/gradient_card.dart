@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-class GradientCard extends StatefulWidget {
+class GradientCard extends StatelessWidget {
   final String title;
   final String? clientId;
   final String? subtitle;
@@ -33,49 +33,6 @@ class GradientCard extends StatefulWidget {
     this.maxTitleLength,
   });
 
-  @override
-  State<GradientCard> createState() => _GradientCardState();
-}
-
-class _GradientCardState extends State<GradientCard> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _animation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    );
-    
-    if (widget.isExpanded) {
-      _controller.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(GradientCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isExpanded != widget.isExpanded) {
-      if (widget.isExpanded) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
   Color _getCountColor(int? count) {
     if (count == null) return CupertinoColors.label.withOpacity(0.5);
     if (count == 1) return const Color(0xFFD4A84B);
@@ -84,81 +41,61 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
   }
 
   Color _getEndColor() {
-    if (widget.isDarkMode) {
-      return const Color(0xFF1C1C1E);
-    }
+    if (isDarkMode) return const Color(0xFF1C1C1E);
     return CupertinoColors.white;
   }
 
   Color _getTextColor() {
-    return widget.isDarkMode ? CupertinoColors.white : CupertinoColors.black;
+    return isDarkMode ? CupertinoColors.white : CupertinoColors.black;
   }
 
   Color _getSubTextColor() {
-    if (widget.isDarkMode) {
-      return CupertinoColors.white.withOpacity(0.5);
-    }
+    if (isDarkMode) return CupertinoColors.white.withOpacity(0.5);
     return CupertinoColors.black.withOpacity(0.5);
   }
 
   Color _getShadowColor() {
-    if (widget.gradient.isEmpty) {
-      return widget.isDarkMode ? CupertinoColors.black.withOpacity(0.3) : Colors.black.withOpacity(0.15);
+    if (gradient.isEmpty) {
+      return isDarkMode ? CupertinoColors.black.withOpacity(0.3) : Colors.black.withOpacity(0.15);
     }
-    if (widget.isDarkMode) {
-      return CupertinoColors.black.withOpacity(0.3);
-    }
-    return widget.gradient[0].withOpacity(0.25);
+    if (isDarkMode) return CupertinoColors.black.withOpacity(0.3);
+    return gradient[0].withOpacity(0.25);
   }
 
   Color _getBoxShadowColor() {
-    if (widget.isDarkMode) {
-      return CupertinoColors.black.withOpacity(0.15);
-    }
+    if (isDarkMode) return CupertinoColors.black.withOpacity(0.15);
     return Colors.black.withOpacity(0.05);
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            return _buildCard(_animation.value, constraints.maxWidth);
-          },
-        );
-      },
-    );
-  }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        String displayTitle = title;
+        if (maxTitleLength != null && title.length > maxTitleLength!) {
+          displayTitle = '${title.substring(0, maxTitleLength!)}…';
+        }
 
-  Widget _buildCard(double animationValue, double maxWidth) {
-    String displayTitle = widget.title;
-    if (widget.maxTitleLength != null && widget.title.length > widget.maxTitleLength!) {
-      displayTitle = widget.title.substring(0, widget.maxTitleLength!) + '…';
-    }
+        final endColor = _getEndColor();
+        final List<Color> gradientColors = gradient.isNotEmpty ? [gradient[0], endColor] : [endColor, endColor];
+        final countColor = _getCountColor(countValue);
+        final textColor = _getTextColor();
+        final subTextColor = _getSubTextColor();
+        final shadowColor = _getShadowColor();
+        final boxShadowColor = _getBoxShadowColor();
 
-    final endColor = _getEndColor();
-    final List<Color> gradientColors = widget.gradient.isNotEmpty ? [widget.gradient[0], endColor] : [endColor, endColor];
-    final countColor = _getCountColor(widget.countValue);
-    final textColor = _getTextColor();
-    final subTextColor = _getSubTextColor();
-    final shadowColor = _getShadowColor();
-    final boxShadowColor = _getBoxShadowColor();
+        final animatedWidth = isExpanded ? constraints.maxWidth - 16 : constraints.maxWidth;
 
-    final cardWidth = maxWidth - (animationValue * 16);
-
-    return Container(
-      margin: EdgeInsets.zero,
-      alignment: Alignment.centerLeft,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          child: SizedBox(
-            width: cardWidth,
-            child: Container(
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              width: animatedWidth,
               decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(borderRadius),
                 gradient: LinearGradient(
                   colors: gradientColors,
                   begin: Alignment.centerLeft,
@@ -177,101 +114,91 @@ class _GradientCardState extends State<GradientCard> with SingleTickerProviderSt
                   ),
                 ],
               ),
+              clipBehavior: Clip.antiAlias,
               child: Stack(
-              alignment: Alignment.centerRight,
-              children: [
-                Padding(
-                  padding: widget.padding ?? const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 16,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              height: 1.2,
-                              color: textColor,
-                            ),
-                            children: [
-                              TextSpan(text: displayTitle),
-                              if (widget.clientId != null && widget.clientId!.isNotEmpty)
-                                TextSpan(
-                                  text: ' (${widget.clientId})',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.normal,
-                                    color: subTextColor,
-                                    height: 1.2,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          softWrap: false,
-                          strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
-                        ),
-                      ),
-                      if (widget.trailing != null)
-                        const SizedBox(width: 80)
-                      else if (widget.subtitle != null || widget.countValue != null)
-                        const SizedBox(width: 60),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  right: 16,
-                  child: widget.trailing != null
-                      ? widget.trailing!
-                      : (widget.subtitle != null || widget.countValue != null)
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
+                alignment: Alignment.centerRight,
+                children: [
+                  Padding(
+                    padding: padding ?? const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                height: 1.2,
+                                color: textColor,
+                              ),
                               children: [
-                                if (widget.subtitle != null)
-                                  Text(
-                                    widget.subtitle!,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: subTextColor,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                if (widget.countValue != null) ...[
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${widget.countValue}',
+                                TextSpan(text: displayTitle),
+                                if (clientId != null && clientId!.isNotEmpty)
+                                  TextSpan(
+                                    text: ' ($clientId)',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FontStyle.italic,
-                                      color: countColor,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  Text(
-                                    '支',
-                                    style: TextStyle(
-                                      fontSize: 11,
+                                      fontWeight: FontWeight.normal,
                                       color: subTextColor,
                                       height: 1.2,
                                     ),
                                   ),
-                                ],
                               ],
-                            )
-                          : const SizedBox.shrink(),
-                ),
-              ],
-            ), 
-            ), 
-          ), 
-        ), 
-      ), 
-    ); 
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            softWrap: false,
+                            strutStyle: const StrutStyle(height: 1.2, fontSize: 15, forceStrutHeight: true),
+                          ),
+                        ),
+                        if (trailing != null)
+                          const SizedBox(width: 80)
+                        else if (subtitle != null || countValue != null)
+                          const SizedBox(width: 60),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    right: 16,
+                    child: trailing != null
+                        ? trailing!
+                        : (subtitle != null || countValue != null)
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (subtitle != null)
+                                    Text(
+                                      subtitle!,
+                                      style: TextStyle(fontSize: 11, color: subTextColor, height: 1.2),
+                                    ),
+                                  if (countValue != null) ...[
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '$countValue',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        fontStyle: FontStyle.italic,
+                                        color: countColor,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    Text(
+                                      '支',
+                                      style: TextStyle(fontSize: 11, color: subTextColor, height: 1.2),
+                                    ),
+                                  ],
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

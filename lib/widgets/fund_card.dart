@@ -29,7 +29,7 @@ class FundCard extends StatefulWidget {
   State<FundCard> createState() => _FundCardState();
 }
 
-class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin {
+class _FundCardState extends State<FundCard> {
   double _dragOffset = 0;
   static const double _maxSwipeOffset = 70;
   DataManager? _dataManager;
@@ -53,17 +53,32 @@ class _FundCardState extends State<FundCard> with SingleTickerProviderStateMixin
   }
 
   void _onDataManagerChanged() {
-    if (!mounted) return;
-    
-    final holdingStillExists = _dataManager?.holdings.any((h) => h.id == widget.holding.id) ?? false;
-    
-    if (holdingStillExists) {
-      setState(() {});
-    } else {
-      if (_isListenerRegistered && _dataManager != null) {
+    if (!mounted || _dataManager == null) return;
+
+    final current = _dataManager!.holdings.cast<FundHolding?>().firstWhere(
+      (h) => h!.id == widget.holding.id,
+      orElse: () => null,
+    );
+
+    if (current == null) {
+      if (_isListenerRegistered) {
         _dataManager!.removeListener(_onDataManagerChanged);
         _isListenerRegistered = false;
       }
+      return;
+    }
+
+    if (current.currentNav != widget.holding.currentNav ||
+        current.fundName != widget.holding.fundName ||
+        current.isPinned != widget.holding.isPinned ||
+        current.totalCost != widget.holding.totalCost ||
+        current.totalShares != widget.holding.totalShares ||
+        current.navDate != widget.holding.navDate ||
+        current.navReturn1m != widget.holding.navReturn1m ||
+        current.navReturn3m != widget.holding.navReturn3m ||
+        current.navReturn6m != widget.holding.navReturn6m ||
+        current.navReturn1y != widget.holding.navReturn1y) {
+      setState(() {});
     }
   }
 

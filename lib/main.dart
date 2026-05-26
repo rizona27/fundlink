@@ -35,19 +35,23 @@ void main() async {
     final monitor = MemoryMonitor();
     monitor.warningThresholdMB = AppConstants.memoryWarningThresholdMB;
     monitor.criticalThresholdMB = AppConstants.memoryCriticalThresholdMB;
-    
+
     monitor.onWarning = (snapshot) {};
-    
+
     monitor.onCritical = (snapshot) {};
-    
+
     monitor.startMonitoring(interval: AppConstants.memoryMonitorInterval);
   }
 
-  _requestPermissionsOnStart();
-
-  runApp(const MyApp());
-
   _initShareReceiving();
+
+  final permissionsOk = await _requestPermissionsOnStart();
+
+  if (permissionsOk) {
+    runApp(const MyApp());
+  } else {
+    runApp(const _PermissionDeniedApp());
+  }
 }
 
 void _initShareReceiving() {
@@ -117,24 +121,40 @@ void _handleSharedFiles(List<SharedMediaFile> files) {
   }
 }
 
-Future<void> _requestPermissionsOnStart() async {
-  if (kIsWeb) return;
+/// 请求运行时权限。网络权限在安装时自动授予，无需运行时弹窗。
+/// 返回 true 表示全部授予，false 表示有权限被拒绝。
+Future<bool> _requestPermissionsOnStart() async {
+  if (kIsWeb) return true;
 
   try {
-    PermissionStatus status;
+    if (io.Platform.isAndroid) {
+      // 存储权限：API ≤32 弹窗，API ≥33 自动授予
+      final storage = await Permission.storage.request();
+      if (storage.isDenied || storage.isPermanentlyDenied) {
+        debugPrint('[权限] 存储权限被拒绝');
+        return false;
+      }
 
-    if (await Permission.storage.isDenied) {
-      status = await Permission.storage.request();
-    } else {
-      status = await Permission.photos.request();
+      // 相册权限：API ≥33 弹窗（READ_MEDIA_IMAGES），API <33 自动授予
+      final photos = await Permission.photos.request();
+      if (photos.isDenied || photos.isPermanentlyDenied) {
+        debugPrint('[权限] 相册权限被拒绝');
+        return false;
+      }
+    } else if (io.Platform.isIOS) {
+      // iOS: 存储由沙盒隐式授权（NSDocumentsFolderUsageDescription），无需弹窗。
+      // iOS: 相册权限
+      final photos = await Permission.photos.request();
+      if (photos.isDenied || photos.isPermanentlyDenied) {
+        debugPrint('[权限] 相册权限被拒绝');
+        return false;
+      }
     }
 
-    if (status.isGranted) {
-    } else if (status.isPermanentlyDenied) {
-    } else {
-    }
+    return true;
   } catch (e) {
     ErrorHandler.handleError(e, context: '权限请求');
+    return false;
   }
 }
 
@@ -288,6 +308,60 @@ class _MyAppState extends State<MyApp> {
         home: const SplashView(),
         debugShowCheckedModeBanner: false,
       ),
+    );
+  }
+}
+
+/// 权限被拒绝时显示的占位 App，弹出提示后退出。
+class _PermissionDeniedApp extends StatelessWidget {
+  const _PermissionDeniedApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoApp(
+      debugShowCheckedModeBanner: false,
+      home: _PermissionDeniedPage(),
+    );
+  }
+}
+
+class _PermissionDeniedPage extends StatefulWidget {
+  @override
+  State<_PermissionDeniedPage> createState() => _PermissionDeniedPageState();
+}
+
+class _PermissionDeniedPageState extends State<_PermissionDeniedPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showDialog());
+  }
+
+  void _showDialog() {
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('需要权限'),
+        content: const Text(
+          '本应用需要网络、存储和相册权限才能正常运行。\n'
+          '请在系统设置中授予所需权限后重新打开应用。',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => io.exit(0),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const CupertinoPageScaffold(
+      backgroundColor: Color(0xFFF2F2F7),
+      child: SizedBox.shrink(),
     );
   }
 }

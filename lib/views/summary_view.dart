@@ -39,7 +39,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   int _valuationRefreshIntervalSeconds = 180;
   Timer? _valuationTimer;
   Timer? _marketStatusTimer;
-  Timer? _scrollThrottleTimer; 
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
   
@@ -83,7 +82,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     return !isTradingTime;
   }
 
-  double _scrollOffset = 0;
+  final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier(0.0);
   final ScrollController _scrollController = ScrollController();
 
   bool get _hasAnyExpanded => _expandedFundCodes.isNotEmpty;
@@ -129,14 +128,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   }
 
   void _onScrollUpdate(double offset) {
-    if (mounted) {
-      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
-        setState(() {
-          _scrollOffset = normalizedOffset;
-        });
-      }
-    }
+    _scrollOffsetNotifier.value = offset < 1.0 ? 0.0 : offset;
   }
 
   Future<void> _loadSortState() async {
@@ -201,6 +193,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cancelAllTimers();
+    _scrollOffsetNotifier.dispose();
     _dataManager.removeListener(_dataListener);
     _scrollController.dispose();
     super.dispose();
@@ -209,8 +202,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   void _cancelAllTimers() {
     _stopValuationTimer();
     _stopMarketStatusTimer();
-    _scrollThrottleTimer?.cancel();
-    _scrollThrottleTimer = null;
   }
 
   @override
@@ -525,6 +516,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   String? _lastSearchText;
   SortKey? _lastSortKey;
   SortOrder? _lastSortOrder;
+  final Map<String, List<Color>> _gradientCache = {};
 
   List<String> get _sortedFundCodes {
     if (_cachedSortedFundCodes != null &&
@@ -623,21 +615,27 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     });
   }
 
+  static const List<Color> _softColors = [
+    Color(0xFFA8C4E0), Color(0xFFB8D0C4), Color(0xFFD4C4A8),
+    Color(0xFFE0B8C4), Color(0xFFC4B8E0), Color(0xFFA8D4D4),
+    Color(0xFFE0C8A8), Color(0xFFC8D4A8), Color(0xFFD4A8C4),
+    Color(0xFFA8D0E0), Color(0xFFE0C0B0), Color(0xFFB0C8E0),
+    Color(0xFFD0B8C8), Color(0xFFC0D4B0), Color(0xFFE0D0B0),
+  ];
+
   List<Color> _getGradientForFundCode(String fundCode) {
+    final cached = _gradientCache[fundCode];
+    if (cached != null) return cached;
+
     int hash = 0;
     for (int i = 0; i < fundCode.length; i++) {
       hash = (hash << 5) - hash + fundCode.codeUnitAt(i);
     }
     hash = hash.abs();
-    final softColors = [
-      const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
-      const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
-      const Color(0xFFE0C8A8), const Color(0xFFC8D4A8), const Color(0xFFD4A8C4),
-      const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
-      const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
-    ];
-    final mainColor = softColors[hash % softColors.length];
-    return [mainColor, mainColor.withOpacity(0.3)];
+    final mainColor = _softColors[hash % _softColors.length];
+    final result = [mainColor, Color.fromRGBO(mainColor.red, mainColor.green, mainColor.blue, 0.3)];
+    _gradientCache[fundCode] = result;
+    return result;
   }
 
   Color _colorForHoldingCount(int count) {
@@ -822,8 +820,11 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         child: SafeArea(
           child: Column(
             children: [
-            AdaptiveTopBar(
-              scrollOffset: _scrollOffset,
+            ValueListenableBuilder<double>(
+              valueListenable: _scrollOffsetNotifier,
+              builder: (context, offset, child) {
+                return AdaptiveTopBar(
+              scrollOffset: offset,
               showBack: false,
               showRefresh: true,
               showExpandCollapse: true,
@@ -882,7 +883,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               buttonSpacing: 12,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               useMenuStyle: true,
-            ),
+            );
+          },
+        ),
             Expanded(
               child: !hasData
                   ? EmptyState(

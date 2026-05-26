@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart';
@@ -27,8 +26,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
   String _searchText = '';
   final Set<String> _expandedClients = {};
   int _dataVersion = 0;
-  double _scrollOffset = 0;
-  Timer? _scrollThrottleTimer;
+  final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier(0.0);
   final ScrollController _scrollController = ScrollController();
   
   @override
@@ -36,16 +34,10 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
   
   List<String>? _cachedSortedKeys;
   String? _lastSearchTextForSort;
+  final Map<String, Color> _clientColorCache = {};
 
   void _onScrollUpdate(double offset) {
-    if (mounted) {
-      final normalizedOffset = offset < 1.0 ? 0.0 : offset;
-      if ((_scrollOffset - normalizedOffset).abs() > 0.5) {
-        setState(() {
-          _scrollOffset = normalizedOffset;
-        });
-      }
-    }
+    _scrollOffsetNotifier.value = offset < 1.0 ? 0.0 : offset;
   }
 
   @override
@@ -78,7 +70,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
 
   @override
   void dispose() {
-    _scrollThrottleTimer?.cancel();
+    _scrollOffsetNotifier.dispose();
     _dataManager.removeListener(_onDataManagerChanged);
     _scrollController.dispose();
     super.dispose();
@@ -201,22 +193,26 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
     return clientId;
   }
 
+  static const List<Color> _softColors = [
+    Color(0xFFA8C4E0), Color(0xFFB8D0C4), Color(0xFFD4C4A8),
+    Color(0xFFE0B8C4), Color(0xFFC4B8E0), Color(0xFFA8D4D4),
+    Color(0xFFE0C8A8), Color(0xFFC8D4A8), Color(0xFFD4A8C4),
+    Color(0xFFA8D0E0), Color(0xFFE0C0B0), Color(0xFFB0C8E0),
+    Color(0xFFD0B8C8), Color(0xFFC0D4B0), Color(0xFFE0D0B0),
+  ];
+
   Color _getClientColor(String name) {
+    final cached = _clientColorCache[name];
+    if (cached != null) return cached;
+
     int hash = 0;
     for (int i = 0; i < name.length; i++) {
       hash = (hash << 5) - hash + name.codeUnitAt(i);
     }
     hash = hash.abs();
-
-    final softColors = [
-      const Color(0xFFA8C4E0), const Color(0xFFB8D0C4), const Color(0xFFD4C4A8),
-      const Color(0xFFE0B8C4), const Color(0xFFC4B8E0), const Color(0xFFA8D4D4),
-      const Color(0xFFE0C8A8), const Color(0xFFC8D4A8), const Color(0xFFD4A8C4),
-      const Color(0xFFA8D0E0), const Color(0xFFE0C0B0), const Color(0xFFB0C8E0),
-      const Color(0xFFD0B8C8), const Color(0xFFC0D4B0), const Color(0xFFE0D0B0),
-    ];
-
-    return softColors[hash % softColors.length];
+    final result = _softColors[hash % _softColors.length];
+    _clientColorCache[name] = result;
+    return result;
   }
 
   Future<void> _renameClient(String oldKey, String newName) async {
@@ -348,8 +344,11 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
             },
             child: Column(
               children: [
-                AdaptiveTopBar(
-                  scrollOffset: _scrollOffset,
+                ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffsetNotifier,
+                  builder: (context, offset, child) {
+                    return AdaptiveTopBar(
+                  scrollOffset: offset,
                   showBack: true,
                   onBack: () => Navigator.of(context).pop(),
                   showRefresh: false,
@@ -381,7 +380,9 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
                   buttonSpacing: 12,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   useMenuStyle: true,
-                ),
+                );
+              },
+            ),
                 Expanded(
                   child: !hasData
                       ? EmptyState(

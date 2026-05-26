@@ -53,8 +53,7 @@
 	<string>需要访问文档文件夹以导入/导出基金持仓数据</string>
 	<key>NSSupportsOpeningFilesInPlace</key>
 	<true/>
-	<key>NSFaceIDUsageDescription</key>
-	<string>需要使用 Face ID / Touch ID 保护您的基金数据安全</string>
+
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
