@@ -13,6 +13,7 @@ import 'import_holding_view.dart';
 import 'license_view.dart';
 import 'log_view.dart';
 import 'manage_holdings_view.dart';
+import '../services/client_mapping_service.dart';
 import 'mapping_dictionary_view.dart';
 import 'pending_transactions_view.dart';
 import 'version_view.dart';
@@ -246,6 +247,15 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
               CupertinoPageRoute(builder: (context) => const LogView()),
             );
           },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.trash,
+          title: '清空映射索引',
+          subtitle: '删除所有映射数据（不可恢复）',
+          isDarkMode: isDarkMode,
+          isDestructive: true,
+          onTap: () => _showClearMappingsConfirmDialog(),
         ),
       ],
     );
@@ -1086,6 +1096,89 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
                     builder: (context) => CupertinoAlertDialog(
                       title: const Text('操作失败'),
                       content: Text('清空数据时出错: $e'),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('确定'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+            },
+            isDestructiveAction: true,
+            child: const Text('确认清空'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearMappingsConfirmDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('清空映射索引'),
+        content: const Text('此操作将删除所有客户映射索引数据，且不可恢复。确定要继续吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _showClearMappingsFinalConfirmDialog();
+            },
+            isDestructiveAction: true,
+            child: const Text('确认清空'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearMappingsFinalConfirmDialog() {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('最后确认'),
+        content: const Text('此操作无法撤销，请再次确认是否清空所有映射索引？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await ClientMappingService().clearAll();
+                await _dataManager.addLog('已清空所有映射索引', type: LogType.warning);
+                if (mounted) {
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (context) => CupertinoAlertDialog(
+                      title: const Text('操作成功'),
+                      content: const Text('所有映射索引数据已清空。'),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('确定'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              } catch (e) {
+                await _dataManager.addLog('清空映射索引失败: $e', type: LogType.error);
+                if (mounted) {
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (context) => CupertinoAlertDialog(
+                      title: const Text('操作失败'),
+                      content: Text('清空映射索引时出错: $e'),
                       actions: [
                         CupertinoDialogAction(
                           onPressed: () => Navigator.pop(context),

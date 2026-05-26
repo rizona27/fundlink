@@ -5,10 +5,12 @@ import '../constants/app_constants.dart';
 import 'package:flutter/services.dart';
 import 'package:pinyin/pinyin.dart';
 import '../services/client_mapping_service.dart';
+import '../services/data_manager.dart';
 import '../models/client_mapping.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/toast.dart';
 import '../utils/input_formatters.dart';
+import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/desktop_focus_manager.dart';
 import 'import_holding_view.dart';
 
@@ -19,19 +21,23 @@ class MappingDictionaryView extends StatefulWidget {
   State<MappingDictionaryView> createState() => _MappingDictionaryViewState();
 }
 
-class _MappingDictionaryViewState extends State<MappingDictionaryView> {
+class _MappingDictionaryViewState extends State<MappingDictionaryView> with ScrollToTopMixin {
   final ClientMappingService _mappingService = ClientMappingService();
   List<ClientMapping> _mappings = [];
   List<ClientMapping> _filteredMappings = [];
   bool _isLoading = true;
-  
+
   SortColumn? _sortColumn;
   bool _sortAscending = true;
-  
+
   String _searchText = '';
-  
+
   double _scrollOffset = 0;
   Timer? _scrollThrottleTimer;
+
+  final ScrollController _scrollController = ScrollController();
+  @override
+  ScrollController get scrollController => _scrollController;
 
   @override
   void initState() {
@@ -348,6 +354,8 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
           context.showToast('添加成功');
         }
         await _loadMappings();
+        final dataManager = DataManagerProvider.of(context);
+        await dataManager.syncClientNamesFromMappings();
       } catch (e) {
         context.showToast('操作失败: $e');
       }
@@ -381,6 +389,8 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
         await _mappingService.deleteMapping(mapping.id);
         context.showToast('删除成功');
         await _loadMappings();
+        final dataManager = DataManagerProvider.of(context);
+        await dataManager.syncClientNamesFromMappings();
       } catch (e) {
         context.showToast('删除失败: $e');
       }
@@ -390,6 +400,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
   @override
   void dispose() {
     _scrollThrottleTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -398,184 +409,188 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      behavior: HitTestBehavior.translucent,
-      child: Container(
-        color: backgroundColor,
-        child: SafeArea(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is ScrollUpdateNotification) {
-                _onScrollUpdate(notification.metrics.pixels);
-              }
-              return false;
-            },
-            child: Column(
-              children: [
-                AdaptiveTopBar(
-                  scrollOffset: _scrollOffset,
-                  showBack: true,
-                  onBack: () => Navigator.of(context).pop(),
-                  showRefresh: false,
-                  showExpandCollapse: false,
-                  showSearch: true,
-                  searchText: _searchText,
-                  searchPlaceholder: '搜索客户号或客户名',
-                  onSearchChanged: (value) {
-                    setState(() {
-                      _searchText = value;
-                      _applyFilterAndSort();
-                    });
-                  },
-                  showReset: false,
-                  showFilter: false,
-                  showSort: false,
-                  hasData: _filteredMappings.isNotEmpty,
-                  backgroundColor: Colors.transparent,
-                  iconColor: CupertinoTheme.of(context).primaryColor,
-                  iconSize: 24,
-                  buttonSpacing: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                
-                AnimatedOpacity(
-                  opacity: _scrollOffset < 50 ? 1.0 : 0.0,
-                  duration: AppConstants.fastAnimationDuration,
-                  child: _scrollOffset < 50
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: isDarkMode
-                                    ? CupertinoColors.white.withOpacity(0.1)
-                                    : CupertinoColors.systemGrey4,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Text(
-                                '共 ${_filteredMappings.length} 条记录',
-                                style: TextStyle(
-                                  fontSize: 14,
+    return buildWithScrollToTop(
+      GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Container(
+          color: backgroundColor,
+          child: SafeArea(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollUpdateNotification) {
+                  _onScrollUpdate(notification.metrics.pixels);
+                }
+                return false;
+              },
+              child: Column(
+                children: [
+                  AdaptiveTopBar(
+                    scrollOffset: _scrollOffset,
+                    showBack: true,
+                    onBack: () => Navigator.of(context).pop(),
+                    showRefresh: false,
+                    showExpandCollapse: false,
+                    showSearch: true,
+                    searchText: _searchText,
+                    searchPlaceholder: '搜索客户号或客户名',
+                    onSearchChanged: (value) {
+                      setState(() {
+                        _searchText = value;
+                        _applyFilterAndSort();
+                      });
+                    },
+                    showReset: false,
+                    showFilter: false,
+                    showSort: false,
+                    hasData: _filteredMappings.isNotEmpty,
+                    backgroundColor: Colors.transparent,
+                    iconColor: CupertinoTheme.of(context).primaryColor,
+                    iconSize: 24,
+                    buttonSpacing: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+
+                  AnimatedOpacity(
+                    opacity: _scrollOffset < 50 ? 1.0 : 0.0,
+                    duration: AppConstants.fastAnimationDuration,
+                    child: _scrollOffset < 50
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                              border: Border(
+                                bottom: BorderSide(
                                   color: isDarkMode
-                                      ? CupertinoColors.white.withOpacity(0.6)
-                                      : CupertinoColors.systemGrey,
+                                      ? CupertinoColors.white.withOpacity(0.1)
+                                      : CupertinoColors.systemGrey4,
                                 ),
                               ),
-                            ],
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                
-                Expanded(
-                  child: Stack(
-                    children: [
-                      _isLoading
-                          ? const Center(child: CupertinoActivityIndicator())
-                          : _filteredMappings.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        CupertinoIcons.book,
-                                        size: 64,
-                                        color: isDarkMode
-                                            ? CupertinoColors.white.withOpacity(0.3)
-                                            : CupertinoColors.systemGrey.withOpacity(0.5),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        _searchText.isNotEmpty ? '未找到匹配的映射' : '暂无映射数据',
-                                        style: TextStyle(
-                                          fontSize: 16,
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  '共 ${_filteredMappings.length} 条记录',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: isDarkMode
+                                        ? CupertinoColors.white.withOpacity(0.6)
+                                        : CupertinoColors.systemGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        _isLoading
+                            ? const Center(child: CupertinoActivityIndicator())
+                            : _filteredMappings.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          CupertinoIcons.book,
+                                          size: 64,
                                           color: isDarkMode
-                                              ? CupertinoColors.white.withOpacity(0.5)
-                                              : CupertinoColors.systemGrey,
+                                              ? CupertinoColors.white.withOpacity(0.3)
+                                              : CupertinoColors.systemGrey.withOpacity(0.5),
                                         ),
-                                      ),
-                                      if (_searchText.isEmpty) ...[
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 16),
                                         Text(
-                                          '点击下方“+”按钮添加映射关系',
+                                          _searchText.isNotEmpty ? '未找到匹配的映射' : '暂无映射数据',
                                           style: TextStyle(
-                                            fontSize: 13,
+                                            fontSize: 16,
                                             color: isDarkMode
-                                                ? CupertinoColors.white.withOpacity(0.4)
-                                                : CupertinoColors.systemGrey2,
+                                                ? CupertinoColors.white.withOpacity(0.5)
+                                                : CupertinoColors.systemGrey,
                                           ),
                                         ),
+                                        if (_searchText.isEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            '点击下方”+”按钮添加映射关系',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isDarkMode
+                                                  ? CupertinoColors.white.withOpacity(0.4)
+                                                  : CupertinoColors.systemGrey2,
+                                            ),
+                                          ),
+                                        ],
                                       ],
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      _buildHeaderRow(isDarkMode),
+                                      Expanded(
+                                        child: ListView.builder(
+                                          controller: _scrollController,
+                                          padding: const EdgeInsets.only(bottom: 80),
+                                          itemCount: _filteredMappings.length,
+                                          itemBuilder: (context, index) {
+                                            return _buildMappingRow(
+                                              _filteredMappings[index],
+                                              index,
+                                              isDarkMode,
+                                            );
+                                          },
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                )
-                              : Column(
-                                  children: [
-                                    _buildHeaderRow(isDarkMode),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        padding: const EdgeInsets.only(bottom: 80),
-                                        itemCount: _filteredMappings.length,
-                                        itemBuilder: (context, index) {
-                                          return _buildMappingRow(
-                                            _filteredMappings[index],
-                                            index,
-                                            isDarkMode,
-                                          );
-                                        },
-                                      ),
+
+                        Positioned(
+                          bottom: 20,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () => _showEditDialog(),
+                              onLongPress: () async {
+                                await Navigator.push(
+                                  context,
+                                  CupertinoPageRoute(
+                                    builder: (context) => const ImportHoldingView(),
+                                  ),
+                                );
+                                _loadMappings();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode
+                                      ? const Color(0xFF2C2C2E).withOpacity(0.85)
+                                      : CupertinoColors.white.withOpacity(0.85),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
                                     ),
                                   ],
                                 ),
-                                      
-                      Positioned(
-                        bottom: 20,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: GestureDetector(
-                            onTap: () => _showEditDialog(),
-                            onLongPress: () {
-                              Navigator.push(
-                                context,
-                                CupertinoPageRoute(
-                                  builder: (context) => const ImportHoldingView(),
+                                child: const Icon(
+                                  CupertinoIcons.plus,
+                                  size: 24,
+                                  color: Color(0xFF007AFF),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isDarkMode 
-                                    ? const Color(0xFF2C2C2E).withOpacity(0.85)
-                                    : CupertinoColors.white.withOpacity(0.85),
-                                borderRadius: BorderRadius.circular(30),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.1),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                CupertinoIcons.plus,
-                                size: 24,
-                                color: Color(0xFF007AFF),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

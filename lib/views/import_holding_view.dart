@@ -14,6 +14,7 @@ import 'package:universal_html/html.dart' as html;
 import '../constants/app_constants.dart';
 import '../models/log_entry.dart';
 import '../models/transaction_record.dart';
+import '../models/client_mapping.dart';
 import '../services/client_mapping_service.dart';
 import '../services/data_manager.dart';
 import '../services/file_import_service.dart';
@@ -1851,14 +1852,21 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   Future<void> _processMappingFile() async {
     try {
       debugPrint('[Import] 开始处理映射索引文件，共${_rawData.length}条记录');
-      
+
       int success = 0;
       int fail = 0;
       int skip = 0;
-      
+
+      // Pre-load existing mappings once
+      final existingMappings = await _mappingService.getAllMappings();
+      final existingMap = <String, ClientMapping>{};
+      for (final m in existingMappings) {
+        existingMap[m.clientId] = m;
+      }
+
       int clientIdIndex = -1;
       int clientNameIndex = -1;
-      
+
       for (int i = 0; i < _headers.length; i++) {
         final header = _headers[i].trim().toLowerCase();
 
@@ -1906,23 +1914,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           
           final clientId = row[clientIdIndex]?.toString().trim();
           final clientName = row[clientNameIndex]?.toString().trim();
-          
+
           if (clientId == null || clientId.isEmpty || clientName == null || clientName.isEmpty) {
             skip++;
             continue;
           }
-          
-          final existing = await _mappingService.getAllMappings();
-          final existingMapping = existing.where((m) => m.clientId == clientId).firstOrNull;
-          
+
+          final existingMapping = existingMap[clientId];
+
           if (existingMapping != null) {
-            await _mappingService.updateMapping(
-              existingMapping.id,
-              clientId,
-              clientName,
-            );
-            success++;
-            debugPrint('[Import] 更新映射: $clientId -> $clientName');
+            skip++;
+            debugPrint('[Import] 跳过重复映射: $clientId -> ${existingMapping.clientName} (文件中为 $clientName)');
           } else {
             await _mappingService.addMapping(clientId, clientName);
             success++;
@@ -1933,9 +1935,16 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           debugPrint('[Import] 导入映射失败: $e');
         }
       }
-      
+
       debugPrint('[Import] 映射导入结果: 成功$success, 跳过$skip, 失败$fail');
-      
+
+      // Sync client names to existing holdings and transactions
+      if (success > 0) {
+        final dataManager = DataManagerProvider.of(context);
+        final changedCount = await dataManager.syncClientNamesFromMappings();
+        debugPrint('[Import] 同步映射到持仓: 更新了 $changedCount 条记录');
+      }
+
       if (mounted) {
         context.showToast('映射索引导入完成\n成功: $success, 跳过: $skip, 失败: $fail');
         Navigator.pop(context);
@@ -2053,31 +2062,34 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
 
     final dataManager = DataManagerProvider.of(context);
-    final fundService = FundService(dataManager);
 
     int success = 0;
     int fail = 0;
     int skip = 0;
-    List<String> errors = [];
-    List<String> skipReasons = [];
+    final errors = <String>[];
+    final skipReasons = <String>[];
 
-    Future<bool> _checkPauseOrAbort() async {
-      if (_shouldAbortImport) return true;
-      if (_isPaused) {
-        debugPrint('[Import] 导入已暂停，等待用户选择...');
-        while (_isPaused && mounted) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        if (_shouldAbortImport) return true;
+    // Pre-load all mappings into a local map for O(1) lookup
+    final mappingMap = <String, String>{};
+    try {
+      final allMappings = await _mappingService.getAllMappings();
+      for (final m in allMappings) {
+        mappingMap[m.clientId] = m.clientName;
       }
-      return false;
+    } catch (_) {}
+
+    // Pre-build duplicate set for O(1) duplicate check
+    final existingPairs = <String>{};
+    for (final h in dataManager.holdings) {
+      existingPairs.add('${h.clientId}_${h.fundCode}');
     }
 
-    final existingHoldings = dataManager.holdings;
+    // Collect all unique fund codes for background fetch
+    final uniqueFundCodes = <String>{};
 
+    // Phase 1: build transaction list (no API calls)
+    final transactionsToImport = <TransactionRecord>[];
     for (int i = 0; i < _validData.length; i++) {
-      if (await _checkPauseOrAbort()) break;
-      
       final row = _validData[i];
       try {
         String clientName = row['clientName']?.toString() ?? '';
@@ -2085,16 +2097,11 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
         final clientId = row['clientId']?.toString() ?? '';
         if (clientId.isEmpty) throw Exception('客户号为空');
-        
+
         if (clientName == clientId) {
-          try {
-            final mappedName = await _mappingService.getClientNameByClientId(clientId);
-            if (mappedName != null && mappedName.isNotEmpty) {
-              clientName = mappedName;
-              debugPrint('[Import] ✅ 第${i+1}行: 客户号 $clientId 映射为客户名 $mappedName');
-            }
-          } catch (e) {
-            debugPrint('[Import] ⚠️ 第${i+1}行: 客户号 $clientId 未在映射词典中找到');
+          final mappedName = mappingMap[clientId];
+          if (mappedName != null && mappedName.isNotEmpty) {
+            clientName = mappedName;
           }
         }
 
@@ -2117,168 +2124,139 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         final date = purchaseDate is DateTime ? purchaseDate : _parseDate(purchaseDate.toString());
         if (date == null) throw Exception('购买日期格式错误');
 
-        final isDuplicate = existingHoldings.any((h) =>
-        h.clientId == clientId &&
-            h.fundCode == fundCode);
-
-        if (isDuplicate) {
+        final pairKey = '${clientId}_$fundCode';
+        if (existingPairs.contains(pairKey)) {
           skip++;
           skipReasons.add('$clientName / $fundCode');
           continue;
         }
+        existingPairs.add(pairKey);
 
-        Map<String, dynamic> fundInfo = {  
-          'fundName': '',
-          'currentNav': 0.0,
-          'navDate': DateTime.now(),
-          'isValid': false,
-          'navReturn1m': null,
-          'navReturn3m': null,
-          'navReturn6m': null,
-          'navReturn1y': null,
-        };
-        var retryCount = 0;
-        const maxRetries = 2;
-        Exception? lastError;
-        bool networkFailed = false;
-        
-        while (retryCount <= maxRetries) {
-          if (await _checkPauseOrAbort()) break;
-          
-          try {
-            fundInfo = await fundService.fetchFundInfo(fundCode);
-            break;
-          } catch (e) {
-            lastError = e is Exception ? e : Exception(e.toString());
-            retryCount++;
-            if (retryCount <= maxRetries) {
-              await Future.delayed(Duration(milliseconds: 500 * retryCount));
-            }
-          }
-          
-          if (await _checkPauseOrAbort()) break;
-        }
-        
-        if (_shouldAbortImport) break;
-        
-        if (retryCount > maxRetries) {
-          networkFailed = true;
-          dataManager.addLog('导入时获取基金$fundCode信息失败（重试$maxRetries次后）: $lastError', type: LogType.warning);
-        }
+        uniqueFundCodes.add(fundCode);
 
-        final fundName = fundInfo['fundName'] as String? ?? '';
-        final currentNav = fundInfo['currentNav'] as double? ?? 0.0;
-        final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
-        final isValid = fundInfo['isValid'] as bool? ?? (currentNav > 0);
-        
-        final navReturn1m = fundInfo['navReturn1m'] as double?;
-        final navReturn3m = fundInfo['navReturn3m'] as double?;
-        final navReturn6m = fundInfo['navReturn6m'] as double?;
-        final navReturn1y = fundInfo['navReturn1y'] as double?;
-
-        if (await _checkPauseOrAbort()) break;
-        
         final transaction = TransactionRecord(
           clientId: clientId,
           clientName: clientName,
           fundCode: fundCode,
-          fundName: fundName,
+          fundName: '',
           type: TransactionType.buy,
           amount: purchaseAmount,
           shares: purchaseShares,
           tradeDate: date,
-          nav: currentNav > 0 ? currentNav : null,
+          nav: null,
           remarks: '',
         );
-        
-        await dataManager.addTransaction(transaction);
-        
-        if (currentNav > 0 || navReturn1m != null || navReturn3m != null || navReturn6m != null || navReturn1y != null) {
-          try {
-            final holdingIndex = dataManager.holdings.indexWhere(
-              (h) => h.clientId == clientId && h.fundCode == fundCode,
-            );
-            if (holdingIndex != -1) {
-              final existingHolding = dataManager.holdings[holdingIndex];
-              final updatedHolding = existingHolding.copyWith(
-                currentNav: currentNav > 0 ? currentNav : existingHolding.currentNav,
-                navDate: navDate,
-                isValid: isValid || existingHolding.isValid,
-                navReturn1m: navReturn1m ?? existingHolding.navReturn1m,
-                navReturn3m: navReturn3m ?? existingHolding.navReturn3m,
-                navReturn6m: navReturn6m ?? existingHolding.navReturn6m,
-                navReturn1y: navReturn1y ?? existingHolding.navReturn1y,
-              );
-              await dataManager.updateHolding(updatedHolding);
-              debugPrint('[Import] ✅ 已更新持仓 $fundCode 的净值和收益率数据');
-            }
-          } catch (e) {
-            debugPrint('[Import] ⚠️ 更新持仓数据失败: $e');
-          }
-        }
-        
+
+        transactionsToImport.add(transaction);
         success++;
       } catch (e) {
         fail++;
-        errors.add('第${i+1}行: $e');
-        dataManager.addLog('导入第${i+1}行失败: $e', type: LogType.error);
+        errors.add('第${i + 1}行: $e');
       }
-      final progress = (i+1) / _validData.length;
-      _targetProgress = progress;
-      _animationController.animateTo(
-        progress,
-        duration: AppConstants.fastAnimationDuration,
-        curve: Curves.easeOut,
-      );
-      
-      if (_isPaused) {
-        debugPrint('[Import] 导入已暂停，等待用户选择...');
-        while (_isPaused && mounted) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        if (_shouldAbortImport) {
-          debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
-          break;
-        }
-      }
-      
-      if (_shouldAbortImport) {
-        debugPrint('[Import] 用户选择中止导入，当前进度: ${progress * 100}%');
-        break;
+
+      // Update progress during validation (Phase 1 is fast, just smooth animation)
+      if ((i + 1) % 50 == 0 || i == _validData.length - 1) {
+        final progress = (i + 1) / _validData.length * 0.3;
+        _animationController.animateTo(progress,
+            duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
       }
     }
 
-    setState(() {
-      _isImporting = false;
-      _isBackgroundImport = false;
-      _shouldAbortImport = false;
-      _isPaused = false;
-      _importResult = ImportResult(
-        successCount: success,
-        failCount: fail,
-        skipCount: skip,
-        errors: errors,
-        skipReasons: skipReasons,
+    // Phase 2: batch insert all transactions at once
+    if (transactionsToImport.isNotEmpty) {
+      await dataManager.addTransactionsBatch(
+        transactionsToImport,
+        onProgress: (progress) {
+          // Map batch progress (0.0-1.0) to overall progress (0.3-1.0)
+          final mappedProgress = 0.3 + progress * 0.7;
+          if (mounted) {
+            _animationController.animateTo(mappedProgress,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut);
+          }
+        },
       );
-    });
+    }
+
+    if (mounted) {
+      _animationController.animateTo(1.0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isImporting = false;
+        _importResult = ImportResult(
+          successCount: success,
+          failCount: fail,
+          skipCount: skip,
+          errors: errors,
+          skipReasons: skipReasons,
+        );
+      });
+    }
 
     String message = '导入完成';
     if (success > 0) message += '，成功$success条';
     if (skip > 0) message += '，跳过$skip条';
     if (fail > 0) message += '，失败$fail条';
-    context.showToast(message);
-    
-    if (!kIsWeb && success > 0) {
-      debugPrint('[Import] 导入完成，开始强制保存数据...');
-      await dataManager.saveData();
-      debugPrint('[Import] 数据保存完成，当前持仓数: ${dataManager.holdings.length}, 交易数: ${dataManager.transactions.length}');
-    }
-    
+    if (mounted) context.showToast(message);
+
     if (fail > 0) {
-      dataManager.addLog('批量导入完成: 成功$success, 跳过$skip, 失败$fail', type: LogType.warning);
+      dataManager.addLog('批量导入: 成功$success, 跳过$skip, 失败$fail', type: LogType.warning);
     } else {
-      dataManager.addLog('批量导入完成: 成功$success, 跳过$skip', type: LogType.success);
+      dataManager.addLog('批量导入: 成功$success, 跳过$skip', type: LogType.success);
     }
+
+    // Phase 3: fetch fund info in background (non-blocking)
+    if (uniqueFundCodes.isNotEmpty) {
+      _fetchFundInfoInBackground(uniqueFundCodes.toList(), dataManager);
+    }
+  }
+
+  Future<void> _fetchFundInfoInBackground(
+    List<String> fundCodes,
+    DataManager dataManager,
+  ) async {
+    final fundService = FundService(dataManager);
+    const batchSize = 5;
+
+    for (int i = 0; i < fundCodes.length; i += batchSize) {
+      final batch = fundCodes.skip(i).take(batchSize).toList();
+      await Future.wait(batch.map((code) async {
+        try {
+          final fundInfo = await fundService.fetchFundInfo(code);
+          final fundName = fundInfo['fundName'] as String? ?? '';
+          final currentNav = fundInfo['currentNav'] as double? ?? 0.0;
+          final navReturn1m = fundInfo['navReturn1m'] as double?;
+          final navReturn3m = fundInfo['navReturn3m'] as double?;
+          final navReturn6m = fundInfo['navReturn6m'] as double?;
+          final navReturn1y = fundInfo['navReturn1y'] as double?;
+
+          if (fundName.isNotEmpty && fundName != '未知基金' && fundName != '加载失败') {
+            final holdings = dataManager.holdings;
+            for (final holding in holdings) {
+              if (holding.fundCode == code && holding.fundName.isEmpty) {
+                await dataManager.updateHolding(holding.copyWith(
+                  fundName: fundName,
+                  currentNav: currentNav > 0 ? currentNav : holding.currentNav,
+                  navDate: fundInfo['navDate'] as DateTime? ?? holding.navDate,
+                  isValid: currentNav > 0,
+                  navReturn1m: navReturn1m ?? holding.navReturn1m,
+                  navReturn3m: navReturn3m ?? holding.navReturn3m,
+                  navReturn6m: navReturn6m ?? holding.navReturn6m,
+                  navReturn1y: navReturn1y ?? holding.navReturn1y,
+                ));
+              }
+            }
+          }
+        } catch (_) {
+          // Background fetch failures are non-critical
+        }
+      }));
+    }
+
+    await dataManager.saveData();
   }
 }
 

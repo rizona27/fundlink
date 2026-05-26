@@ -65,6 +65,33 @@ void _initShareReceiving() {
   });
 }
 
+({Uint8List bytes, String fileName})? _pendingSharedFileData;
+
+void _navigateToImportWithFile(Uint8List bytes, String fileName) {
+  final navigator = MyApp.navigatorKey.currentState;
+  if (navigator == null) {
+    _pendingSharedFileData = (bytes: bytes, fileName: fileName);
+    debugPrint('[ShareIntent] 导航器未就绪，暂存文件待处理: $fileName');
+    return;
+  }
+
+  debugPrint('[ShareIntent] 正在导航到导入页面: $fileName');
+  navigator.push(
+    CupertinoPageRoute(
+      builder: (context) => ImportHoldingView(
+        initialFile: (bytes: bytes, fileName: fileName),
+      ),
+    ),
+  );
+}
+
+void _processPendingSharedFile() {
+  final data = _pendingSharedFileData;
+  if (data == null) return;
+  _pendingSharedFileData = null;
+  _navigateToImportWithFile(data.bytes, data.fileName);
+}
+
 void _handleSharedFiles(List<SharedMediaFile> files) {
   if (files.isEmpty) return;
 
@@ -84,13 +111,7 @@ void _handleSharedFiles(List<SharedMediaFile> files) {
     final bytes = ioFile.readAsBytesSync();
     final fileName = path.split('/').last;
 
-    MyApp.navigatorKey.currentState?.push(
-      CupertinoPageRoute(
-        builder: (context) => ImportHoldingView(
-          initialFile: (bytes: bytes, fileName: fileName),
-        ),
-      ),
-    );
+    _navigateToImportWithFile(bytes, fileName);
   } catch (e) {
     debugPrint('[ShareIntent] 读取分享文件失败: $e');
   }
@@ -281,6 +302,14 @@ class MainTabView extends StatefulWidget {
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
   final GlobalKey<FloatingTabBarState> _tabBarKey = GlobalKey<FloatingTabBarState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _processPendingSharedFile();
+    });
+  }
 
   final List<String> _pageIds = [
     'summary_view',

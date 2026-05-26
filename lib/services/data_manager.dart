@@ -10,6 +10,7 @@ import '../models/log_entry.dart';
 import '../models/profit_result.dart';
 import '../models/transaction_record.dart';
 import '../services/china_trading_day_service.dart';
+import '../services/client_mapping_service.dart';
 import '../services/database_helper.dart';
 import '../services/database_repository.dart';
 import '../services/fund_service.dart';
@@ -868,6 +869,71 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Batch import transactions without per-row saveData/log calls.
+  /// Used by the import flow for performance.
+  Future<int> addTransactionsBatch(
+    List<TransactionRecord> transactions, {
+    void Function(double progress)? onProgress,
+  }) async {
+    if (transactions.isEmpty) return 0;
+
+    int successCount = 0;
+    final affectedPairs = <String>{};
+    final enhancedList = <TransactionRecord>[];
+
+    // Phase A: validate and prepare (fast, in-memory)
+    for (final transaction in transactions) {
+      if (transaction.amount <= 0) continue;
+      if (!transaction.isPending && transaction.shares <= 0) continue;
+
+      final applicationDate = await getTradeApplicationDate(transaction.tradeDate);
+      final enhancedTransaction = transaction.copyWith(
+        status: TransactionStatus.confirmed,
+        applicationDate: applicationDate,
+        frozenShares: null,
+      );
+
+      enhancedList.add(enhancedTransaction);
+      affectedPairs.add('${enhancedTransaction.clientId}_${enhancedTransaction.fundCode}');
+      successCount++;
+    }
+
+    onProgress?.call(0.25);
+
+    // Phase B: batch insert into DB (single DB transaction)
+    if (!kIsWeb && enhancedList.isNotEmpty) {
+      await _repository!.batchInsertTransactions(enhancedList);
+    }
+
+    // Single list append instead of O(n²) per-row copies
+    _transactions = [..._transactions, ...enhancedList];
+
+    for (final tx in enhancedList) {
+      _clearRelatedCaches(tx.clientId, tx.fundCode);
+    }
+
+    onProgress?.call(0.50);
+
+    // Phase C: rebuild each affected holding once
+    final pairs = affectedPairs.toList();
+    for (int i = 0; i < pairs.length; i++) {
+      final parts = pairs[i].split('_');
+      await _rebuildHolding(parts[0], parts[1]);
+      if (pairs.length > 3 && i % ((pairs.length / 4).ceil()) == 0) {
+        onProgress?.call(0.50 + 0.40 * (i / pairs.length));
+      }
+    }
+
+    onProgress?.call(0.90);
+
+    // Phase D: save once and notify once
+    await saveData();
+    notifyListeners();
+
+    onProgress?.call(1.0);
+    return successCount;
+  }
+
   Future<void> _rebuildHolding(String clientId, String fundCode) async {
     final relatedTransactions = _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
@@ -978,6 +1044,52 @@ class DataManager extends ChangeNotifier {
     await addLog('删除交易记录: ${transaction.fundCode} - ${transaction.type.displayName}', type: LogType.info);
     await saveData();
     notifyListeners();
+  }
+
+  /// Sync client names from mapping index to all holdings and transactions.
+  /// Call after mappings are imported, added, updated, or deleted.
+  Future<int> syncClientNamesFromMappings() async {
+    final mappingService = ClientMappingService();
+    final mappings = await mappingService.getAllMappings();
+    final mappingMap = <String, String>{};
+    for (final m in mappings) {
+      mappingMap[m.clientId] = m.clientName;
+    }
+
+    int changedCount = 0;
+
+    // Update holdings
+    for (int i = 0; i < _holdings.length; i++) {
+      final holding = _holdings[i];
+      final mappedName = mappingMap[holding.clientId];
+      if (mappedName != null && mappedName.isNotEmpty && mappedName != holding.clientName) {
+        _holdings[i] = holding.copyWith(clientName: mappedName);
+        if (!kIsWeb) {
+          await _repository!.updateHolding(holding.id, _holdings[i]);
+        }
+        changedCount++;
+      }
+    }
+
+    // Update transactions
+    for (int i = 0; i < _transactions.length; i++) {
+      final tx = _transactions[i];
+      final mappedName = mappingMap[tx.clientId];
+      if (mappedName != null && mappedName.isNotEmpty && mappedName != tx.clientName) {
+        _transactions[i] = tx.copyWith(clientName: mappedName);
+        if (!kIsWeb) {
+          await _repository!.updateTransaction(tx.id, _transactions[i]);
+        }
+        changedCount++;
+      }
+    }
+
+    if (changedCount > 0) {
+      await saveData();
+      notifyListeners();
+    }
+
+    return changedCount;
   }
 
   Future<void> updateHolding(FundHolding updatedHolding) async {
