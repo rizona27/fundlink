@@ -33,27 +33,17 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   
   final GlobalKey<StockCandleChartState> _candleChartKey = GlobalKey();
   
-  bool _candleChartInitialized = false;
-
   @override
   void initState() {
     super.initState();
     _checkTradingTime();
     _loadStockData();
     _startAutoUpdate();
-    
+
     _priceAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          _candleChartInitialized = true;
-        });
-      }
-    });
   }
 
   @override
@@ -328,29 +318,28 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                                 children: [
                                   _buildPriceCard(isDark, textColor, secondaryTextColor),
                                   const SizedBox(height: 10),
-                                  if (_candleChartInitialized)
-                                    Container(
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: isDark
-                                              ? CupertinoColors.white.withOpacity(0.1)
-                                              : CupertinoColors.systemGrey.withOpacity(0.2),
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          StockCandleChart(
-                                            key: _candleChartKey,
-                                            stockCode: widget.stockCode,
-                                            isDark: isDark,
-                                          ),
-                                        ],
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? CupertinoColors.white.withOpacity(0.1)
+                                            : CupertinoColors.systemGrey.withOpacity(0.2),
                                       ),
                                     ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        StockCandleChart(
+                                          key: _candleChartKey,
+                                          stockCode: widget.stockCode,
+                                          isDark: isDark,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),

@@ -1,8 +1,13 @@
+import 'dart:io' show File, Platform;
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:gal/gal.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/net_worth_point.dart';
+import 'glass_button.dart';
 
 class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
@@ -46,7 +51,11 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   bool _showHs300 = false; 
   bool _showZZ500 = false; 
   bool _showZZ1000 = false; 
-  bool _showCustomFund = false; 
+  bool _showCustomFund = false;
+  bool _useCustomRange = false;
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
+  bool _exporting = false;
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
@@ -121,25 +130,29 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
     final now = DateTime.now();
     DateTime startDate;
-    switch (_selectedRange) {
-      case '1m':
-        startDate = now.subtract(const Duration(days: 30));
-        break;
-      case '3m':
-        startDate = now.subtract(const Duration(days: 90));
-        break;
-      case '6m':
-        startDate = now.subtract(const Duration(days: 180));
-        break;
-      case '1y':
-        startDate = now.subtract(const Duration(days: 365));
-        break;
-      case '3y':
-        startDate = now.subtract(const Duration(days: 1095));
-        break;
-      default:
-        startDate = DateTime(1900);
-        break;
+    if (_useCustomRange && _customStartDate != null) {
+      startDate = _customStartDate!;
+    } else {
+      switch (_selectedRange) {
+        case '1m':
+          startDate = now.subtract(const Duration(days: 30));
+          break;
+        case '3m':
+          startDate = now.subtract(const Duration(days: 90));
+          break;
+        case '6m':
+          startDate = now.subtract(const Duration(days: 180));
+          break;
+        case '1y':
+          startDate = now.subtract(const Duration(days: 365));
+          break;
+        case '3y':
+          startDate = now.subtract(const Duration(days: 1095));
+          break;
+        default:
+          startDate = DateTime(1900);
+          break;
+      }
     }
 
     int fundStartIdx = 0;
@@ -151,7 +164,18 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       }
     }
     final baseDate = widget.fundPoints[fundStartIdx].date;
-    final fundSlice = widget.fundPoints.sublist(fundStartIdx);
+    var fundSlice = widget.fundPoints.sublist(fundStartIdx);
+
+    if (_useCustomRange && _customEndDate != null) {
+      int fundEndIdx = fundSlice.length;
+      for (int i = 0; i < fundSlice.length; i++) {
+        if (fundSlice[i].date.isAfter(_customEndDate!)) {
+          fundEndIdx = i;
+          break;
+        }
+      }
+      fundSlice = fundSlice.sublist(0, fundEndIdx);
+    }
 
     double getNavOnOrBefore(List<NetWorthPoint> points, DateTime target) {
       for (int i = points.length - 1; i >= 0; i--) {
@@ -270,6 +294,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   void _onRangeChanged(String newRange) {
     setState(() {
       _selectedRange = newRange;
+      _useCustomRange = false;
+      _customStartDate = null;
+      _customEndDate = null;
       _updateSliceAndNormalize();
       _hoverIndexNotifier.value = -1;
       _dotPositionNotifier.value = null;
@@ -381,6 +408,13 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     return 0.0;
   }
 
+  double _getPeriodEndFundReturn() => _sliceFundValues.isNotEmpty ? (_sliceFundValues.last - 1) * 100 : 0.0;
+  double _getPeriodEndHsReturn() => _sliceHsValues.isNotEmpty ? (_sliceHsValues.last - 1) * 100 : 0.0;
+  double _getPeriodEndZZ500Return() => _sliceZZ500Values.isNotEmpty ? (_sliceZZ500Values.last - 1) * 100 : 0.0;
+  double _getPeriodEndZZ1000Return() => _sliceZZ1000Values.isNotEmpty ? (_sliceZZ1000Values.last - 1) * 100 : 0.0;
+  double _getPeriodEndAvgReturn() => _sliceAvgValues.isNotEmpty ? (_sliceAvgValues.last - 1) * 100 : 0.0;
+  double _getPeriodEndCustomFundReturn() => _sliceCustomFundValues.isNotEmpty ? (_sliceCustomFundValues.last - 1) * 100 : 0.0;
+
   String _formatDate(DateTime date) {
     if (_selectedRange == '1m') {
       return '${date.month}/${date.day}';
@@ -466,6 +500,97 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     _updateHoverFromPosition(event.position);
   }
 
+  Future<void> _exportChart() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+
+    try {
+      _hoverIndexNotifier.value = -1;
+      _dotPositionNotifier.value = null;
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final boundary = _chartContainerKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        _showExportResult(false, '截图失败');
+        return;
+      }
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        _showExportResult(false, '图片转换失败');
+        return;
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+
+      if (Platform.isAndroid || Platform.isIOS) {
+        await Gal.putImageBytes(pngBytes, album: 'FundLink');
+        _showExportResult(true, '已保存到相册');
+      } else {
+        final dir = await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final filePath = '${dir.path}${Platform.pathSeparator}fund_performance_$timestamp.png';
+        final file = File(filePath);
+        await file.writeAsBytes(pngBytes);
+        _showExportResult(true, '已保存到 $filePath');
+      }
+    } catch (e) {
+      _showExportResult(false, '保存失败: $e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  void _showExportResult(bool success, String message) {
+    if (!mounted) return;
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(success ? '导出成功' : '导出失败'),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDatePickerAndApply({required bool isStart}) async {
+    final now = DateTime.now();
+    final initialDate = isStart
+        ? (_customStartDate ?? now.subtract(const Duration(days: 90)))
+        : (_customEndDate ?? now);
+
+    final picked = await showCupertinoModalPopup<DateTime>(
+      context: context,
+      builder: (ctx) => _DatePickerModal(
+        initialDate: initialDate,
+        title: isStart ? '选择开始日期' : '选择结束日期',
+      ),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        if (isStart) {
+          _customStartDate = picked;
+        } else {
+          _customEndDate = picked;
+        }
+        if (_customStartDate != null && _customEndDate != null) {
+          _useCustomRange = true;
+          _selectedRange = '';
+          _updateSliceAndNormalize();
+          _hoverIndexNotifier.value = -1;
+          _dotPositionNotifier.value = null;
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
@@ -543,22 +668,24 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     }
 
     final range = maxY - minY;
-    final padding = range * 0.1;
-    
-    minY = minY - padding;
-    maxY = maxY + padding;
-    
-    if (range < 0.02) {
+    final interval = _getNiceInterval(minY, maxY);
+
+    // Snap to interval grid with padding, so labels never overlap or appear redundant
+    final paddedMin = minY - range * 0.1;
+    final paddedMax = maxY + range * 0.1;
+    minY = (paddedMin / interval).floorToDouble() * interval;
+    maxY = (paddedMax / interval).ceilToDouble() * interval;
+
+    if (maxY - minY < interval * 2) {
       final center = (maxY + minY) / 2;
-      minY = center - 0.02;
-      maxY = center + 0.02;
+      minY = center - interval;
+      maxY = center + interval;
     }
 
     _currentMinY = minY;
     _currentMaxY = maxY;
     _maxIndex = fundSpots.length - 1;
 
-    final interval = _getNiceInterval(minY, maxY);
     final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
 
     final screenWidth = MediaQuery.of(context).size.width;
@@ -608,9 +735,16 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                '业绩走势',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '业绩走势',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildExportButton(isDark),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -619,7 +753,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '$rangeName涨跌幅 ${rangeReturn >= 0 ? '+' : ''}${rangeReturn.toStringAsFixed(2)}%',
+                  '${_useCustomRange ? '自定义区间' : rangeName}涨跌幅 ${rangeReturn >= 0 ? '+' : ''}${rangeReturn.toStringAsFixed(2)}%${_useCustomRange && _customStartDate != null && _customEndDate != null ? ' [${_customEndDate!.difference(_customStartDate!).inDays}天]' : ''}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -636,7 +770,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _buildGlassButton(
                   label: _rangeLabels[key]!,
-                  isSelected: _selectedRange == key,
+                  isSelected: _selectedRange == key && !_useCustomRange,
                   onTap: () => _onRangeChanged(key),
                   isDark: isDark,
                 ),
@@ -650,19 +784,40 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _buildGlassButton(
                   label: _rangeLabels[key]!,
-                  isSelected: _selectedRange == key,
+                  isSelected: _selectedRange == key && !_useCustomRange,
                   onTap: () => _onRangeChanged(key),
                   isDark: isDark,
                 ),
               ),
             )).toList(),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          _buildCustomDateRow(isDark),
+          const SizedBox(height: 12),
           RepaintBoundary(
             key: _chartContainerKey,
-            child: SizedBox(
-              height: 240,
-              child: MouseRegion(
+            child: Container(
+              color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _useCustomRange && _customStartDate != null && _customEndDate != null
+                          ? '${_customStartDate!.year}/${_customStartDate!.month.toString().padLeft(2, '0')}/${_customStartDate!.day.toString().padLeft(2, '0')} - ${_customEndDate!.year}/${_customEndDate!.month.toString().padLeft(2, '0')}/${_customEndDate!.day.toString().padLeft(2, '0')} 期间业绩走势'
+                          : '${_rangeLabels[_selectedRange] ?? ''}业绩走势',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? CupertinoColors.white : const Color(0xFF1C1C1E),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 240,
+                    child: MouseRegion(
                 onExit: (_) => _clearHover(),
                 child: Listener(
                   onPointerDown: _handlePointerEvent,
@@ -732,7 +887,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               ),
                             ),
                             rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
+                              sideTitles: SideTitles(showTitles: false, reservedSize: 38),
                             ),
                             topTitles: const AxisTitles(
                               sideTitles: SideTitles(showTitles: false),
@@ -923,42 +1078,65 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               ),
             ),
           ),
-        ),
-          const SizedBox(height: 12),
-          ValueListenableBuilder<int>(
+                const SizedBox(height: 12),
+                ValueListenableBuilder<int>(
             valueListenable: _hoverIndexNotifier,
             builder: (context, hoverIndex, child) {
               final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
-              
-              return Column(
-                children: [
+              final exporting = _exporting;
+
+              final toggleHs300 = exporting ? null : _toggleHs300;
+              final toggleZZ500 = exporting ? null : _toggleZZ500;
+              final toggleZZ1000 = exporting ? null : _toggleZZ1000;
+              final toggleAvg = exporting ? null : _toggleAverage;
+
+              final showHs300 = exporting ? _showHs300 : true;
+              final showZZ500 = exporting ? _showZZ500 : true;
+              final showZZ1000 = exporting ? _showZZ1000 : true;
+              final showAvg = exporting ? _showAverage : isShortRange;
+              final showCustom = exporting ? _showCustomFund : true;
+
+              final allItems = <Widget>[
+                _buildLegendItemWithValue(
+                  widget.fundCode != null ? '本基金(${widget.fundCode})' : '本基金',
+                  fundLineColor,
+                  exporting ? _getPeriodEndFundReturn() : _getHoverFundReturn(),
+                  isDark,
+                  null,
+                  forceShowValue: exporting,
+                ),
+                if (showHs300)
+                  _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, exporting ? _getPeriodEndHsReturn() : _getHoverHsReturn(), isDark, toggleHs300, forceShowValue: exporting),
+                if (showZZ500)
+                  _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), exporting ? _getPeriodEndZZ500Return() : _getHoverZZ500Return(), isDark, toggleZZ500, forceShowValue: exporting),
+                if (showZZ1000)
+                  _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), exporting ? _getPeriodEndZZ1000Return() : _getHoverZZ1000Return(), isDark, toggleZZ1000, forceShowValue: exporting),
+                if (showCustom)
+                  _buildCustomFundLegendItem(isDark, showEye: !exporting, forceShowValue: exporting),
+                if (showAvg)
+                  _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, exporting ? _getPeriodEndAvgReturn() : _getHoverAvgReturn(), isDark, toggleAvg, forceShowValue: exporting),
+              ];
+
+              final rows = <Widget>[];
+              for (int i = 0; i < allItems.length; i += 3) {
+                final end = (i + 3).clamp(0, allItems.length);
+                rows.add(
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildLegendItemWithValue(
-                        widget.fundCode != null ? '本基金(${widget.fundCode})' : '本基金',
-                        fundLineColor,
-                        _getHoverFundReturn(),
-                        isDark,
-                        null,
-                      ),
-                      _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, _getHoverHsReturn(), isDark, _toggleHs300),
-                      _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), _getHoverZZ500Return(), isDark, _toggleZZ500),
-                    ],
+                    children: allItems.sublist(i, end),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), _getHoverZZ1000Return(), isDark, _toggleZZ1000),
-                      _buildCustomFundLegendItem(isDark),
-                      if (isShortRange)
-                        _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, _getHoverAvgReturn(), isDark, _toggleAverage),
-                    ],
-                  ),
-                ],
-              );
+                );
+                if (end < allItems.length) {
+                  rows.add(const SizedBox(height: 8));
+                }
+              }
+
+              return Column(children: rows);
             },
+                ),
+              ],
+            ),
+            ),
           ),
           const SizedBox(height: 8),
           Padding(
@@ -973,6 +1151,150 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildExportButton(bool isDark) {
+    final bgColor = isDark
+        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        : CupertinoColors.white.withValues(alpha: 0.85);
+
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: CupertinoButton(
+        onPressed: _exporting ? null : _exportChart,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        borderRadius: BorderRadius.circular(15),
+        child: _exporting
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CupertinoActivityIndicator(),
+              )
+            : Text(
+                '导出走势图',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.label,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildCustomDateRow(bool isDark) {
+    final isActive = _useCustomRange;
+
+    String startLabel;
+    if (_customStartDate != null) {
+      startLabel = '${_customStartDate!.year}-${_customStartDate!.month.toString().padLeft(2, '0')}-${_customStartDate!.day.toString().padLeft(2, '0')}';
+    } else {
+      startLabel = '开始日期';
+    }
+
+    String endLabel;
+    if (_customEndDate != null) {
+      endLabel = '${_customEndDate!.year}-${_customEndDate!.month.toString().padLeft(2, '0')}-${_customEndDate!.day.toString().padLeft(2, '0')}';
+    } else {
+      endLabel = '结束日期';
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: _buildGlassButton(
+              label: startLabel,
+              isSelected: isActive,
+              onTap: () => _showDatePickerAndApply(isStart: true),
+              isDark: isDark,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: _buildGlassButton(
+              label: endLabel,
+              isSelected: isActive,
+              onTap: () => _showDatePickerAndApply(isStart: false),
+              isDark: isDark,
+            ),
+          ),
+        ),
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0.0, end: _useCustomRange ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          builder: (context, value, child) {
+            return Padding(
+              padding: EdgeInsets.only(left: 4.0 * value),
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: value.clamp(0.0, 1.0),
+                  child: Opacity(
+                    opacity: value.clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                ),
+              ),
+            );
+          },
+          child: _buildClearButton(isDark),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClearButton(bool isDark) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _useCustomRange = false;
+          _customStartDate = null;
+          _customEndDate = null;
+          _selectedRange = '3m';
+          _updateSliceAndNormalize();
+          _hoverIndexNotifier.value = -1;
+          _dotPositionNotifier.value = null;
+        });
+      },
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+              : CupertinoColors.white.withValues(alpha: 0.85),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          CupertinoIcons.xmark,
+          size: 14,
+          color: isDark ? CupertinoColors.white : CupertinoColors.label,
+        ),
       ),
     );
   }
@@ -1015,8 +1337,8 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  Widget _buildLegendItemWithValue(String label, Color color, double value, bool isDark, VoidCallback? onToggle) {
-    final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
+  Widget _buildLegendItemWithValue(String label, Color color, double value, bool isDark, VoidCallback? onToggle, {bool forceShowValue = false}) {
+    final valueStr = (value != 0 || forceShowValue) ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
     final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
     return GestureDetector(
       onTap: onToggle,
@@ -1057,12 +1379,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     return CupertinoIcons.eye;
   }
 
-  Widget _buildCustomFundLegendItem(bool isDark) {
-    final value = _getHoverCustomFundReturn();
-    final valueStr = value != 0 ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
+  Widget _buildCustomFundLegendItem(bool isDark, {bool showEye = true, bool forceShowValue = false}) {
+    final value = forceShowValue ? _getPeriodEndCustomFundReturn() : _getHoverCustomFundReturn();
+    final valueStr = (value != 0 || forceShowValue) ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
     final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
     final displayLabel = widget.customFundCode != null ? '自定义(${widget.customFundCode})' : '自定义';
-    
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1078,15 +1400,17 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: _toggleCustomFund,
-              child: Icon(
-                _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
-                size: 14,
-                color: isDark ? CupertinoColors.white : CupertinoColors.black,
+            if (showEye) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: _toggleCustomFund,
+                child: Icon(
+                  _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+                  size: 14,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                ),
               ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: 2),
@@ -1146,5 +1470,172 @@ class _CrosshairPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CrosshairPainter oldDelegate) {
     return oldDelegate.crossX != crossX || oldDelegate.crossY != crossY;
+  }
+}
+
+class _DatePickerModal extends StatefulWidget {
+  final DateTime initialDate;
+  final String title;
+
+  const _DatePickerModal({
+    required this.initialDate,
+    required this.title,
+  });
+
+  @override
+  State<_DatePickerModal> createState() => _DatePickerModalState();
+}
+
+class _DatePickerModalState extends State<_DatePickerModal> {
+  late DateTime _tempDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempDate = widget.initialDate;
+  }
+
+  void _updateTempDate({int? year, int? month, int? day}) {
+    setState(() {
+      int y = year ?? _tempDate.year;
+      int m = month ?? _tempDate.month;
+      int d = day ?? _tempDate.day;
+      int maxDays = DateTime(y, m + 1, 0).day;
+      if (d > maxDays) d = maxDays;
+      _tempDate = DateTime(y, m, d);
+    });
+  }
+
+  Widget _buildPickerColumn({
+    required List<int> items,
+    required int selectedIndex,
+    required String suffix,
+    required ValueChanged<int> onChanged,
+    required Color bgColor,
+    required Color textColor,
+    required Widget selectionOverlay,
+  }) {
+    return Expanded(
+      child: CupertinoPicker(
+        scrollController: FixedExtentScrollController(initialItem: selectedIndex.clamp(0, items.length - 1)),
+        itemExtent: 36,
+        backgroundColor: bgColor,
+        selectionOverlay: selectionOverlay,
+        onSelectedItemChanged: onChanged,
+        children: items.map((item) => Center(
+          child: Text(
+            '$item$suffix',
+            style: TextStyle(fontSize: 18, color: textColor),
+          ),
+        )).toList(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final maxDay = DateTime(_tempDate.year, _tempDate.month + 1, 0).day;
+    final days = List.generate(maxDay, (i) => i + 1);
+
+    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
+      background: isDarkMode
+          ? CupertinoColors.white.withValues(alpha: 0.05)
+          : CupertinoColors.black.withValues(alpha: 0.03),
+    );
+
+    final yearIndex = years.indexOf(_tempDate.year);
+
+    return CupertinoPopupSurface(
+      child: Container(
+        height: 310,
+        decoration: BoxDecoration(
+          color: panelBgColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Text(
+              widget.title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  _buildPickerColumn(
+                    items: years,
+                    selectedIndex: yearIndex >= 0 ? yearIndex : 0,
+                    suffix: '年',
+                    onChanged: (i) => _updateTempDate(year: years[i]),
+                    bgColor: panelBgColor,
+                    textColor: textColor,
+                    selectionOverlay: selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    items: months,
+                    selectedIndex: _tempDate.month - 1,
+                    suffix: '月',
+                    onChanged: (i) => _updateTempDate(month: i + 1),
+                    bgColor: panelBgColor,
+                    textColor: textColor,
+                    selectionOverlay: selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    items: days,
+                    selectedIndex: _tempDate.day - 1,
+                    suffix: '日',
+                    onChanged: (i) => _updateTempDate(day: i + 1),
+                    bgColor: panelBgColor,
+                    textColor: textColor,
+                    selectionOverlay: selectionOverlay,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              height: 0.5,
+              color: isDarkMode
+                  ? CupertinoColors.separator
+                  : CupertinoColors.opaqueSeparator,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GlassButton(
+                    label: '取消',
+                    onPressed: () => Navigator.pop(context),
+                    isPrimary: false,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
+                  const SizedBox(width: 12),
+                  GlassButton(
+                    label: '完成',
+                    onPressed: () => Navigator.pop(context, _tempDate),
+                    isPrimary: true,
+                    height: 44,
+                    borderRadius: 30,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
