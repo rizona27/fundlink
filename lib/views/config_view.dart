@@ -201,7 +201,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildMenuItem(
           icon: CupertinoIcons.book,
           title: '映射索引',
-          subtitle: '管理映射关系',
+          subtitle: '管理客户与客户号映射关系',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -273,15 +273,15 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildSwitchItem(
           icon: CupertinoIcons.lock_fill,
           title: '隐私模式',
-          subtitle: '信息脱敏',
+          subtitle: '客户信息脱敏',
           value: _dataManager.isPrivacyMode,
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.togglePrivacyMode();
             if (mounted) {
               final toastMsg = value
-                  ? '隐私模式开启:显示用户名'
-                  : '隐私模式关闭:隐藏用户名';
+                  ? '隐私模式开启:显示客户名'
+                  : '隐私模式关闭:隐藏客户名';
               context.showToast(toastMsg);
               setState(() {});
             }
@@ -291,15 +291,15 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildSwitchItem(
           icon: CupertinoIcons.person_fill,
           title: '一览卡片',
-          subtitle: '客户显示',
+          subtitle: '是否显示客户',
           value: _dataManager.showHoldersOnSummaryCard,
           isDarkMode: isDarkMode,
           onChanged: (value) async {
             await _dataManager.setShowHoldersOnSummaryCard(value);
             if (mounted) {
               final toastMsg = value
-                  ? '基金卡片开启:显示持有人'
-                  : '基金卡片关闭:隐藏持有人';
+                  ? '基金卡片开启:显示客户'
+                  : '基金卡片关闭:隐藏客户';
               context.showToast(toastMsg);
               setState(() {});
             }
@@ -322,7 +322,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildMenuItem(
           icon: CupertinoIcons.plus_circle_fill,
           title: '新增持仓',
-          subtitle: '添加基金记录',
+          subtitle: '添加持仓记录',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -335,7 +335,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildMenuItem(
           icon: CupertinoIcons.pencil,
           title: '编辑持仓',
-          subtitle: '修改持仓信息',
+          subtitle: '修改持仓记录',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
@@ -348,7 +348,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildMenuItemWithBadge(
           icon: CupertinoIcons.clock_fill,
           title: '待确认交易',
-          subtitle: '查看和管理待确认交易',
+          subtitle: '待确认交易队列查看',
           isDarkMode: isDarkMode,
           badgeCount: _getPendingTransactionCount(),
           onTap: () {
@@ -361,8 +361,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         _buildDivider(isDarkMode),
         _buildMenuItem(
           icon: CupertinoIcons.trash,
-          title: '清空数据',
-          subtitle: '删除所有数据（不可恢复）',
+          title: '清空持仓数据',
+          subtitle: '删除所有持仓数据（不可恢复）',
           isDarkMode: isDarkMode,
           isDestructive: true,
           onTap: () => _showClearAllConfirmDialog(),
