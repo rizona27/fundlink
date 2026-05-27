@@ -70,6 +70,12 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   List<double> _sliceZZ1000Values = [];
   List<double> _sliceCustomFundValues = [];
 
+  int _firstHsSpotIndex = 0;
+  int _firstZZ500SpotIndex = 0;
+  int _firstZZ1000SpotIndex = 0;
+  int _firstCustomFundSpotIndex = 0;
+  int _firstAvgSpotIndex = 0;
+
   final ValueNotifier<int> _hoverIndexNotifier = ValueNotifier(-1);
   final ValueNotifier<double> _crosshairXNotifier = ValueNotifier(0);
   final ValueNotifier<double> _crosshairYNotifier = ValueNotifier(0);
@@ -279,6 +285,20 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         _sliceCustomFundValues.add(1.0);
       }
     }
+
+    int firstIndexWhereDataStarts(DateTime firstDataDate) {
+      if (!firstDataDate.isAfter(baseDate)) return 0;
+      for (int i = 0; i < _sliceDates.length; i++) {
+        if (!_sliceDates[i].isBefore(firstDataDate)) return i;
+      }
+      return _sliceDates.length;
+    }
+
+    _firstHsSpotIndex = widget.hsPoints.isNotEmpty ? firstIndexWhereDataStarts(widget.hsPoints.first.date) : 0;
+    _firstZZ500SpotIndex = widget.zz500Points != null && widget.zz500Points!.isNotEmpty ? firstIndexWhereDataStarts(widget.zz500Points!.first.date) : 0;
+    _firstZZ1000SpotIndex = widget.zz1000Points != null && widget.zz1000Points!.isNotEmpty ? firstIndexWhereDataStarts(widget.zz1000Points!.first.date) : 0;
+    _firstCustomFundSpotIndex = widget.customFundPoints != null && widget.customFundPoints!.isNotEmpty ? firstIndexWhereDataStarts(widget.customFundPoints!.first.date) : 0;
+    _firstAvgSpotIndex = widget.avgPoints.isNotEmpty ? firstIndexWhereDataStarts(widget.avgPoints.first.date) : 0;
   }
 
   double _calculateRangeReturn() {
@@ -373,47 +393,47 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     if (hoverIndex >= 0 && hoverIndex < _sliceFundValues.length) {
       return (_sliceFundValues[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceFundValues.isNotEmpty ? (_sliceFundValues.last - 1) * 100 : 0.0;
   }
 
   double _getHoverAvgReturn() {
     final hoverIndex = _hoverIndexNotifier.value;
-    if (_showAverage && hoverIndex >= 0 && hoverIndex < _sliceAvgValues.length) {
+    if (hoverIndex >= 0 && hoverIndex < _sliceAvgValues.length) {
       return (_sliceAvgValues[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceAvgValues.isNotEmpty ? (_sliceAvgValues.last - 1) * 100 : 0.0;
   }
 
   double _getHoverHsReturn() {
     final hoverIndex = _hoverIndexNotifier.value;
-    if (_showHs300 && hoverIndex >= 0 && hoverIndex < _sliceHsValues.length) {
+    if (hoverIndex >= 0 && hoverIndex < _sliceHsValues.length) {
       return (_sliceHsValues[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceHsValues.isNotEmpty ? (_sliceHsValues.last - 1) * 100 : 0.0;
   }
 
   double _getHoverZZ500Return() {
     final hoverIndex = _hoverIndexNotifier.value;
-    if (_showZZ500 && hoverIndex >= 0 && hoverIndex < _sliceZZ500Values.length) {
+    if (hoverIndex >= 0 && hoverIndex < _sliceZZ500Values.length) {
       return (_sliceZZ500Values[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceZZ500Values.isNotEmpty ? (_sliceZZ500Values.last - 1) * 100 : 0.0;
   }
 
   double _getHoverZZ1000Return() {
     final hoverIndex = _hoverIndexNotifier.value;
-    if (_showZZ1000 && hoverIndex >= 0 && hoverIndex < _sliceZZ1000Values.length) {
+    if (hoverIndex >= 0 && hoverIndex < _sliceZZ1000Values.length) {
       return (_sliceZZ1000Values[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceZZ1000Values.isNotEmpty ? (_sliceZZ1000Values.last - 1) * 100 : 0.0;
   }
 
   double _getHoverCustomFundReturn() {
     final hoverIndex = _hoverIndexNotifier.value;
-    if (_showCustomFund && hoverIndex >= 0 && hoverIndex < _sliceCustomFundValues.length) {
+    if (hoverIndex >= 0 && hoverIndex < _sliceCustomFundValues.length) {
       return (_sliceCustomFundValues[hoverIndex] - 1) * 100;
     }
-    return 0.0;
+    return _sliceCustomFundValues.isNotEmpty ? (_sliceCustomFundValues.last - 1) * 100 : 0.0;
   }
 
   double _getPeriodEndFundReturn() => _sliceFundValues.isNotEmpty ? (_sliceFundValues.last - 1) * 100 : 0.0;
@@ -662,16 +682,26 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
     final fundSpots = List.generate(transformedFundValues.length,
             (i) => FlSpot(i.toDouble(), transformedFundValues[i]));
-    final avgSpots = List.generate(transformedAvgValues.length,
-            (i) => FlSpot(i.toDouble(), transformedAvgValues[i]));
-    final hsSpots = List.generate(transformedHsValues.length,
-            (i) => FlSpot(i.toDouble(), transformedHsValues[i]));
-    final zz500Spots = List.generate(transformedZZ500Values.length,
-            (i) => FlSpot(i.toDouble(), transformedZZ500Values[i]));
-    final zz1000Spots = List.generate(transformedZZ1000Values.length,
-            (i) => FlSpot(i.toDouble(), transformedZZ1000Values[i]));
-    final customFundSpots = List.generate(transformedCustomFundValues.length,
-            (i) => FlSpot(i.toDouble(), transformedCustomFundValues[i]));
+    final avgSpots = _firstAvgSpotIndex < transformedAvgValues.length
+        ? List.generate(transformedAvgValues.length - _firstAvgSpotIndex,
+            (i) => FlSpot((_firstAvgSpotIndex + i).toDouble(), transformedAvgValues[_firstAvgSpotIndex + i]))
+        : <FlSpot>[];
+    final hsSpots = _firstHsSpotIndex < transformedHsValues.length
+        ? List.generate(transformedHsValues.length - _firstHsSpotIndex,
+            (i) => FlSpot((_firstHsSpotIndex + i).toDouble(), transformedHsValues[_firstHsSpotIndex + i]))
+        : <FlSpot>[];
+    final zz500Spots = _firstZZ500SpotIndex < transformedZZ500Values.length
+        ? List.generate(transformedZZ500Values.length - _firstZZ500SpotIndex,
+            (i) => FlSpot((_firstZZ500SpotIndex + i).toDouble(), transformedZZ500Values[_firstZZ500SpotIndex + i]))
+        : <FlSpot>[];
+    final zz1000Spots = _firstZZ1000SpotIndex < transformedZZ1000Values.length
+        ? List.generate(transformedZZ1000Values.length - _firstZZ1000SpotIndex,
+            (i) => FlSpot((_firstZZ1000SpotIndex + i).toDouble(), transformedZZ1000Values[_firstZZ1000SpotIndex + i]))
+        : <FlSpot>[];
+    final customFundSpots = _firstCustomFundSpotIndex < transformedCustomFundValues.length
+        ? List.generate(transformedCustomFundValues.length - _firstCustomFundSpotIndex,
+            (i) => FlSpot((_firstCustomFundSpotIndex + i).toDouble(), transformedCustomFundValues[_firstCustomFundSpotIndex + i]))
+        : <FlSpot>[];
 
     double minY = transformedFundValues.reduce((a, b) => a < b ? a : b);
     double maxY = transformedFundValues.reduce((a, b) => a > b ? a : b);
@@ -968,7 +998,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                                 applyCutOffY: true,
                               ),
                             ),
-                            if (_showAverage && avgSpots.isNotEmpty)
+                            if (_showAverage && avgSpots.isNotEmpty && (_useCustomRange || !['1y', '3y', 'all'].contains(_selectedRange)))
                               LineChartBarData(
                                 spots: avgSpots,
                                 isCurved: true,
@@ -1157,14 +1187,17 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               (_showZZ500 ? visibleItems : hiddenItems).add(_legendOpacified(_showZZ500, zz500Item));
               (_showCustomFund ? visibleItems : hiddenItems).add(_legendOpacified(_showCustomFund, customFundItem));
               (_showZZ1000 ? visibleItems : hiddenItems).add(_legendOpacified(_showZZ1000, zz1000Item));
-              (_showAverage ? visibleItems : hiddenItems).add(_legendOpacified(_showAverage, avgItem));
+              final showAvg = _useCustomRange || !['1y', '3y', 'all'].contains(_selectedRange);
+              if (showAvg) {
+                (_showAverage ? visibleItems : hiddenItems).add(_legendOpacified(_showAverage, avgItem));
+              }
 
               final exportOnlyVisible = <Widget>[fundItem];
               if (_showHs300) exportOnlyVisible.add(hs300Item);
               if (_showZZ500) exportOnlyVisible.add(zz500Item);
               if (_showCustomFund) exportOnlyVisible.add(customFundItem);
               if (_showZZ1000) exportOnlyVisible.add(zz1000Item);
-              if (_showAverage) exportOnlyVisible.add(avgItem);
+              if (_showAverage && showAvg) exportOnlyVisible.add(avgItem);
 
               final allItems = capturing ? exportOnlyVisible : [...visibleItems, ...hiddenItems];
 
