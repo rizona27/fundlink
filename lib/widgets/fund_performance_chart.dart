@@ -1256,7 +1256,27 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 }
               }
 
-              return Column(children: rows);
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.05),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Column(
+                  key: ValueKey('$_showHs300 $_showZZ500 $_showZZ1000 $_showCustomFund $_showAverage'),
+                  children: rows,
+                ),
+              );
             },
                 ),
               ],

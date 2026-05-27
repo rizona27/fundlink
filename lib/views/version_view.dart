@@ -14,7 +14,7 @@ import '../constants/app_constants.dart';
 String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
-  'v1.3.5 - 新增业绩走势图片导出及自定义区间测算'
+  'v1.3.5 - 新增业绩走势图片导出及自定义区间测算',
   'v1.3.4 - 新增文件分享导入，优化模板和导入格式',
   'v1.3.3 - 优化Toast提示与主题的适配',
   'v1.3.2 - 优化持仓置顶/回滚顶部按钮，重构日志/设置菜单',
