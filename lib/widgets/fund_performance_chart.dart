@@ -105,7 +105,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.fundPoints != widget.fundPoints ||
         oldWidget.avgPoints != widget.avgPoints ||
-        oldWidget.hsPoints != widget.hsPoints) {
+        oldWidget.hsPoints != widget.hsPoints ||
+        oldWidget.zz500Points != widget.zz500Points ||
+        oldWidget.zz1000Points != widget.zz1000Points ||
+        oldWidget.customFundPoints != widget.customFundPoints) {
       _updateSliceAndNormalize();
     }
   }
@@ -573,11 +576,39 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         ? (_customStartDate ?? now.subtract(const Duration(days: 90)))
         : (_customEndDate ?? now);
 
+    if (widget.fundPoints.isEmpty) return;
+
+    final earliestDate = widget.fundPoints.first.date;
+    final latestDate = widget.fundPoints.last.date;
+    final latestMinusOne = latestDate.subtract(const Duration(days: 1));
+
+    final DateTime minDate;
+    final DateTime maxDate;
+    if (isStart) {
+      minDate = earliestDate;
+      maxDate = latestMinusOne.isAfter(earliestDate) ? latestMinusOne : earliestDate;
+    } else {
+      minDate = _customStartDate != null && _customStartDate!.isAfter(earliestDate)
+          ? _customStartDate!
+          : earliestDate;
+      maxDate = latestDate;
+    }
+
+    DateTime clampDate(DateTime d, DateTime min, DateTime max) {
+      if (d.isBefore(min)) return min;
+      if (d.isAfter(max)) return max;
+      return d;
+    }
+
+    final clampedInitial = clampDate(initialDate, minDate, maxDate);
+
     final picked = await showCupertinoModalPopup<DateTime>(
       context: context,
       builder: (ctx) => _DatePickerModal(
-        initialDate: initialDate,
+        initialDate: clampedInitial,
         title: isStart ? '选择开始日期' : '选择结束日期',
+        minDate: minDate,
+        maxDate: maxDate,
       ),
     );
 
@@ -1104,36 +1135,91 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                 return Opacity(opacity: eyeOpen ? 1.0 : 0.0, child: child);
               }
 
-              final allItems = <Widget>[
-                _buildLegendItemWithValue(
-                  widget.fundCode != null ? '本基金(${widget.fundCode})' : '本基金',
-                  fundLineColor,
-                  capturing ? _getPeriodEndFundReturn() : _getHoverFundReturn(),
-                  isDark,
-                  null,
-                  forceShowValue: capturing,
-                ),
-                _legendOpacified(_showHs300, _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, capturing ? _getPeriodEndHsReturn() : _getHoverHsReturn(), isDark, toggleHs300, forceShowValue: capturing)),
-                _legendOpacified(_showZZ500, _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), capturing ? _getPeriodEndZZ500Return() : _getHoverZZ500Return(), isDark, toggleZZ500, forceShowValue: capturing)),
-                _legendOpacified(_showZZ1000, _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), capturing ? _getPeriodEndZZ1000Return() : _getHoverZZ1000Return(), isDark, toggleZZ1000, forceShowValue: capturing)),
-                _legendOpacified(_showCustomFund, _buildCustomFundLegendItem(isDark, showEye: !capturing, forceShowValue: capturing)),
-                _legendOpacified(_showAverage, _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, capturing ? _getPeriodEndAvgReturn() : _getHoverAvgReturn(), isDark, toggleAvg, forceShowValue: capturing)),
-              ];
+              final fundItem = _buildLegendItemWithValue(
+                '本基金',
+                fundLineColor,
+                capturing ? _getPeriodEndFundReturn() : _getHoverFundReturn(),
+                isDark,
+                null,
+                forceShowValue: capturing,
+                visible: true,
+              );
+              final hs300Item = _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, capturing ? _getPeriodEndHsReturn() : _getHoverHsReturn(), isDark, toggleHs300, forceShowValue: capturing, visible: _showHs300);
+              final zz500Item = _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), capturing ? _getPeriodEndZZ500Return() : _getHoverZZ500Return(), isDark, toggleZZ500, forceShowValue: capturing, visible: _showZZ500);
+              final zz1000Item = _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), capturing ? _getPeriodEndZZ1000Return() : _getHoverZZ1000Return(), isDark, toggleZZ1000, forceShowValue: capturing, visible: _showZZ1000);
+              final customFundItem = _buildCustomFundLegendItem(isDark, forceShowValue: capturing, visible: _showCustomFund);
+              final avgItem = _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, capturing ? _getPeriodEndAvgReturn() : _getHoverAvgReturn(), isDark, toggleAvg, forceShowValue: capturing, visible: _showAverage);
+
+              final visibleItems = <Widget>[];
+              final hiddenItems = <Widget>[];
+              visibleItems.add(fundItem);
+              (_showHs300 ? visibleItems : hiddenItems).add(_legendOpacified(_showHs300, hs300Item));
+              (_showZZ500 ? visibleItems : hiddenItems).add(_legendOpacified(_showZZ500, zz500Item));
+              (_showCustomFund ? visibleItems : hiddenItems).add(_legendOpacified(_showCustomFund, customFundItem));
+              (_showZZ1000 ? visibleItems : hiddenItems).add(_legendOpacified(_showZZ1000, zz1000Item));
+              (_showAverage ? visibleItems : hiddenItems).add(_legendOpacified(_showAverage, avgItem));
+
+              final exportOnlyVisible = <Widget>[fundItem];
+              if (_showHs300) exportOnlyVisible.add(hs300Item);
+              if (_showZZ500) exportOnlyVisible.add(zz500Item);
+              if (_showCustomFund) exportOnlyVisible.add(customFundItem);
+              if (_showZZ1000) exportOnlyVisible.add(zz1000Item);
+              if (_showAverage) exportOnlyVisible.add(avgItem);
+
+              final allItems = capturing ? exportOnlyVisible : [...visibleItems, ...hiddenItems];
 
               final rows = <Widget>[];
-              for (int i = 0; i < allItems.length; i += 3) {
-                final end = (i + 3).clamp(0, allItems.length);
-                final rowItems = allItems.sublist(i, end);
-                rows.add(
-                  Row(
-                    mainAxisAlignment: rowItems.length == 3
-                        ? MainAxisAlignment.spaceEvenly
-                        : MainAxisAlignment.start,
-                    children: rowItems,
-                  ),
-                );
-                if (end < allItems.length) {
+              if (capturing) {
+                final count = allItems.length;
+                if (count <= 3) {
+                  rows.add(Row(
+                    children: List.generate(count, (i) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Center(child: allItems[i]),
+                      ),
+                    )),
+                  ));
+                } else {
+                  final firstRow = allItems.sublist(0, 3);
+                  final secondRow = allItems.sublist(3);
+                  rows.add(Row(
+                    children: List.generate(3, (i) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Center(child: firstRow[i]),
+                      ),
+                    )),
+                  ));
                   rows.add(const SizedBox(height: 8));
+                  rows.add(Row(
+                    children: List.generate(3, (i) => Expanded(
+                      child: i < secondRow.length
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Center(child: secondRow[i]),
+                            )
+                          : const SizedBox.shrink(),
+                    )),
+                  ));
+                }
+              } else {
+                for (int i = 0; i < allItems.length; i += 3) {
+                  final end = (i + 3).clamp(0, allItems.length);
+                  final rowItems = allItems.sublist(i, end);
+                  rows.add(Row(
+                    children: List.generate(3, (col) => Expanded(
+                      child: col < rowItems.length
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Center(child: rowItems[col]),
+                            )
+                          : const SizedBox.shrink(),
+                    )),
+                  ));
+                  if (end < allItems.length) {
+                    rows.add(const SizedBox(height: 8));
+                  }
                 }
               }
 
@@ -1287,7 +1373,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           color: isDark
               ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
               : CupertinoColors.white.withValues(alpha: 0.85),
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: CupertinoColors.systemRed.withOpacity(isDark ? 0.5 : 0.7),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
@@ -1296,10 +1385,10 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
             ),
           ],
         ),
-        child: Icon(
+        child: const Icon(
           CupertinoIcons.xmark,
           size: 14,
-          color: isDark ? CupertinoColors.white : CupertinoColors.label,
+          color: CupertinoColors.systemRed,
         ),
       ),
     );
@@ -1343,27 +1432,44 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  Widget _buildLegendItemWithValue(String label, Color color, double value, bool isDark, VoidCallback? onToggle, {bool forceShowValue = false}) {
+  Widget _buildLegendItemWithValue(String label, Color color, double value, bool isDark, VoidCallback? onToggle, {bool forceShowValue = false, bool visible = true}) {
     final valueStr = (value != 0 || forceShowValue) ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
     final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
+    final isOn = visible;
+
+    final colorBox = GestureDetector(
+      onTap: onToggle,
+      child: Container(
+        width: 16, height: 16,
+        decoration: BoxDecoration(
+          color: isOn ? color : Colors.transparent,
+          border: Border.all(
+            color: isOn ? color : (isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3),
+            width: isOn ? 0 : 1,
+          ),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: isOn ? null : Icon(
+          CupertinoIcons.xmark,
+          size: 12,
+          color: isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
+
     return GestureDetector(
       onTap: onToggle,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(width: 12, height: 12, color: color),
+              colorBox,
               const SizedBox(width: 4),
-              Text(label, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
-              if (onToggle != null) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  _getEyeIconState(onToggle),
-                  size: 14,
-                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                ),
-              ],
+              Flexible(
+                child: Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+              ),
             ],
           ),
           const SizedBox(height: 2),
@@ -1376,47 +1482,45 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     );
   }
 
-  IconData _getEyeIconState(VoidCallback toggle) {
-    if (toggle == _toggleAverage) return _showAverage ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
-    if (toggle == _toggleHs300) return _showHs300 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
-    if (toggle == _toggleZZ500) return _showZZ500 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
-    if (toggle == _toggleZZ1000) return _showZZ1000 ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
-    if (toggle == _toggleCustomFund) return _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash;
-    return CupertinoIcons.eye;
-  }
-
-  Widget _buildCustomFundLegendItem(bool isDark, {bool showEye = true, bool forceShowValue = false}) {
+  Widget _buildCustomFundLegendItem(bool isDark, {bool forceShowValue = false, bool visible = true}) {
     final value = forceShowValue ? _getPeriodEndCustomFundReturn() : _getHoverCustomFundReturn();
     final valueStr = (value != 0 || forceShowValue) ? '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%' : '--';
     final valueColor = value >= 0 ? CupertinoColors.systemRed : CupertinoColors.systemGreen;
     final displayLabel = widget.customFundCode != null ? '自定义(${widget.customFundCode})' : '自定义';
+    final isOn = visible;
+
+    final colorBox = GestureDetector(
+      onTap: _toggleCustomFund,
+      child: Container(
+        width: 16, height: 16,
+        decoration: BoxDecoration(
+          color: isOn ? const Color(0xFF00BCD4) : Colors.transparent,
+          border: Border.all(
+            color: isOn ? const Color(0xFF00BCD4) : (isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3),
+            width: isOn ? 0 : 1,
+          ),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: isOn ? null : Icon(
+          CupertinoIcons.xmark,
+          size: 12,
+          color: isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3,
+        ),
+      ),
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            colorBox,
+            const SizedBox(width: 4),
             GestureDetector(
               onTap: widget.onCustomFundConfig,
-              child: Row(
-                children: [
-                  Container(width: 12, height: 12, color: const Color(0xFF00BCD4)),
-                  const SizedBox(width: 4),
-                  Text(displayLabel, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
-                ],
-              ),
+              child: Text(displayLabel, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
             ),
-            if (showEye) ...[
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: _toggleCustomFund,
-                child: Icon(
-                  _showCustomFund ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
-                  size: 14,
-                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                ),
-              ),
-            ],
           ],
         ),
         const SizedBox(height: 2),
@@ -1482,10 +1586,14 @@ class _CrosshairPainter extends CustomPainter {
 class _DatePickerModal extends StatefulWidget {
   final DateTime initialDate;
   final String title;
+  final DateTime? minDate;
+  final DateTime? maxDate;
 
   const _DatePickerModal({
     required this.initialDate,
     required this.title,
+    this.minDate,
+    this.maxDate,
   });
 
   @override
@@ -1495,20 +1603,29 @@ class _DatePickerModal extends StatefulWidget {
 class _DatePickerModalState extends State<_DatePickerModal> {
   late DateTime _tempDate;
 
+  DateTime get _minDate => widget.minDate ?? DateTime(2000);
+  DateTime get _maxDate => widget.maxDate ?? DateTime(2100);
+
+  DateTime _clamp(DateTime d) {
+    if (d.isBefore(_minDate)) return _minDate;
+    if (d.isAfter(_maxDate)) return _maxDate;
+    return d;
+  }
+
   @override
   void initState() {
     super.initState();
-    _tempDate = widget.initialDate;
+    _tempDate = _clamp(widget.initialDate);
   }
 
   void _updateTempDate({int? year, int? month, int? day}) {
+    int y = year ?? _tempDate.year;
+    int m = month ?? _tempDate.month;
+    int d = day ?? _tempDate.day;
+    int maxDays = DateTime(y, m + 1, 0).day;
+    if (d > maxDays) d = maxDays;
     setState(() {
-      int y = year ?? _tempDate.year;
-      int m = month ?? _tempDate.month;
-      int d = day ?? _tempDate.day;
-      int maxDays = DateTime(y, m + 1, 0).day;
-      if (d > maxDays) d = maxDays;
-      _tempDate = DateTime(y, m, d);
+      _tempDate = _clamp(DateTime(y, m, d));
     });
   }
 
@@ -1541,11 +1658,24 @@ class _DatePickerModalState extends State<_DatePickerModal> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final now = DateTime.now();
-    final years = List.generate(10, (i) => now.year - 5 + i);
-    final months = List.generate(12, (i) => i + 1);
-    final maxDay = DateTime(_tempDate.year, _tempDate.month + 1, 0).day;
-    final days = List.generate(maxDay, (i) => i + 1);
+    final minYear = _minDate.year;
+    final maxYear = _maxDate.year;
+    final years = List.generate(maxYear - minYear + 1, (i) => minYear + i);
+
+    int monthStart = 1;
+    int monthEnd = 12;
+    if (_tempDate.year == minYear) monthStart = _minDate.month;
+    if (_tempDate.year == maxYear) monthEnd = _maxDate.month;
+    if (monthStart > monthEnd) monthStart = monthEnd;
+    final months = List.generate(monthEnd - monthStart + 1, (i) => monthStart + i);
+
+    final maxDayInMonth = DateTime(_tempDate.year, _tempDate.month + 1, 0).day;
+    int dayStart = 1;
+    int dayEnd = maxDayInMonth;
+    if (_tempDate.year == minYear && _tempDate.month == _minDate.month) dayStart = _minDate.day;
+    if (_tempDate.year == maxYear && _tempDate.month == _maxDate.month) dayEnd = _maxDate.day;
+    if (dayStart > dayEnd) dayStart = dayEnd;
+    final days = List.generate(dayEnd - dayStart + 1, (i) => dayStart + i);
 
     final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
@@ -1556,6 +1686,8 @@ class _DatePickerModalState extends State<_DatePickerModal> {
     );
 
     final yearIndex = years.indexOf(_tempDate.year);
+    final monthIndex = months.indexOf(_tempDate.month);
+    final dayIndex = days.indexOf(_tempDate.day);
 
     return CupertinoPopupSurface(
       child: Container(
@@ -1591,18 +1723,18 @@ class _DatePickerModalState extends State<_DatePickerModal> {
                   ),
                   _buildPickerColumn(
                     items: months,
-                    selectedIndex: _tempDate.month - 1,
+                    selectedIndex: monthIndex >= 0 ? monthIndex : 0,
                     suffix: '月',
-                    onChanged: (i) => _updateTempDate(month: i + 1),
+                    onChanged: (i) => _updateTempDate(month: months[i]),
                     bgColor: panelBgColor,
                     textColor: textColor,
                     selectionOverlay: selectionOverlay,
                   ),
                   _buildPickerColumn(
                     items: days,
-                    selectedIndex: _tempDate.day - 1,
+                    selectedIndex: dayIndex >= 0 ? dayIndex : 0,
                     suffix: '日',
-                    onChanged: (i) => _updateTempDate(day: i + 1),
+                    onChanged: (i) => _updateTempDate(day: days[i]),
                     bgColor: panelBgColor,
                     textColor: textColor,
                     selectionOverlay: selectionOverlay,

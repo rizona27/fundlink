@@ -259,7 +259,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
             if (mounted) {
               setState(() {
                 _customFundCode = newCode;
-                _loading = true;
               });
             }
             
@@ -269,29 +268,13 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 if (mounted) {
                   setState(() {
                     _customFundPoints = customData..sort((a, b) => a.date.compareTo(b.date));
-                    _loading = false;
                   });
                 }
-                
-                if (mounted) {
-                  setState(() {});
-                }
-                
                 context.showToast('已更新');
               } else {
-                if (mounted) {
-                  setState(() {
-                    _loading = false;
-                  });
-                }
                 context.showToast('基金数据为空');
               }
             } catch (e) {
-              if (mounted) {
-                setState(() {
-                  _loading = false;
-                });
-              }
               context.showToast('加载失败');
             }
           },
