@@ -329,15 +329,15 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                                             : CupertinoColors.systemGrey.withOpacity(0.2),
                                       ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        StockCandleChart(
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) => SizedBox(
+                                        width: constraints.maxWidth,
+                                        child: StockCandleChart(
                                           key: _candleChartKey,
                                           stockCode: widget.stockCode,
                                           isDark: isDark,
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ],

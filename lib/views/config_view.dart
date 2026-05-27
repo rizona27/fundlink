@@ -16,6 +16,7 @@ import 'manage_holdings_view.dart';
 import '../services/client_mapping_service.dart';
 import 'mapping_dictionary_view.dart';
 import 'pending_transactions_view.dart';
+import 'permission_settings_view.dart';
 import 'version_view.dart';
 import '../widgets/toast.dart';
 
@@ -402,6 +403,19 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const LicenseView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.lock_shield_fill,
+          title: '权限许可',
+          subtitle: '查看和管理应用权限',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const PermissionSettingsView()),
             );
           },
         ),

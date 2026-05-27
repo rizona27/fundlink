@@ -101,24 +101,25 @@ lib/
 │   ├── memory_info_native.dart            # 原生平台内存信息实现（iOS/Android/macOS），使用 flutter_memory_info
 │   ├── memory_info_web.dart               # Web平台内存信息实现，使用 Performance API 或估算值
 │   ├── memory_monitor.dart                # 内存监控工具类，跨平台兼容，监控应用内存使用情况，防止内存泄漏
+│   ├── permission_gate.dart               # 权限门控工具，功能执行前检查权限状态，被拒时弹出设置引导对话框
 │   ├── smart_cache.dart                   # 智能 LRU 缓存工具类，支持 TTL 过期和容量限制，用于 API 数据缓存
 │   └── view_utils.dart                    # 视图工具类，提供日期格式化、数字格式化等常用 UI 辅助函数
 │
 ├── services/
 │   ├── china_trading_day_service.dart     # 中国交易日判断服务，智能识别法定节假日和调休补班，采用三层降级策略
 │   ├── client_mapping_service.dart        # 客户映射词典服务，管理客户号与客户名的映射关系，支持增删改查和双向查询
-│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、日志记录、隐私模式、收益计算
+│   ├── data_manager.dart                  # 数据管理核心，持仓增删改查、交易记录管理、批量导入、映射同步、日志记录、隐私模式、收益计算
 │   ├── database_helper.dart               # SQLite 数据库帮助类，跨平台数据库支持，提供 CRUD 操作和 Schema 管理
 │   ├── database_repository.dart           # 数据访问层封装，统一管理所有数据库操作，支持批量插入和高级查询
-│   ├── file_export_service.dart           # 文件导出服务，支持 CSV/Excel 格式
-│   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配能力
+│   ├── file_export_service.dart           # 文件导出服务，支持 CSV/Excel 格式导出持仓数据，含文件保存与分享功能
+│   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配、编码检测和完整备份解析能力
 │   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
 │   ├── http_client_provider.dart          # HTTP Client 提供者，全局共享 HTTP 客户端实例，实现连接池复用，提高网络请求效率
 │   ├── ui_state_service.dart              # UI 状态管理服务，使用 SQLite 存储 UI 状态（如展开/折叠状态）
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
 │
 ├── models/
-│   ├── client_mapping.dart                  # 客户映射模型，存储客户号与客户名的映射关系（ID、客户号、客户名、创建/更新时间）
+│   ├── client_mapping.dart                # 客户映射模型，存储客户号与客户名的映射关系（ID、客户号、客户名、创建/更新时间）
 │   ├── fund_holding.dart                  # 持仓数据模型，客户信息、基金代码/名称、累计投入、持有份额、平均成本、净值、收益
 │   ├── fund_info_cache.dart               # 基金信息缓存模型，存储基金代码、名称、当前净值等数据的本地缓存
 │   ├── log_entry.dart                     # 日志条目模型，消息内容、日志类型、时间戳
@@ -141,6 +142,7 @@ lib/
 │   ├── manage_holdings_view.dart          # 管理持仓页，编辑/删除/客户与基金持仓信息，支持批量编辑客户信息（姓名+客户号）
 │   ├── mapping_dictionary_view.dart       # 映射词典页，管理客户号与客户名的映射关系
 │   ├── pending_transactions_view.dart     # 待确认交易管理页，展示 T+1/T+2 待确认的交易列表
+│   ├── permission_settings_view.dart        # 权限许可页，列出应用所需权限及当前状态，支持点击重新授权或跳转系统设置
 │   ├── splash_view.dart                   # 开场动画页
 │   ├── summary_view.dart                  # 基金汇总页，按基金代码分组，显示基金详情及收益
 │   ├── top_performers_view.dart           # 收益排行页，按金额/收益/收益率/持有天数排序

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show File, Platform;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
@@ -7,6 +8,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/net_worth_point.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../utils/permission_gate.dart';
+import '../widgets/toast.dart';
 import 'glass_button.dart';
 
 class FundPerformanceChart extends StatefulWidget {
@@ -56,6 +60,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
   bool _exporting = false;
+  bool _capturing = false;
 
   List<DateTime> _sliceDates = [];
   List<double> _sliceFundValues = [];
@@ -507,56 +512,59 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     try {
       _hoverIndexNotifier.value = -1;
       _dotPositionNotifier.value = null;
-      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Trigger legend filter + period return values, then wait one frame
+      setState(() => _capturing = true);
+      final frameCompleter = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!frameCompleter.isCompleted) frameCompleter.complete();
+      });
+      await frameCompleter.future;
 
       final boundary = _chartContainerKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
-        _showExportResult(false, '截图失败');
+        if (mounted) context.showToast('截图失败');
         return;
       }
 
-      final image = await boundary.toImage(pixelRatio: 3.0);
+      // Start capture, then IMMEDIATELY restore in-app state
+      final imageFuture = boundary.toImage(pixelRatio: 3.0);
+      if (mounted) setState(() => _capturing = false);
+
+      final image = await imageFuture;
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
-        _showExportResult(false, '图片转换失败');
+        if (mounted) context.showToast('图片转换失败');
         return;
       }
 
       final pngBytes = byteData.buffer.asUint8List();
 
       if (Platform.isAndroid || Platform.isIOS) {
+        final ok = await checkPermission(
+          context: context,
+          permission: Permission.photos,
+          featureDescription: '相册/媒体',
+        );
+        if (!ok) return;
         await Gal.putImageBytes(pngBytes, album: 'FundLink');
-        _showExportResult(true, '已保存到相册');
+        if (mounted) context.showToast('走势图已保存到相册');
       } else {
         final dir = await getApplicationDocumentsDirectory();
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final filePath = '${dir.path}${Platform.pathSeparator}fund_performance_$timestamp.png';
         final file = File(filePath);
         await file.writeAsBytes(pngBytes);
-        _showExportResult(true, '已保存到 $filePath');
+        if (mounted) context.showToast('走势图已保存');
       }
     } catch (e) {
-      _showExportResult(false, '保存失败: $e');
+      if (mounted) context.showToast('保存失败: $e');
     } finally {
-      if (mounted) setState(() => _exporting = false);
+      if (mounted) setState(() {
+        _exporting = false;
+        _capturing = false;
+      });
     }
-  }
-
-  void _showExportResult(bool success, String message) {
-    if (!mounted) return;
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(success ? '导出成功' : '导出失败'),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _showDatePickerAndApply({required bool isStart}) async {
@@ -753,7 +761,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${_useCustomRange ? '自定义区间' : rangeName}涨跌幅 ${rangeReturn >= 0 ? '+' : ''}${rangeReturn.toStringAsFixed(2)}%${_useCustomRange && _customStartDate != null && _customEndDate != null ? ' [${_customEndDate!.difference(_customStartDate!).inDays}天]' : ''}',
+                  '${_useCustomRange ? '区间' : rangeName}涨跌幅 ${rangeReturn >= 0 ? '+' : ''}${rangeReturn.toStringAsFixed(2)}%${_useCustomRange && _customStartDate != null && _customEndDate != null ? ' [${_customEndDate!.difference(_customStartDate!).inDays}天]' : ''}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -1085,45 +1093,43 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
               final isShortRange = ['1m', '3m', '6m'].contains(_selectedRange);
               final exporting = _exporting;
 
-              final toggleHs300 = exporting ? null : _toggleHs300;
-              final toggleZZ500 = exporting ? null : _toggleZZ500;
-              final toggleZZ1000 = exporting ? null : _toggleZZ1000;
-              final toggleAvg = exporting ? null : _toggleAverage;
+              final capturing = _capturing;
+              final toggleHs300 = capturing ? null : _toggleHs300;
+              final toggleZZ500 = capturing ? null : _toggleZZ500;
+              final toggleZZ1000 = capturing ? null : _toggleZZ1000;
+              final toggleAvg = capturing ? null : _toggleAverage;
 
-              final showHs300 = exporting ? _showHs300 : true;
-              final showZZ500 = exporting ? _showZZ500 : true;
-              final showZZ1000 = exporting ? _showZZ1000 : true;
-              final showAvg = exporting ? _showAverage : isShortRange;
-              final showCustom = exporting ? _showCustomFund : true;
+              Widget _legendOpacified(bool eyeOpen, Widget child) {
+                if (!capturing) return child;
+                return Opacity(opacity: eyeOpen ? 1.0 : 0.0, child: child);
+              }
 
               final allItems = <Widget>[
                 _buildLegendItemWithValue(
                   widget.fundCode != null ? '本基金(${widget.fundCode})' : '本基金',
                   fundLineColor,
-                  exporting ? _getPeriodEndFundReturn() : _getHoverFundReturn(),
+                  capturing ? _getPeriodEndFundReturn() : _getHoverFundReturn(),
                   isDark,
                   null,
-                  forceShowValue: exporting,
+                  forceShowValue: capturing,
                 ),
-                if (showHs300)
-                  _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, exporting ? _getPeriodEndHsReturn() : _getHoverHsReturn(), isDark, toggleHs300, forceShowValue: exporting),
-                if (showZZ500)
-                  _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), exporting ? _getPeriodEndZZ500Return() : _getHoverZZ500Return(), isDark, toggleZZ500, forceShowValue: exporting),
-                if (showZZ1000)
-                  _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), exporting ? _getPeriodEndZZ1000Return() : _getHoverZZ1000Return(), isDark, toggleZZ1000, forceShowValue: exporting),
-                if (showCustom)
-                  _buildCustomFundLegendItem(isDark, showEye: !exporting, forceShowValue: exporting),
-                if (showAvg)
-                  _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, exporting ? _getPeriodEndAvgReturn() : _getHoverAvgReturn(), isDark, toggleAvg, forceShowValue: exporting),
+                _legendOpacified(_showHs300, _buildLegendItemWithValue('沪深300', CupertinoColors.systemGrey, capturing ? _getPeriodEndHsReturn() : _getHoverHsReturn(), isDark, toggleHs300, forceShowValue: capturing)),
+                _legendOpacified(_showZZ500, _buildLegendItemWithValue('中证500', const Color(0xFFFF9800), capturing ? _getPeriodEndZZ500Return() : _getHoverZZ500Return(), isDark, toggleZZ500, forceShowValue: capturing)),
+                _legendOpacified(_showZZ1000, _buildLegendItemWithValue('中证1000', const Color(0xFF9C27B0), capturing ? _getPeriodEndZZ1000Return() : _getHoverZZ1000Return(), isDark, toggleZZ1000, forceShowValue: capturing)),
+                _legendOpacified(_showCustomFund, _buildCustomFundLegendItem(isDark, showEye: !capturing, forceShowValue: capturing)),
+                _legendOpacified(_showAverage, _buildLegendItemWithValue('同类平均', CupertinoColors.systemBlue, capturing ? _getPeriodEndAvgReturn() : _getHoverAvgReturn(), isDark, toggleAvg, forceShowValue: capturing)),
               ];
 
               final rows = <Widget>[];
               for (int i = 0; i < allItems.length; i += 3) {
                 final end = (i + 3).clamp(0, allItems.length);
+                final rowItems = allItems.sublist(i, end);
                 rows.add(
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: allItems.sublist(i, end),
+                    mainAxisAlignment: rowItems.length == 3
+                        ? MainAxisAlignment.spaceEvenly
+                        : MainAxisAlignment.start,
+                    children: rowItems,
                   ),
                 );
                 if (end < allItems.length) {

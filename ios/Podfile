@@ -40,6 +40,8 @@ post_install do |installer|
       # 解决 _symbol_aliasing.h 错误
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'LIBC_NO_LIBCRAP=1'
+        # 启用 permission_handler 权限模块
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_PHOTOS=1'
       
       # 设置 C 语言标准为 GNU99
       config.build_settings['GCC_C_LANGUAGE_STANDARD'] = 'gnu99'

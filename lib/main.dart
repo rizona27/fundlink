@@ -45,13 +45,10 @@ void main() async {
 
   _initShareReceiving();
 
-  final permissionsOk = await _requestPermissionsOnStart();
+  runApp(const MyApp());
 
-  if (permissionsOk) {
-    runApp(const MyApp());
-  } else {
-    runApp(const _PermissionDeniedApp());
-  }
+  // 权限将在启动画面结束后、主界面显示时以应用内对话框形式请求
+  _requestPermissionsDeferred();
 }
 
 void _initShareReceiving() {
@@ -128,22 +125,17 @@ Future<bool> _requestPermissionsOnStart() async {
 
   try {
     if (io.Platform.isAndroid) {
-      // 存储权限：API ≤32 弹窗，API ≥33 自动授予
       final storage = await Permission.storage.request();
       if (storage.isDenied || storage.isPermanentlyDenied) {
         debugPrint('[权限] 存储权限被拒绝');
         return false;
       }
-
-      // 相册权限：API ≥33 弹窗（READ_MEDIA_IMAGES），API <33 自动授予
       final photos = await Permission.photos.request();
       if (photos.isDenied || photos.isPermanentlyDenied) {
         debugPrint('[权限] 相册权限被拒绝');
         return false;
       }
     } else if (io.Platform.isIOS) {
-      // iOS: 存储由沙盒隐式授权（NSDocumentsFolderUsageDescription），无需弹窗。
-      // iOS: 相册权限
       final photos = await Permission.photos.request();
       if (photos.isDenied || photos.isPermanentlyDenied) {
         debugPrint('[权限] 相册权限被拒绝');
@@ -156,6 +148,17 @@ Future<bool> _requestPermissionsOnStart() async {
     ErrorHandler.handleError(e, context: '权限请求');
     return false;
   }
+}
+
+/// 延迟请求权限：等启动画面结束后直接弹出系统权限请求。
+/// 用户选择允许或拒绝均可继续使用应用。
+void _requestPermissionsDeferred() {
+  if (kIsWeb) return;
+
+  // 等待启动画面结束后再弹出系统权限请求
+  Future.delayed(const Duration(seconds: 6), () {
+    _requestPermissionsOnStart();
+  });
 }
 
 class MyApp extends StatefulWidget {

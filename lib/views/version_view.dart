@@ -479,7 +479,7 @@ class _VersionViewState extends State<VersionView> {
   }
 
   void _scheduleConnectivityCheck() {
-    _connectivityTimer = Timer(const Duration(seconds: 30), () {
+    _connectivityTimer = Timer(const Duration(seconds: 5), () {
       if (mounted) {
         _checkConnectivity();
         _hasCheckedConnectivity = true;

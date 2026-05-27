@@ -7,7 +7,8 @@ import 'package:excel/excel.dart' as excel;
 import 'package:fast_gbk/fast_gbk.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart' hide Permission;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
@@ -21,6 +22,7 @@ import '../services/file_import_service.dart';
 import '../services/fund_service.dart';
 import '../utils/error_handler.dart';
 import '../utils/input_formatters.dart';
+import '../utils/permission_gate.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
 
@@ -1504,6 +1506,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         html.Url.revokeObjectUrl(url);
         if (mounted) context.showToast('持仓模板已下载');
       } else {
+        if (Platform.isAndroid) {
+          final ok = await checkPermission(
+            context: context,
+            permission: Permission.storage,
+            featureDescription: '存储空间',
+          );
+          if (!ok) return;
+        }
         final savedPath = await FileSaver.instance.saveAs(
           name: 'FundLink-持仓模板',
           bytes: bytes,
@@ -1546,6 +1556,14 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         html.Url.revokeObjectUrl(url);
         if (mounted) context.showToast('映射模板已下载');
       } else {
+        if (Platform.isAndroid) {
+          final ok = await checkPermission(
+            context: context,
+            permission: Permission.storage,
+            featureDescription: '存储空间',
+          );
+          if (!ok) return;
+        }
         final savedPath = await FileSaver.instance.saveAs(
           name: 'FundLink-映射索引模板',
           bytes: bytes,
@@ -1565,6 +1583,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Future<void> _pickFile() async {
+    // 存储权限：现代系统文件选择器通常自动处理权限，
+    // 但旧版 Android 需要存储权限才能读取外部文件
+    if (Platform.isAndroid) {
+      final ok = await checkPermission(
+        context: context,
+        permission: Permission.storage,
+        featureDescription: '存储空间',
+      );
+      if (!ok) return;
+    }
+
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'xlsx', 'xls'],

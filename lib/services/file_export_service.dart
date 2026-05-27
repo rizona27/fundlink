@@ -10,10 +10,12 @@ import 'package:file_saver/file_saver.dart';
 import 'package:universal_html/html.dart' as html;
 
 import 'dart:io' as io;
+import 'package:permission_handler/permission_handler.dart';
 import '../models/fund_holding.dart';
 import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
+import '../utils/permission_gate.dart';
 import '../widgets/toast.dart';
 
 class FileExportService {
@@ -176,6 +178,16 @@ class FileExportService {
     } else {
       final nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
       final extension = fileName.split('.').last;
+
+      // 存储权限检查（旧版 Android 需要）
+      if (io.Platform.isAndroid) {
+        final ok = await checkPermission(
+          context: context,
+          permission: Permission.storage,
+          featureDescription: '存储空间',
+        );
+        if (!ok) return;
+      }
 
       try {
         final savedPath = await FileSaver.instance.saveAs(

@@ -103,65 +103,55 @@ class _FundDetailPageState extends State<FundDetailPage> {
       }
     }
 
-    if (mounted) setState(() => _loading = true);
+    // Show page immediately, load data progressively
+    if (!forceRefresh && _fundPoints.isNotEmpty) {
+      // We already have data; only refresh valuation in background
+      _refreshValuationOnly();
+      return;
+    }
+
+    if (mounted) setState(() => _loading = _fundPoints.isEmpty);
+
     try {
-      final rawTrend = await _fundService!.fetchNetWorthTrend(widget.holding.fundCode);
+      // Launch ALL API calls in parallel
+      final trendFuture = _fundService!.fetchNetWorthTrend(widget.holding.fundCode);
+      final benchmarkFuture = _fundService!.fetchBenchmarkData(widget.holding.fundCode);
+      final hs300Future = _fundService!.fetchNetWorthTrend('460300');
+      final zz500Future = _fundService!.fetchNetWorthTrend('004348');
+      final zz1000Future = _fundService!.fetchNetWorthTrend('011860');
+      final customFundFuture = _customFundCode.isNotEmpty
+          ? _fundService!.fetchNetWorthTrend(_customFundCode)
+          : Future.value(<NetWorthPoint>[]);
+      final holdingsFuture = _fundService!.fetchTopHoldingsFromHtml(widget.holding.fundCode).catchError((_) => <TopHolding>[]);
+      final valuationFuture = _fundService!.fetchRealtimeValuation(widget.holding.fundCode).catchError((_) => null);
+
+      // Await all in one batch
+      final results = await Future.wait([
+        trendFuture, benchmarkFuture,
+        hs300Future, zz500Future, zz1000Future, customFundFuture,
+        holdingsFuture, valuationFuture,
+      ]);
+
+      final rawTrend = results[0] as List<NetWorthPoint>;
       _fundPoints = List<NetWorthPoint>.from(rawTrend)
         ..sort((a, b) => a.date.compareTo(b.date));
       _cachedFundPointsWithChanges = null;
 
-      final benchmark = await _fundService!.fetchBenchmarkData(widget.holding.fundCode);
-      _avgPoints = (benchmark['average'] as List<NetWorthPoint>)
+      final benchmark = results[1] as Map<String, List<NetWorthPoint>>;
+      _avgPoints = (benchmark['average'] ?? <NetWorthPoint>[])
         ..sort((a, b) => a.date.compareTo(b.date));
-      _hsPoints = (benchmark['hs300'] as List<NetWorthPoint>)
+      _hsPoints = (results[2] as List<NetWorthPoint>)
         ..sort((a, b) => a.date.compareTo(b.date));
-
-      
-      final hs300Future = _fundService!.fetchNetWorthTrend('460300');
-      final zz500Future = _fundService!.fetchNetWorthTrend('004348');
-      final zz1000Future = _fundService!.fetchNetWorthTrend('011860');
-      final customFundFuture = _customFundCode.isNotEmpty 
-          ? _fundService!.fetchNetWorthTrend(_customFundCode) 
-          : Future.value(<NetWorthPoint>[]);
-      
-      final results = await Future.wait([
-        hs300Future.catchError((e) {
-          return <NetWorthPoint>[];
-        }),
-        zz500Future.catchError((e) {
-          return <NetWorthPoint>[];
-        }),
-        zz1000Future.catchError((e) {
-          return <NetWorthPoint>[];
-        }),
-        customFundFuture.catchError((e) {
-          return <NetWorthPoint>[];
-        }),
-      ]);
-      
-      _hsPoints = results[0]..sort((a, b) => a.date.compareTo(b.date));
-      _zz500Points = results[1]..sort((a, b) => a.date.compareTo(b.date));
-      _zz1000Points = results[2]..sort((a, b) => a.date.compareTo(b.date));
-      _customFundPoints = results[3]..sort((a, b) => a.date.compareTo(b.date));
-      
-      
-      if (_avgPoints.isNotEmpty) {
-      }
-      if (_hsPoints.isNotEmpty) {
-      }
-      if (_zz500Points != null && _zz500Points!.isNotEmpty) {
-      }
-      if (_zz1000Points != null && _zz1000Points!.isNotEmpty) {
-      }
-      if (_customFundPoints != null && _customFundPoints!.isNotEmpty) {
-      }
-
-      final holdings = await _fundService!.fetchTopHoldingsFromHtml(widget.holding.fundCode);
-      final valuation = await _fundService!.fetchRealtimeValuation(widget.holding.fundCode);
+      _zz500Points = (results[3] as List<NetWorthPoint>)
+        ..sort((a, b) => a.date.compareTo(b.date));
+      _zz1000Points = (results[4] as List<NetWorthPoint>)
+        ..sort((a, b) => a.date.compareTo(b.date));
+      _customFundPoints = (results[5] as List<NetWorthPoint>)
+        ..sort((a, b) => a.date.compareTo(b.date));
 
       setState(() {
-        _topHoldings = holdings;
-        _valuation = valuation;
+        _topHoldings = results[6] as List<TopHolding>;
+        _valuation = results[7] as Map<String, dynamic>?;
         _loading = false;
         _isDataCached = true;
         _lastFetchTime = DateTime.now();
