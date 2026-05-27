@@ -280,8 +280,8 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             await _dataManager.togglePrivacyMode();
             if (mounted) {
               final toastMsg = value
-                  ? '隐私模式开启:显示客户名'
-                  : '隐私模式关闭:隐藏客户名';
+                  ? '隐私模式开启:隐藏客户名'
+                  : '隐私模式关闭:显示客户名';
               context.showToast(toastMsg);
               setState(() {});
             }
