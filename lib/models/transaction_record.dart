@@ -213,35 +213,46 @@ class TransactionRecord {
       'amount': amount,
       'shares': shares,
       'nav': nav,
-      'fee_rate': 0.0,
-      'fee_amount': fee ?? 0.0,
+      'fee_rate': fee ?? 0.0,
       'trade_date': tradeDate.toIso8601String(),
-      'confirm_date': null,
+      'confirm_date': confirmDate?.toIso8601String(),
       'is_after_1500': isAfter1500 ? 1 : 0,
-      'status': isPending ? 'pending' : 'confirmed',
+      'status': status.name,
+      'confirmed_nav': confirmedNav,
+      'retry_count': retryCount,
+      'application_date': applicationDate?.toIso8601String(),
+      'frozen_shares': frozenShares,
       'remarks': remarks,
       'created_at': createdAt.toIso8601String(),
     };
   }
 
   factory TransactionRecord.fromMap(Map<String, dynamic> map) {
+    final statusStr = map['status'] as String?;
     return TransactionRecord(
-      id: map['id'] as String,
-      clientId: map['client_id'] as String? ?? '',
-      clientName: map['client_name'] as String? ?? '',
-      fundCode: map['fund_code'] as String? ?? '',
-      fundName: map['fund_name'] as String? ?? '',
+      id: map['id'] as String?,
+      clientId: (map['client_id'] as String?) ?? '',
+      clientName: (map['client_name'] as String?) ?? '',
+      fundCode: (map['fund_code'] as String?) ?? '',
+      fundName: (map['fund_name'] as String?) ?? '',
       type: TransactionTypeExtension.fromCode(map['type'] as String),
-      amount: (map['amount'] as num).toDouble(),
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       shares: (map['shares'] as num?)?.toDouble() ?? 0.0,
       tradeDate: DateTime.parse(map['trade_date'] as String),
       nav: map['nav'] != null ? (map['nav'] as num).toDouble() : null,
-      fee: map['fee_amount'] != null ? (map['fee_amount'] as num).toDouble() : null,
-      remarks: map['remarks'] as String? ?? '',
-      createdAt: DateTime.parse(map['created_at'] as String),
+      fee: (map['fee_rate'] as num?)?.toDouble(),
+      remarks: (map['remarks'] as String?) ?? '',
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
       isAfter1500: (map['is_after_1500'] as int?) == 1,
-      isPending: (map['status'] as String?) == 'pending',
+      isPending: statusStr == 'pending' || statusStr == 'submitted' || statusStr == 'pendingConfirm' || statusStr == 'pendingSubmit',
+      status: statusStr != null
+          ? TransactionStatus.values.firstWhere((e) => e.name == statusStr, orElse: () => TransactionStatus.submitted)
+          : TransactionStatus.submitted,
       confirmedNav: map['confirmed_nav'] != null ? (map['confirmed_nav'] as num).toDouble() : null,
+      retryCount: (map['retry_count'] as int?) ?? 0,
+      applicationDate: map['application_date'] != null ? DateTime.parse(map['application_date'] as String) : null,
+      confirmDate: map['confirm_date'] != null ? DateTime.parse(map['confirm_date'] as String) : null,
+      frozenShares: (map['frozen_shares'] as num?)?.toDouble(),
     );
   }
 

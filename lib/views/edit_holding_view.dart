@@ -667,10 +667,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
     final buyTransactions = _transactions
         .where((t) => t.type == TransactionType.buy)
         .toList()
-      ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
-    
-    final isFoundationBuy = buyTransactions.isNotEmpty && 
-                            tx.id == buyTransactions.first.id;
+      ..sort((a, b) {
+        final dateCmp = b.tradeDate.compareTo(a.tradeDate);
+        if (dateCmp != 0) return dateCmp;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+    final isFoundationBuy = buyTransactions.isNotEmpty &&
+                            tx.id == buyTransactions.last.id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -706,6 +710,21 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                   ),
                 ),
               ),
+              if (isFoundationBuy) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD60A).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.star_fill,
+                    size: 12,
+                    color: Color(0xFFFFD60A),
+                  ),
+                ),
+              ],
               if (tx.isPending) ...[
                 const SizedBox(width: 6),
                 Container(
@@ -1108,8 +1127,10 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                   return;
                                 }
                                 
+                                // Save parent context before dialog pop renders it invalid.
+                                final parentCtx = this.context;
                                 Navigator.pop(context);
-                                
+
                                 try {
                                   final updatedTx = tx.copyWith(
                                     amount: amount,
@@ -1120,9 +1141,13 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                   await _dataManager.updateTransaction(updatedTx);
 
                                   _loadTransactions();
-                                  context.showToast('修改成功');
+                                  if (parentCtx.mounted) {
+                                    parentCtx.showToast('修改成功');
+                                  }
                                 } catch (e) {
-                                  context.showToast('修改失败: $e');
+                                  if (parentCtx.mounted) {
+                                    parentCtx.showToast('修改失败: $e');
+                                  }
                                 }
                               },
                               isPrimary: true,

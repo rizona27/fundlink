@@ -22,6 +22,7 @@ class ManageHoldingsView extends StatefulWidget {
 
 class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTopMixin {
   late DataManager _dataManager;
+  bool _listenerRegistered = false;
 
   String _searchText = '';
   final Set<String> _expandedClients = {};
@@ -53,8 +54,16 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _dataManager = DataManagerProvider.of(context);
-    _dataManager.addListener(_onDataManagerChanged);
+    final newDm = DataManagerProvider.of(context);
+    if (_listenerRegistered && _dataManager != newDm) {
+      _dataManager.removeListener(_onDataManagerChanged);
+      _listenerRegistered = false;
+    }
+    _dataManager = newDm;
+    if (!_listenerRegistered) {
+      _dataManager.addListener(_onDataManagerChanged);
+      _listenerRegistered = true;
+    }
 
     final route = ModalRoute.of(context);
   }

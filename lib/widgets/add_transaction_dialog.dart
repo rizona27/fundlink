@@ -88,57 +88,19 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     _dataManager = DataManagerProvider.of(context);
     _updatePendingStatus().then((_) {
       if (mounted) {
-        _checkTimeAndSetNav();
-        _fetchCurrentNavIfNeeded(); 
+        _checkTimeHint();
+        _fetchNavByDate();
       }
     });
   }
 
-  Future<void> _fetchCurrentNavIfNeeded() async {
-    if (_isTodayTransaction) {
-      if (mounted) setState(() => _isFetchingNav = false);
-      return;
-    }
-    
-    if (mounted) setState(() => _isFetchingNav = true);
-    try { 
-      final fundService = FundService(_dataManager);
-      final fundInfo = await fundService.fetchFundInfo(widget.fundCode);
-      if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-        if (mounted) {
-          setState(() {
-            _navController.text = fundInfo['currentNav'].toStringAsFixed(4);
-          });
-        }
-      } else if (widget.currentNav != null && widget.currentNav! > 0) {
-        if (mounted) {
-          setState(() {
-            _navController.text = widget.currentNav!.toStringAsFixed(4);
-          });
-        }
-      }
-    } catch (e) {
-      if (widget.currentNav != null && widget.currentNav! > 0) {
-        if (mounted) {
-          setState(() {
-            _navController.text = widget.currentNav!.toStringAsFixed(4);
-          });
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isFetchingNav = false);
-      }
-    }
-  }
+  void _checkTimeHint() {
+    if (!mounted) return;
 
-  void _checkTimeAndSetNav() {
-    if (!mounted) return; 
-    
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
-    
+
     if (hour == 14 && minute >= 50) {
       setState(() {
         _timeHint = '即将收盘，注意区分15:00前后净值';
@@ -147,13 +109,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       setState(() {
         _timeHint = '刚过15:00，今日净值尚未更新';
       });
-    }
-
-    if (!_isTodayTransaction) {
-      if (widget.currentNav != null && widget.currentNav! > 0) {
-        _navController.text = widget.currentNav!.toStringAsFixed(4);
-      }
-    } else {
     }
   }
 
@@ -191,6 +146,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         return;
       }
       
+      if (feeRate <= -100) return; // Would cause division by zero
       final estimatedShares = amount / (1 + feeRate / 100) / nav;
       setState(() => _estimatedShares = estimatedShares > 0 ? estimatedShares : null);
       
@@ -235,7 +191,18 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           }
           _updatePendingStatus().then((_) {
             _fetchNavByDate().then((_) {
-              if (!_isTodayTransaction && mounted) {
+              if (_isTodayTransaction) {
+                // Switched to today: clear auto-calculated fields.
+                _estimatedShares = null;
+                _hasManuallyEditedShares = false;
+                _hasManuallyEditedAmount = false;
+                if (widget.type == TransactionType.buy) {
+                  _sharesController.clear();
+                } else {
+                  _amountController.clear();
+                }
+                if (mounted) setState(() {});
+              } else if (mounted) {
                 _calculateEstimated();
               }
             });
@@ -301,17 +268,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         }
       }
       
-      if (selectedPoint == null && widget.currentNav != null && widget.currentNav! > 0) {
-        if (mounted) {
-          setState(() {
-            _navController.text = widget.currentNav!.toStringAsFixed(4);
-          });
-          _calculateEstimated();
-        }
-        return;
-      }
-      
       if (selectedPoint == null) {
+        // No historical NAV found for the target date. Keep field empty so the
+        // user enters it manually, rather than silently falling back to latest.
         if (mounted) {
           setState(() {
             _navController.clear();
@@ -433,6 +392,19 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       return;
     }
 
+    // All transactions must be on or after the foundation (earliest buy) date.
+    final history = _dataManager.getTransactionHistory(widget.clientId, widget.fundCode);
+    final buyTxs = history.where((t) => t.type == TransactionType.buy).toList();
+    if (buyTxs.isNotEmpty) {
+      final foundationDate = buyTxs.map((t) => t.tradeDate).reduce((a, b) => a.isBefore(b) ? a : b);
+      final tradeDay = DateTime(_tradeDate.year, _tradeDate.month, _tradeDate.day);
+      final foundationDay = DateTime(foundationDate.year, foundationDate.month, foundationDate.day);
+      if (tradeDay.isBefore(foundationDay)) {
+        context.showToast('交易日期不能早于首次买入日期\n(${foundationDay.year}-${foundationDay.month.toString().padLeft(2, '0')}-${foundationDay.day.toString().padLeft(2, '0')})');
+        return;
+      }
+    }
+
     double? confirmedNav;
     
     if (isPending) {
@@ -473,7 +445,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       }
     } catch (e) {
       if (mounted) {
-        context.showToast('操作失败: $e');
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        context.showToast('操作失败: $msg');
       }
     } finally {
       if (mounted) {
@@ -901,7 +874,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       _buildInputField(
                         label: '确认份额',
                         controller: _sharesController,
-                        hint: '可手动修改',
+                        hint: _isTodayTransaction ? '待净值确认后自动计算' : '可手动修改',
                         suffix: '份',
                         onChanged: (value) {
                           setState(() => _hasManuallyEditedShares = true);
@@ -1021,7 +994,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       _buildInputField(
                         label: '确认金额',
                         controller: _amountController,
-                        hint: '可手动修改',
+                        hint: _isTodayTransaction ? '待净值确认后自动计算' : '可手动修改',
                         suffix: '元',
                         onChanged: (value) {
                           setState(() => _hasManuallyEditedAmount = true);

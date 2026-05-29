@@ -472,8 +472,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   String _getValuationDisplayText(FundHolding holding) {
     final cache = _dataManager.getValuation(holding.fundCode);
     if (cache != null) {
-      final gsz = cache['gsz'] as double;
-      final gszzl = cache['gszzl'] as double;
+      final gsz = (cache['gsz'] as num?)?.toDouble();
+      final gszzl = (cache['gszzl'] as num?)?.toDouble();
+      if (gsz == null || gszzl == null) return '--% (--)';
       return '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}% (${gsz.toStringAsFixed(4)})';
     }
     return '--% (--)';
@@ -941,43 +942,46 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         if (_sortKey == SortKey.latestNav) {
                           final cache = _dataManager.getValuation(fundCode);
                           if (cache != null) {
-                            final gsz = cache['gsz'] as double;
-                            final gszzl = cache['gszzl'] as double;
-                            final changeColor = _getChangeColor(gszzl);
-
-                            trailing = Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.2,
-                                    color: changeColor,
+                            final gsz = (cache['gsz'] as num?)?.toDouble();
+                            final gszzl = (cache['gszzl'] as num?)?.toDouble();
+                            if (gsz != null && gszzl != null) {
+                              final changeColor = _getChangeColor(gszzl);
+                              trailing = Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.2,
+                                      color: changeColor,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  ' (${gsz.toStringAsFixed(4)})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal,
-                                    height: 1.2,
-                                    color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                  Text(
+                                    ' (${gsz.toStringAsFixed(4)})',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.normal,
+                                      height: 1.2,
+                                      color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                                    ),
                                   ),
+                                ],
+                              );
+                            } else {
+                              trailing = Text(
+                                '--% (--)',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.2,
+                                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
                                 ),
-                              ],
-                            );
+                              );
+                            }
                           } else {
-                            trailing = Text(
-                              '--% (--)',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                height: 1.2,
-                                color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                              ),
-                            );
+                            trailing = const SizedBox.shrink();
                           }
                         } else {
                           final sortValue = _sortKey.getValue(first);

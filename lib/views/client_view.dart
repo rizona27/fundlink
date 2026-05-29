@@ -43,6 +43,7 @@ class ClientView extends StatefulWidget {
 
 class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, ScrollToTopMixin {
   late DataManager _dataManager;
+  bool _listenerRegistered = false;
   late FundService _fundService;
   String _searchText = '';
   final Set<String> _expandedClients = {};
@@ -179,9 +180,17 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _dataManager = DataManagerProvider.of(context);
+    final newDm = DataManagerProvider.of(context);
+    if (_listenerRegistered && _dataManager != newDm) {
+      _dataManager.removeListener(_onDataManagerChanged);
+      _listenerRegistered = false;
+    }
+    _dataManager = newDm;
+    if (!_listenerRegistered) {
+      _dataManager.addListener(_onDataManagerChanged);
+      _listenerRegistered = true;
+    }
     _fundService = FundService(_dataManager);
-    _dataManager.addListener(_onDataManagerChanged);
 
     Future.microtask(() {
       if (mounted) {

@@ -151,6 +151,18 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
   }
 
   Widget _buildTransactionCard(TransactionRecord tx, bool isDarkMode, Color textColor, Color secondaryTextColor) {
+    final buyTransactions = _transactions
+        .where((t) => t.type == TransactionType.buy)
+        .toList()
+      ..sort((a, b) {
+        final dateCmp = b.tradeDate.compareTo(a.tradeDate);
+        if (dateCmp != 0) return dateCmp;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+    final isFoundationBuy = buyTransactions.isNotEmpty &&
+                            tx.id == buyTransactions.last.id;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -181,6 +193,21 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
                   ),
                 ),
               ),
+              if (isFoundationBuy) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD60A).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.star_fill,
+                    size: 12,
+                    color: Color(0xFFFFD60A),
+                  ),
+                ),
+              ],
               if (tx.isPending) ...[
                 const SizedBox(width: 6),
                 Container(

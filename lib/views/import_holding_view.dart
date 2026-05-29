@@ -1776,6 +1776,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       _autoSuggestMapping();
       setState(() => _currentStep = 2);
     } catch (e) {
+      if (!context.mounted) return;
       final dataManager = DataManagerProvider.of(context);
       dataManager.addLog('导入文件解析失败: $_fileName - $e', type: LogType.error);
       if (context.mounted) {
@@ -2090,6 +2091,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       });
     }
 
+    if (!context.mounted) return;
     final dataManager = DataManagerProvider.of(context);
 
     int success = 0;

@@ -42,7 +42,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
       singleInstance: true,
@@ -63,7 +63,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
       onUpgrade: _upgradeDatabase,
       singleInstance: true,
@@ -104,6 +104,8 @@ class DatabaseHelper {
         nav_return_1y REAL,
         remarks TEXT,
         is_pinned INTEGER NOT NULL DEFAULT 0,
+        is_valid INTEGER NOT NULL DEFAULT 1,
+        pinned_timestamp TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -126,8 +128,11 @@ class DatabaseHelper {
         trade_date TEXT NOT NULL,
         confirm_date TEXT,
         is_after_1500 INTEGER DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'pending',
+        status TEXT NOT NULL DEFAULT 'submitted',
         confirmed_nav REAL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        application_date TEXT,
+        frozen_shares REAL DEFAULT 0,
         remarks TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (holding_id) REFERENCES holdings(id) ON DELETE CASCADE
@@ -163,8 +168,15 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)');
   }
 
-Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
-}
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE holdings ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1');
+      await db.execute('ALTER TABLE holdings ADD COLUMN pinned_timestamp TEXT');
+      await db.execute('ALTER TABLE transactions ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE transactions ADD COLUMN application_date TEXT');
+      await db.execute('ALTER TABLE transactions ADD COLUMN frozen_shares REAL DEFAULT 0');
+    }
+  }
 
 
   Future<int> insertHolding(Map<String, dynamic> holding) async {
@@ -180,8 +192,9 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
   }) async {
     final db = await database;
     
+    final allowedColumns = {'created_at', 'updated_at', 'fund_code', 'total_cost', 'client_name'};
     String orderBy = 'created_at DESC';
-    if (sortBy != null) {
+    if (sortBy != null && allowedColumns.contains(sortBy)) {
       final direction = ascending ? 'ASC' : 'DESC';
       orderBy = '$sortBy $direction';
     }
@@ -256,10 +269,11 @@ Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async
 
   Future<List<Map<String, dynamic>>> queryPendingTransactions() async {
     final db = await database;
+    // Pending = not yet confirmed, not cancelled, not failed.
     return await db.query(
       'transactions',
-      where: 'status = ?',
-      whereArgs: ['pending'],
+      where: 'status IN (?, ?, ?)',
+      whereArgs: ['pendingSubmit', 'submitted', 'pendingConfirm'],
       orderBy: 'trade_date DESC',
     );
   }

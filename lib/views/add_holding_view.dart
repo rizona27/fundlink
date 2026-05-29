@@ -392,7 +392,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     if (amount == null || amount <= 0) {
       return;
     }
-    
+    if (feeRate <= -100) return; // Would cause division by zero
+
     final shares = amount / (1 + feeRate / 100) / _confirmNav!;
     
     if (shares > 0) {
@@ -416,7 +417,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     if (amount == null || amount <= 0 || shares == null || shares <= 0) {
       return;
     }
-    
+    if (feeRate <= -100) return;
+
     final nav = amount / (1 + feeRate / 100) / shares;
     
     if (nav > 0) {
@@ -491,6 +493,11 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     final fundCode = _fundCodeController.text.trim().toUpperCase();
     final feeRateText = _feeRateController.text.trim();
     final feeRate = feeRateText.isEmpty ? 0.0 : (double.tryParse(feeRateText) ?? 0.0);
+    if (feeRate <= -100) {
+      context.showToast('费率不能小于等于-100%');
+      setState(() => _isSaving = false);
+      return;
+    }
 
     try {
       final clientId = _clientIdController.text.trim();
@@ -682,7 +689,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
     } catch (e) {
       await _dataManager.addLog('添加交易失败: $e', type: LogType.error);
-      context.showToast('添加失败: $e');
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      context.showToast('添加失败: $msg');
     } finally {
       if (mounted) {
         setState(() {

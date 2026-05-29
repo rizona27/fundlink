@@ -82,27 +82,40 @@ class ChinaTradingDayService {
     return previous;
   }
   
+  /// Sync check using the same cache + world-holiday fallback as getNextTradingDaySync.
+  /// Accurate for Chinese holidays without requiring an async API call.
+  bool isTradingDaySync(DateTime date) {
+    final dateKey = _formatDate(date);
+    if (_cache.containsKey(dateKey)) {
+      return _cache[dateKey]!;
+    }
+
+    // Weekend check
+    if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) {
+      _cache[dateKey] = false;
+      return false;
+    }
+
+    // World holidays check (Chinese holidays)
+    try {
+      final isHoliday = _worldHolidays.isHoliday('CN', date);
+      final isTrading = !isHoliday;
+      _cache[dateKey] = isTrading;
+      return isTrading;
+    } catch (_) {
+      // Fallback: assume weekday is trading day
+      final isTrading = true;
+      _cache[dateKey] = isTrading;
+      return isTrading;
+    }
+  }
+
   DateTime getNextTradingDaySync({DateTime? from}) {
     DateTime next = from ?? DateTime.now();
     next = DateTime(next.year, next.month, next.day).add(const Duration(days: 1));
     
     for (int i = 0; i < 30; i++) {
-      final dateKey = _formatDate(next);
-      bool isTrading;
-      
-      if (_cache.containsKey(dateKey)) {
-        isTrading = _cache[dateKey]!;
-      } else {
-        if (next.weekday == DateTime.saturday || next.weekday == DateTime.sunday) {
-          isTrading = false;
-        } else {
-          final isHoliday = _worldHolidays.isHoliday('CN', next);
-          isTrading = !isHoliday;
-        }
-        _cache[dateKey] = isTrading;
-      }
-      
-      if (isTrading) {
+      if (isTradingDaySync(next)) {
         return next;
       }
       next = next.add(const Duration(days: 1));

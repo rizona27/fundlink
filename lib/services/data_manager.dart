@@ -818,18 +818,18 @@ class DataManager extends ChangeNotifier {
     // Pending transactions may have amount=0 (NAV not yet known).
     if (!transaction.isPending && transaction.amount <= 0) {
       await addLog('添加交易失败: 金额必须大于0', type: LogType.error);
-      throw Exception('无效的交易数据');
+      throw Exception('金额必须大于0');
     }
 
     if (!transaction.isPending && transaction.shares <= 0) {
       await addLog('添加交易失败: 已确认交易必须有份额', type: LogType.error);
-      throw Exception('无效的交易数据');
+      throw Exception('已确认交易必须输入份额');
     }
 
     // Pending sell requires shares > 0 at minimum.
     if (transaction.isPending && transaction.type == TransactionType.sell && transaction.shares <= 0) {
       await addLog('添加交易失败: 待确认卖出必须输入份额', type: LogType.error);
-      throw Exception('无效的交易数据');
+      throw Exception('待确认卖出必须输入份额');
     }
 
     final applicationDate = await getTradeApplicationDate(transaction.tradeDate);
@@ -1025,7 +1025,11 @@ class DataManager extends ChangeNotifier {
     final result = _transactions
         .where((tx) => tx.clientId == clientId && tx.fundCode == fundCode)
         .toList()
-      ..sort((a, b) => b.tradeDate.compareTo(a.tradeDate));
+      ..sort((a, b) {
+        final dateCmp = b.tradeDate.compareTo(a.tradeDate);
+        if (dateCmp != 0) return dateCmp;
+        return b.createdAt.compareTo(a.createdAt);
+      });
     
     if (_transactionHistoryCache.length >= AppConstants.maxCacheSize) {
       final oldestKey = _transactionHistoryCache.keys.first;
@@ -1345,8 +1349,9 @@ class DataManager extends ChangeNotifier {
               navReturn1y: fetched['navReturn1y'],
             );
             _holdings[index] = updated;
+            _profitCache.remove('${updated.clientId}_${updated.fundCode}');
           }
-          
+
           await autoConfirmRelatedPendingTransactions(holding.fundCode, fundService);
         } else {
           await addLog('强制刷新基金 ${holding.fundCode} 失败', type: LogType.error);
@@ -1647,27 +1652,28 @@ class DataManager extends ChangeNotifier {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
-    
-    final isTradeWeekday = isWeekday(tradeDay);
-    
+
+    final service = ChinaTradingDayService();
+    final isTradeDay = service.isTradingDaySync(tradeDay);
+
     if (tradeDay.isBefore(today)) {
-      if (!isTradeWeekday) {
-        return getNextWeekday(tradeDay);
+      if (!isTradeDay) {
+        return service.getNextTradingDaySync(from: tradeDay);
       } else {
         if (isAfter1500) {
-          return getNextWeekday(tradeDay);
+          return service.getNextTradingDaySync(from: tradeDay);
         } else {
           return tradeDay;
         }
       }
     }
-    
-    final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
-    
+
+    final effectiveIsAfter1500 = isTradeDay ? isAfter1500 : false;
+
     if (effectiveIsAfter1500) {
-      return getNextWeekday(tradeDay);
+      return service.getNextTradingDaySync(from: tradeDay);
     } else {
-      return isTradeWeekday ? tradeDay : getNextWeekday(tradeDay);
+      return isTradeDay ? tradeDay : service.getNextTradingDaySync(from: tradeDay);
     }
   }
   
@@ -1711,20 +1717,18 @@ class DataManager extends ChangeNotifier {
     }
     
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
-    final isTradeWeekday = isWeekday(tradeDay);
-    final effectiveIsAfter1500 = isTradeWeekday ? isAfter1500 : false;
-    
+    final service = ChinaTradingDayService();
+    final isTradeDay = service.isTradingDaySync(tradeDay);
+    final effectiveIsAfter1500 = isTradeDay ? isAfter1500 : false;
+
     DateTime actualNavDate;
     if (effectiveIsAfter1500) {
-      actualNavDate = getNextWeekday(tradeDay); 
+      actualNavDate = service.getNextTradingDaySync(from: tradeDay);
     } else {
-      actualNavDate = isTradeWeekday ? tradeDay : getNextWeekday(tradeDay); 
+      actualNavDate = isTradeDay ? tradeDay : service.getNextTradingDaySync(from: tradeDay);
     }
-    
-    final confirmDate = getNextWeekday(actualNavDate);
-    
-    final service = ChinaTradingDayService();
-    return service.getNextTradingDaySync(from: confirmDate);
+
+    return service.getNextTradingDaySync(from: actualNavDate);
   }
   
   static Future<DateTime> calculateConfirmDateAsync(DateTime tradeDate, bool isAfter1500) async {
@@ -1779,7 +1783,7 @@ class DataManager extends ChangeNotifier {
     final isTradingDay = await DataManager.isTradingDay(submitDay);
     
     if (isTradingDay) {
-      if (hour < 15 || (hour == 15 && minute == 0)) {
+      if (hour < 15) {
         return submitDay;
       } else {
         return await DataManager.getNextTradingDay(from: submitDay);
@@ -1839,7 +1843,6 @@ class DataManager extends ChangeNotifier {
         if (confirmedIndex != -1) {
           final confirmedTx = _transactions[confirmedIndex].copyWith(
             status: TransactionStatus.confirmed,
-            retryCount: transaction.retryCount + 1,
           );
           _transactions[confirmedIndex] = confirmedTx;
           

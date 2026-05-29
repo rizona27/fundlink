@@ -23,19 +23,29 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
   bool _isLoading = false;
   late VoidCallback _dataListener;
 
+  bool _listenerRegistered = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _dataManager = DataManagerProvider.of(context);
+    final newDm = DataManagerProvider.of(context);
+    if (_listenerRegistered && _dataManager != newDm) {
+      _dataManager.removeListener(_dataListener);
+      _listenerRegistered = false;
+    }
+    _dataManager = newDm;
     _fundService = FundService(_dataManager);
-    
+
     _dataListener = () {
       if (mounted) {
         _loadPendingTransactions();
       }
     };
-    _dataManager.addListener(_dataListener);
-    
+    if (!_listenerRegistered) {
+      _dataManager.addListener(_dataListener);
+      _listenerRegistered = true;
+    }
+
     _loadPendingTransactions();
   }
   
@@ -262,7 +272,9 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '金额: ¥${tx.amount.toStringAsFixed(2)}',
+                          tx.amount > 0
+                              ? '金额: ¥${tx.amount.toStringAsFixed(2)}'
+                              : '金额: 待净值确认后自动计算',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -678,7 +690,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                     Text('金额', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                     const SizedBox(height: 2),
                     Text(
-                      '${tx.amount.toStringAsFixed(2)}元',
+                      tx.amount > 0 ? '${tx.amount.toStringAsFixed(2)}元' : '待计算',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
                     ),
                   ],
