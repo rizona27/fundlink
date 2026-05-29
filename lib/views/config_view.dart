@@ -192,7 +192,7 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
 
   Widget _buildCommonToolsSection(bool isDarkMode) {
     return _buildSection(
-      title: '数据日志',
+      title: '数据同步',
       icon: '工具',
       isDarkMode: isDarkMode,
       isExpanded: _isCommonToolsExpanded,
@@ -233,19 +233,6 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const ExportHoldingView()),
-            );
-          },
-        ),
-        _buildDivider(isDarkMode),
-        _buildMenuItem(
-          icon: CupertinoIcons.doc_text_search,
-          title: '查看日志',
-          subtitle: '系统和操作记录',
-          isDarkMode: isDarkMode,
-          onTap: () {
-            Navigator.push(
-              context,
-              CupertinoPageRoute(builder: (context) => const LogView()),
             );
           },
         ),
@@ -395,14 +382,14 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
         ),
         _buildDivider(isDarkMode),
         _buildMenuItem(
-          icon: CupertinoIcons.heart_fill,
-          title: '开源许可',
-          subtitle: 'AGPL v3',
+          icon: CupertinoIcons.doc_text_search,
+          title: '查看日志',
+          subtitle: '系统和操作记录',
           isDarkMode: isDarkMode,
           onTap: () {
             Navigator.push(
               context,
-              CupertinoPageRoute(builder: (context) => const LicenseView()),
+              CupertinoPageRoute(builder: (context) => const LogView()),
             );
           },
         ),
@@ -416,6 +403,19 @@ class _ConfigViewState extends State<ConfigView> with AutomaticKeepAliveClientMi
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const PermissionSettingsView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.heart_fill,
+          title: '开源许可',
+          subtitle: 'AGPL v3',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const LicenseView()),
             );
           },
         ),

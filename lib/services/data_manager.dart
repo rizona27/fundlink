@@ -954,12 +954,27 @@ class DataManager extends ChangeNotifier {
     }
 
     final firstTx = relatedTransactions.first;
-    final lastTx = relatedTransactions.last;
 
     final existingHolding = _holdings.firstWhere(
       (h) => h.clientId == clientId && h.fundCode == fundCode,
       orElse: () => FundHolding.invalid(fundCode: fundCode),
     );
+
+    // If existing holding lacks valid NAV, try to derive from confirmed transactions
+    double effectiveNav = existingHolding.currentNav;
+    DateTime effectiveNavDate = existingHolding.navDate;
+    bool effectiveIsValid = existingHolding.isValid;
+
+    if (!effectiveIsValid || effectiveNav <= 0) {
+      for (final tx in relatedTransactions.reversed) {
+        if (!tx.isPending && tx.confirmedNav != null && tx.confirmedNav! > 0) {
+          effectiveNav = tx.confirmedNav!;
+          effectiveNavDate = tx.confirmDate ?? tx.tradeDate;
+          effectiveIsValid = true;
+          break;
+        }
+      }
+    }
 
     final newHolding = FundHolding.fromTransactions(
       clientId: clientId,
@@ -967,9 +982,9 @@ class DataManager extends ChangeNotifier {
       fundCode: fundCode,
       fundName: firstTx.fundName,
       transactions: relatedTransactions,
-      navDate: existingHolding.navDate,
-      currentNav: existingHolding.currentNav,
-      isValid: existingHolding.isValid,
+      navDate: effectiveNavDate,
+      currentNav: effectiveNav,
+      isValid: effectiveIsValid,
       isPinned: existingHolding.isPinned,
       pinnedTimestamp: existingHolding.pinnedTimestamp,
       navReturn1m: existingHolding.navReturn1m,
@@ -1188,14 +1203,25 @@ class DataManager extends ChangeNotifier {
 
     final removed = _holdings[index];
     
-    final pendingTxs = _transactions.where(
-      (tx) => tx.clientId == removed.clientId && tx.fundCode == removed.fundCode && tx.isPending,
+    // Delete ALL related transactions (confirmed + pending), not just pending.
+    // Otherwise confirmed transactions survive and resurrect the holding on re-add.
+    final relatedTxs = _transactions.where(
+      (tx) => tx.clientId == removed.clientId && tx.fundCode == removed.fundCode,
     ).toList();
-    
-    for (final tx in pendingTxs) {
-      await _repository?.deleteTransaction(tx.id);
+
+    for (final tx in relatedTxs) {
+      if (tx.isPending &&
+          tx.type == TransactionType.sell &&
+          tx.frozenShares != null &&
+          tx.frozenShares! > 0) {
+        await releaseFrozenShares(tx.id);
+      }
+
+      if (!kIsWeb) {
+        await _repository?.deleteTransaction(tx.id);
+      }
       _transactions.remove(tx);
-      await addLog('删除持仓时同步删除待确认交易: ${tx.fundCode} - ${tx.type.displayName}', type: LogType.info);
+      await addLog('删除持仓时同步删除交易: ${tx.fundCode} - ${tx.type.displayName}', type: LogType.info);
     }
     
     if (!kIsWeb) {
@@ -1221,7 +1247,8 @@ class DataManager extends ChangeNotifier {
     _transactions = [];
     _profitCache.clear();
     _transactionHistoryCache.clear();
-    
+
+    await saveData();
     await addLog('清空所有持仓数据，共删除 $count 条记录', type: LogType.warning);
     notifyListeners();
   }
