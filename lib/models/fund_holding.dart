@@ -24,7 +24,6 @@ class FundHolding {
   final double? navReturn6m;
   final double? navReturn1y;
   
-  final List<String> transactionIds;
 
   FundHolding({
     String? id,
@@ -45,7 +44,6 @@ class FundHolding {
     this.navReturn3m,
     this.navReturn6m,
     this.navReturn1y,
-    this.transactionIds = const [],
   }) : id = id ?? const Uuid().v4();
 
   double get totalValue => totalShares * currentNav;
@@ -77,7 +75,6 @@ class FundHolding {
     double? navReturn3m,
     double? navReturn6m,
     double? navReturn1y,
-    List<String>? transactionIds,
   }) {
     return FundHolding(
       id: id ?? this.id,
@@ -98,7 +95,6 @@ class FundHolding {
       navReturn3m: navReturn3m ?? this.navReturn3m,
       navReturn6m: navReturn6m ?? this.navReturn6m,
       navReturn1y: navReturn1y ?? this.navReturn1y,
-      transactionIds: transactionIds ?? this.transactionIds,
     );
   }
 
@@ -122,7 +118,6 @@ class FundHolding {
       'navReturn3m': navReturn3m,
       'navReturn6m': navReturn6m,
       'navReturn1y': navReturn1y,
-      'transactionIds': transactionIds,
     };
   }
 
@@ -166,9 +161,6 @@ class FundHolding {
       navReturn3m: json['navReturn3m'] as double?,
       navReturn6m: json['navReturn6m'] as double?,
       navReturn1y: json['navReturn1y'] as double?,
-      transactionIds: json['transactionIds'] != null
-          ? List<String>.from(json['transactionIds'] as List)
-          : [],
     );
   }
 
@@ -215,7 +207,6 @@ class FundHolding {
       navReturn3m: (map['nav_return_3m'] as num?)?.toDouble(),
       navReturn6m: (map['nav_return_6m'] as num?)?.toDouble(),
       navReturn1y: (map['nav_return_1y'] as num?)?.toDouble(),
-      transactionIds: [],
     );
   }
 
@@ -266,12 +257,14 @@ class FundHolding {
           final costPerShare = totalCost / totalShares;
           totalCost -= tx.shares * costPerShare;
           totalShares -= tx.shares;
+          // Defensive: clamp negatives from data corruption.
+          if (totalShares < 0) totalShares = 0;
+          if (totalCost < 0) totalCost = 0;
         }
       }
     }
     
     final averageCost = totalShares > 0 ? totalCost / totalShares : 0.0;
-    final transactionIds = transactions.map((tx) => tx.id).toList();
     
     return FundHolding(
       clientId: clientId,
@@ -291,7 +284,6 @@ class FundHolding {
       navReturn3m: navReturn3m,
       navReturn6m: navReturn6m,
       navReturn1y: navReturn1y,
-      transactionIds: transactionIds,
     );
   }
 }

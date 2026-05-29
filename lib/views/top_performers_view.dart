@@ -234,10 +234,12 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     if (!mounted) return;
 
     final holdings = _dataManager.holdings;
+    // Include pending-only holdings (totalCost=0) so they appear in ranking
+    // with zero amounts until their transactions are confirmed.
     final validHoldings = <FundHolding>[];
 
     for (final h in holdings) {
-      if (h.isValidHolding) {
+      if (h.clientName.isNotEmpty && h.fundCode.isNotEmpty) {
         validHoldings.add(h);
       }
     }
@@ -359,7 +361,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   bool get _hasData {
     for (final h in _dataManager.holdings) {
-      if (h.isValidHolding) return true;
+      if (h.clientName.isNotEmpty && h.fundCode.isNotEmpty) return true;
     }
     return false;
   }

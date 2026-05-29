@@ -603,7 +603,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
       }
 
       final fundInfo = await _fundService.fetchFundInfo(fundCode);
-      final fundName = fundInfo['fundName'] as String? ?? '待加载';
+      final fundName = fundInfo['fundName'] as String? ?? fundCode;
       final currentNav = fundInfo['currentNav'] as double? ?? 0;
       final navDate = fundInfo['navDate'] as DateTime? ?? DateTime.now();
       final isValid = fundInfo['isValid'] as bool? ?? false;

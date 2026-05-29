@@ -1111,27 +1111,14 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                 Navigator.pop(context);
                                 
                                 try {
-                                  final updatedTx = TransactionRecord(
-                                    id: tx.id,
-                                    clientId: tx.clientId,
-                                    clientName: tx.clientName,
-                                    fundCode: tx.fundCode,
-                                    fundName: tx.fundName,
-                                    type: tx.type,
+                                  final updatedTx = tx.copyWith(
                                     amount: amount,
                                     shares: shares,
                                     tradeDate: tradeDate,
-                                    nav: tx.nav,
-                                    fee: tx.fee,
-                                    remarks: tx.remarks,
-                                    isAfter1500: tx.isAfter1500,
-                                    isPending: tx.isPending,
-                                    confirmedNav: tx.confirmedNav,
                                   );
-                                  
-                                  await _dataManager.deleteTransaction(tx.id);
-                                  await _dataManager.addTransaction(updatedTx);
-                                  
+
+                                  await _dataManager.updateTransaction(updatedTx);
+
                                   _loadTransactions();
                                   context.showToast('修改成功');
                                 } catch (e) {

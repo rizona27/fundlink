@@ -657,12 +657,18 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                     return Text('-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor));
                                   }
                                   
+                                  // Use average-cost method matching FundHolding.fromTransactions
                                   double totalCost = 0;
+                                  double totalShares = 0;
                                   for (final tx in transactions) {
+                                    if (tx.isPending) continue;
                                     if (tx.isBuy) {
+                                      totalShares += tx.shares;
                                       totalCost += tx.amount;
-                                    } else if (tx.isSell) {
-                                      totalCost -= tx.amount;
+                                    } else if (tx.isSell && totalShares > 0) {
+                                      final costPerShare = totalCost / totalShares;
+                                      totalCost -= tx.shares * costPerShare;
+                                      totalShares -= tx.shares;
                                     }
                                   }
                                   

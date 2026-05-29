@@ -315,8 +315,7 @@ class FileImportService {
       navReturn3m: null,
       navReturn6m: null,
       navReturn1y: null,
-      transactionIds: [],
-    );
+          );
   }
 
   static DateTime parseFlexibleDate(String dateStr) {

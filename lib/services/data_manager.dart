@@ -72,8 +72,13 @@ class DataManager extends ChangeNotifier {
   void _clearRelatedCaches(String clientId, String fundCode) {
     final cacheKey = '${clientId}_$fundCode';
     _transactionHistoryCache.remove(cacheKey);
-    
+
     _profitCache.removeWhere((key, value) => key.startsWith('${clientId}_$fundCode'));
+  }
+
+  Future<void> _syncHolding(String clientId, String fundCode) async {
+    _clearRelatedCaches(clientId, fundCode);
+    await _rebuildHolding(clientId, fundCode);
   }
 
   List<FundHolding> get holdings => List.unmodifiable(_holdings);
@@ -735,7 +740,6 @@ class DataManager extends ChangeNotifier {
     
     await addLog('新增持仓: ${holding.fundCode} - ${holding.clientName}', type: LogType.success);
     await saveData();
-    notifyListeners();
   }
 
   Future<void> batchAddHoldings(List<FundHolding> holdings) async {
@@ -756,7 +760,6 @@ class DataManager extends ChangeNotifier {
     
     await addLog('批量添加 ${holdings.length} 个持仓', type: LogType.success);
     await saveData();
-    notifyListeners();
   }
   
   Future<void> batchAddTransactions(List<TransactionRecord> transactions) async {
@@ -809,17 +812,23 @@ class DataManager extends ChangeNotifier {
     
     await addLog('批量添加 ${enhancedTransactions.length} 笔交易', type: LogType.success);
     await saveData();
-    notifyListeners();
   }
 
   Future<void> addTransaction(TransactionRecord transaction) async {
-    if (transaction.amount <= 0) {
+    // Pending transactions may have amount=0 (NAV not yet known).
+    if (!transaction.isPending && transaction.amount <= 0) {
       await addLog('添加交易失败: 金额必须大于0', type: LogType.error);
       throw Exception('无效的交易数据');
     }
-    
+
     if (!transaction.isPending && transaction.shares <= 0) {
       await addLog('添加交易失败: 已确认交易必须有份额', type: LogType.error);
+      throw Exception('无效的交易数据');
+    }
+
+    // Pending sell requires shares > 0 at minimum.
+    if (transaction.isPending && transaction.type == TransactionType.sell && transaction.shares <= 0) {
+      await addLog('添加交易失败: 待确认卖出必须输入份额', type: LogType.error);
       throw Exception('无效的交易数据');
     }
 
@@ -854,9 +863,7 @@ class DataManager extends ChangeNotifier {
     }
     _transactions = [..._transactions, enhancedTransaction];
     
-    _clearRelatedCaches(enhancedTransaction.clientId, enhancedTransaction.fundCode);
-
-    await _rebuildHolding(enhancedTransaction.clientId, enhancedTransaction.fundCode);
+    await _syncHolding(enhancedTransaction.clientId, enhancedTransaction.fundCode);
 
     await addLog(
       '${enhancedTransaction.type.displayName}交易: ${enhancedTransaction.fundCode} - ${enhancedTransaction.clientName}, '
@@ -866,7 +873,6 @@ class DataManager extends ChangeNotifier {
       type: LogType.success,
     );
     await saveData();
-    notifyListeners();
   }
 
   /// Batch import transactions without per-row saveData/log calls.
@@ -928,7 +934,6 @@ class DataManager extends ChangeNotifier {
 
     // Phase D: save once and notify once
     await saveData();
-    notifyListeners();
 
     onProgress?.call(1.0);
     return successCount;
@@ -1052,13 +1057,71 @@ class DataManager extends ChangeNotifier {
     }
     _transactions = List.from(_transactions)..removeAt(index);
     
-    _clearRelatedCaches(transaction.clientId, transaction.fundCode);
-
-    await _rebuildHolding(transaction.clientId, transaction.fundCode);
+    await _syncHolding(transaction.clientId, transaction.fundCode);
 
     await addLog('删除交易记录: ${transaction.fundCode} - ${transaction.type.displayName}', type: LogType.info);
     await saveData();
-    notifyListeners();
+  }
+
+  Future<void> cancelPendingTransaction(String transactionId) async {
+    final index = _transactions.indexWhere((tx) => tx.id == transactionId);
+    if (index == -1) {
+      await addLog('取消交易失败: 未找到交易记录', type: LogType.error);
+      throw Exception('交易记录不存在');
+    }
+
+    final transaction = _transactions[index];
+    if (!transaction.isPending) {
+      await addLog('取消交易失败: 该交易已确认', type: LogType.error);
+      throw Exception('已确认的交易无法取消');
+    }
+
+    if (transaction.type == TransactionType.sell &&
+        transaction.frozenShares != null &&
+        transaction.frozenShares! > 0) {
+      await releaseFrozenShares(transactionId);
+    }
+
+    final cancelled = transaction.copyWith(
+      isPending: false,
+      status: TransactionStatus.cancelled,
+      frozenShares: 0,
+    );
+    _transactions[index] = cancelled;
+
+    if (!kIsWeb) {
+      await _repository!.updateTransaction(cancelled.id, cancelled);
+    }
+
+    await _syncHolding(transaction.clientId, transaction.fundCode);
+
+    await addLog('取消待确认交易: ${transaction.fundName}(${transaction.fundCode}) - ${transaction.type.displayName}', type: LogType.info);
+    await saveData();
+  }
+
+  Future<void> updateTransaction(TransactionRecord updated) async {
+    final index = _transactions.indexWhere((tx) => tx.id == updated.id);
+    if (index == -1) {
+      await addLog('更新交易失败: 未找到交易记录', type: LogType.error);
+      throw Exception('交易记录不存在');
+    }
+
+    final old = _transactions[index];
+
+    if (!kIsWeb) {
+      await _repository!.updateTransaction(updated.id, updated);
+    }
+    _transactions[index] = updated;
+
+    _clearRelatedCaches(old.clientId, old.fundCode);
+    if (updated.clientId != old.clientId || updated.fundCode != old.fundCode) {
+      _clearRelatedCaches(updated.clientId, updated.fundCode);
+      await _rebuildHolding(old.clientId, old.fundCode);
+    }
+    await _rebuildHolding(updated.clientId, updated.fundCode);
+
+    await addLog('更新交易记录: ${updated.fundCode} - ${updated.type.displayName}', type: LogType.info);
+    await saveData();
   }
 
   /// Sync client names from mapping index to all holdings and transactions.
@@ -1101,7 +1164,6 @@ class DataManager extends ChangeNotifier {
 
     if (changedCount > 0) {
       await saveData();
-      notifyListeners();
     }
 
     return changedCount;
@@ -1124,7 +1186,6 @@ class DataManager extends ChangeNotifier {
 
     await addLog('更新持仓: ${updatedHolding.fundCode} - ${updatedHolding.clientName}', type: LogType.success);
     await saveData();
-    notifyListeners();
   }
 
   Future<void> updateHoldingNav(String clientId, String fundCode, double currentNav, DateTime navDate) async {
@@ -1231,7 +1292,6 @@ class DataManager extends ChangeNotifier {
     _holdings = List.from(_holdings)..removeAt(index);
     await addLog('删除持仓: ${removed.fundCode} - ${removed.clientName}', type: LogType.info);
     await saveData();
-    notifyListeners();
   }
 
   Future<void> clearAllHoldings() async {
@@ -1343,7 +1403,6 @@ class DataManager extends ChangeNotifier {
       _holdings = newHoldings;
       await addLog('${newIsPinned ? "置顶" : "取消置顶"}: ${holding.fundCode} - ${holding.clientName}', type: LogType.info);
       await saveData();
-      notifyListeners();
     }
   }
 
@@ -1421,7 +1480,7 @@ class DataManager extends ChangeNotifier {
   }
 
   ProfitResult calculateProfit(FundHolding holding) {
-    final cacheKey = '${holding.clientId}_${holding.fundCode}_${holding.totalShares}_${holding.totalCost}_${holding.currentNav}';
+    final cacheKey = '${holding.clientId}_${holding.fundCode}';
     
     if (_profitCache.containsKey(cacheKey)) {
       return _profitCache[cacheKey]!;
@@ -1528,9 +1587,7 @@ class DataManager extends ChangeNotifier {
         await _repository!.updateTransaction(updatedTransaction.id, updatedTransaction);
       }
       
-      _clearRelatedCaches(transaction.clientId, transaction.fundCode);
-      
-      await _rebuildHolding(transaction.clientId, transaction.fundCode);
+      await _syncHolding(transaction.clientId, transaction.fundCode);
       
       await saveData();
       
@@ -1830,14 +1887,19 @@ class DataManager extends ChangeNotifier {
     try {
       final pendingTransactions = getPendingTransactions();
       if (pendingTransactions.isEmpty) return 0;
-      
+
       int confirmedCount = 0;
       int failedCount = 0;
       final now = DateTime.now();
-      
+
+      // Cache fund info per run to avoid duplicate API calls for same fund.
+      final fundInfoCache = <String, Map<String, dynamic>?>{};
+
       for (final tx in pendingTransactions) {
         try {
-          final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
+          final fundInfo = fundInfoCache[tx.fundCode] ??
+              (fundInfoCache[tx.fundCode] = await fundService.fetchFundInfo(tx.fundCode));
+          if (fundInfo == null) continue;
           if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
             final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
             final fundNavDate = fundInfo['navDate'] as DateTime?;
@@ -2033,9 +2095,7 @@ class DataManager extends ChangeNotifier {
         await _repository!.updateTransaction(updatedTransaction.id, updatedTransaction);
       }
       
-      _clearRelatedCaches(transaction.clientId, transaction.fundCode);
-      
-      await _rebuildHolding(transaction.clientId, transaction.fundCode);
+      await _syncHolding(transaction.clientId, transaction.fundCode);
       
       await saveData();
       
