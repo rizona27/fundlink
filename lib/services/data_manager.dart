@@ -1151,21 +1151,21 @@ class DataManager extends ChangeNotifier {
       for (final tx in pendingTransactions) {
         try {
           final fundInfo = await fundService.fetchFundInfo(tx.fundCode);
+          final fundNavDate = fundInfo['navDate'] as DateTime?;
+          final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
           if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
-            final navDate = await calculateNavDateForTradeAsync(tx.tradeDate, tx.isAfter1500);
-            final fundNavDate = fundInfo['navDate'] as DateTime?;
-            
             if (fundNavDate != null && !fundNavDate.isBefore(navDate)) {
               await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
               confirmedCount++;
               continue;
             }
           }
-          
+
           final canConfirmDate = await calculateConfirmDateAsync(tx.tradeDate, tx.isAfter1500);
-          
+
           if ((now.isAfter(canConfirmDate) || now.isAtSameMomentAs(canConfirmDate)) &&
-              fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+              fundInfo['isValid'] == true && fundInfo['currentNav'] > 0 &&
+              fundNavDate != null && !fundNavDate.isBefore(navDate)) {
             await confirmPendingTransaction(tx.id, fundInfo['currentNav']);
             confirmedCount++;
           }
@@ -1623,7 +1623,7 @@ class DataManager extends ChangeNotifier {
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
     if (navDay.isBefore(today)) {
-      return tradeDate;
+      return today;
     }
     
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
@@ -1651,7 +1651,7 @@ class DataManager extends ChangeNotifier {
     final navDay = DateTime(navDate.year, navDate.month, navDate.day);
     
     if (navDay.isBefore(today)) {
-      return tradeDate;
+      return today;
     }
     
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
@@ -1744,8 +1744,11 @@ class DataManager extends ChangeNotifier {
       }
       
       final fundInfo = await fundService.fetchFundInfo(transaction.fundCode);
-      
-      if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0) {
+      final navDate = await calculateNavDateForTradeAsync(transaction.tradeDate, transaction.isAfter1500);
+      final fundNavDate = fundInfo['navDate'] as DateTime?;
+
+      if (fundInfo['isValid'] == true && fundInfo['currentNav'] > 0 &&
+          fundNavDate != null && !fundNavDate.isBefore(navDate)) {
         await confirmPendingTransaction(transactionId, fundInfo['currentNav']);
         
         final confirmedIndex = _transactions.indexWhere((tx) => tx.id == transactionId);

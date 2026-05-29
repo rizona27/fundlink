@@ -677,7 +677,7 @@ class _VersionViewState extends State<VersionView> {
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
-                                          '基金用户管理系统',
+                                          '基金持仓管理助手',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w500,
