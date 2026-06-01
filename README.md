@@ -115,6 +115,7 @@ lib/
 │   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配、编码检测和完整备份解析能力
 │   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
 │   ├── http_client_provider.dart          # HTTP Client 提供者，全局共享 HTTP 客户端实例，实现连接池复用，提高网络请求效率
+│   ├── stock_quote_service.dart           # 腾讯行情 API 股票报价服务，支持批量获取 A 股/港股实时行情（价格/PE/PB/市值），含 GBK 解码、TTL 缓存与风格分类
 │   ├── ui_state_service.dart              # UI 状态管理服务，使用 SQLite 存储 UI 状态（如展开/折叠状态）
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
 │
@@ -130,7 +131,8 @@ lib/
 │
 ├── views/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户信息、基金代码、交易金额/份额/日期
-│   ├── client_view.dart                   # 客户视图页，分组展示持仓
+│   ├── client_view.dart                   # 客户视图页，分组展示持仓，展开后可通过三点按钮进入汇总分析
+│   ├── client_fund_summary_view.dart       # 客户基金汇总分析页，含四大模块：①投资金额饼图+盈亏双向柱状图 ②十大重仓股（加权本金）③风格分布+行业分类+重叠检测 ④智能投资方向总结
 │   ├── config_view.dart                   # 程序设置页面，隐私/主题切换/日志查询/持仓管理等
 │   ├── edit_holding_view.dart             # 编辑持仓页，显示持仓详情，支持加仓/减仓操作，查看交易历史，编辑基金备注
 │   ├── export_holding_view.dart           # 导出数据页面，支持 CSV/Excel 格式

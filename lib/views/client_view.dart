@@ -19,6 +19,7 @@ import '../widgets/glass_button.dart';
 import '../widgets/gradient_card.dart';
 import '../widgets/toast.dart';
 import 'add_holding_view.dart';
+import 'client_fund_summary_view.dart';
 
 class _ClientGroup {
   final String key;
@@ -610,6 +611,38 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                                           color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey,
                                         ),
                                       ),
+                                      if (_expandedClients.contains(groups[groupIndex].key)) ...[
+                                        const SizedBox(width: 8),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              AnimationConfig.createPageRoute(
+                                                page: ClientFundSummaryPage(
+                                                  clientName: groups[groupIndex].holdings.first.clientName,
+                                                  clientId: groups[groupIndex].clientId,
+                                                  holdings: groups[groupIndex].holdings,
+                                                  dataManager: _dataManager,
+                                                  fundService: _fundService,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: isDarkMode
+                                                  ? CupertinoColors.white.withOpacity(0.2)
+                                                  : CupertinoColors.black.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              CupertinoIcons.ellipsis,
+                                              size: 16,
+                                              color: isDarkMode ? CupertinoColors.white : CupertinoColors.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                   maxTitleLength: 10,
