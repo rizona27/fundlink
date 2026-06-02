@@ -34,6 +34,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   bool _loadingTopHoldings = true;
   bool _loadingQuotes = true;
   bool _profitBarExpanded = false;
+  int _touchedPieIndex = -1;
 
   Map<String, StockQuote> _stockQuotes = {};
   List<_WeightedHolding> _weightedHoldings = [];
@@ -191,17 +192,16 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   int _getOverlapStockCount() =>
       _weightedHoldings.where((w) => w.fundCodes.length > 1).length;
 
-  String _getTopIndustry() {
+  List<MapEntry<String, double>> _getTopIndustries({int count = 3}) {
     final industryMap = <String, double>{};
     for (final wh in _weightedHoldings) {
       final label = _classifyIndustry(wh.stockName, code: wh.stockCode);
       industryMap[label] = (industryMap[label] ?? 0) + wh.weightedRatio;
     }
-    if (industryMap.isEmpty) return '';
+    if (industryMap.isEmpty) return [];
     final sorted = industryMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final top = sorted.first;
-    return '${top.key}（占比${top.value.toStringAsFixed(1)}%）';
+    return sorted.take(count).toList();
   }
 
   /// Hardcoded precision mapping for well-known heavy-weight stocks.
@@ -327,6 +327,65 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     '000002': '房地产',     // 万科
     '600048': '房地产',     // 保利发展
     '001979': '房地产',     // 招商蛇口
+    // Steel
+    '600019': '钢铁',       // 宝钢股份
+    '000898': '钢铁',       // 鞍钢股份
+    '600010': '钢铁',       // 包钢股份
+    '000932': '钢铁',       // 华菱钢铁
+    '600282': '钢铁',       // 南钢股份
+    // Chemicals
+    '600309': '化工',       // 万华化学
+    '600346': '化工',       // 恒力石化
+    '002493': '化工',       // 荣盛石化
+    '000703': '化工',       // 恒逸石化
+    '600426': '化工',       // 华鲁恒升
+    '600989': '化工',       // 宝丰能源
+    '002601': '化工',       // 龙佰集团
+    '600160': '化工',       // 巨化股份
+    '002064': '化工',       // 华峰化学
+    // Textile & Apparel
+    '02020': '纺织服装',    // 安踏体育
+    '02331': '纺织服装',    // 李宁
+    '03998': '纺织服装',    // 波司登
+    '600398': '纺织服装',   // 海澜之家
+    '300979': '纺织服装',   // 华利集团
+    // Retail
+    '601888': '商业零售',   // 中国中免
+    '601933': '商业零售',   // 永辉超市
+    '002024': '商业零售',   // 苏宁易购
+    // Construction Machinery
+    '600031': '工程机械',   // 三一重工
+    '000157': '工程机械',   // 中联重科
+    '000425': '工程机械',   // 徐工机械
+    '601100': '工程机械',   // 恒立液压
+    '603338': '工程机械',   // 浙江鼎力
+    // Environmental Protection
+    '603568': '环保',       // 伟明环保
+    '600323': '环保',       // 瀚蓝环境
+    '300070': '环保',       // 碧水源
+    // Paper & Packaging
+    '002078': '造纸/包装',  // 太阳纸业
+    '000488': '造纸/包装',  // 晨鸣纸业
+    '002831': '造纸/包装',  // 裕同科技
+    // Tourism & Hotels
+    '600754': '旅游酒店',   // 锦江酒店
+    '600258': '旅游酒店',   // 首旅酒店
+    '603099': '旅游酒店',   // 长白山
+    // Testing & Inspection
+    '300012': '检验检测',   // 华测检测
+    '002967': '检验检测',   // 广电计量
+    // New Materials
+    '300699': '新材料',     // 光威复材
+    '300777': '新材料',     // 中简科技
+    '600143': '新材料',     // 金发科技
+    '688005': '新材料',     // 容百科技（三元材料）
+    '300073': '新材料',     // 当升科技（正极材料）
+    // Glass
+    '600660': '玻璃/建材',  // 福耀玻璃（已在汽车零部件分类过，此处保留作为玻璃龙头）
+    '601636': '玻璃/建材',  // 旗滨集团
+    '000012': '玻璃/建材',  // 南玻A
+    // Non-bank Financial
+    '600053': '非银金融',   // 九鼎投资
   };
 
   /// Industry classification via keyword matching on stock name, with a
@@ -474,6 +533,71 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       '院线', '出版', '凤凰传媒', '中南传媒', '山东出版', '中国出版', '新华文轩', '中信出版',
       '教育'])) return '传媒/教育';
 
+    // Steel
+    if (_containsAny(n, ['宝钢股份', '鞍钢股份', '包钢股份', '华菱钢铁', '南钢股份', '马钢股份',
+      '首钢股份', '河钢股份', '沙钢股份', '太钢不锈', '新钢股份', '杭钢股份', '方大特钢',
+      '柳钢股份', '三钢闽光', '韶钢松山', '重庆钢铁', '中信特钢', '甬金股份', '久立特材',
+      '常宝股份', '武进不锈', '钢铁', '特钢', '钢管', '锻钢'])) return '钢铁';
+
+    // Chemicals
+    if (_containsAny(n, ['万华化学', '恒力石化', '荣盛石化', '恒逸石化', '华鲁恒升', '宝丰能源',
+      '龙佰集团', '巨化股份', '华峰化学', '桐昆股份', '东方盛虹', '鲁西化工', '三友化工',
+      '中泰化学', '湖北宜化', '卫星化学', '合盛硅业', '新和成', '浙江龙盛', '闰土股份',
+      '安迪苏', '沧州大化', '化学', '化工', '化纤', '聚酯', 'MDI', '钛白粉', '纯碱',
+      '氯碱', '氨纶', '涤纶', '粘胶', '有机硅', '氟化工', '磷化工', '煤化工'])) return '化工';
+
+    // Textile & Apparel
+    if (_containsAny(n, ['安踏体育', '李宁', '波司登', '海澜之家', '华利集团', '申洲国际',
+      '森马服饰', '雅戈尔', '太平鸟', '地素时尚', '比音勒芬', '特步国际', '361度',
+      '罗莱生活', '富安娜', '水星家纺', '百隆东方', '鲁泰', '新澳股份', '台华新材',
+      '纺织', '服装', '服饰', '家纺', '鞋业', '运动鞋', '制衣', '面料', '羽绒'])) return '纺织服装';
+
+    // Retail
+    if (_containsAny(n, ['中国中免', '永辉超市', '苏宁易购', '王府井', '家家悦', '红旗连锁',
+      '百联股份', '重庆百货', '天虹股份', '小商品城', '居然之家', '美凯龙', '豫园股份',
+      '老凤祥', '周大福', '周大生', '中国黄金', '菜百股份', '免税', '超市', '百货',
+      '零售', '商业连锁', '便利店', '珠宝', '黄金首饰'])) return '商业零售';
+
+    // Construction Machinery
+    if (_containsAny(n, ['三一重工', '中联重科', '徐工机械', '恒立液压', '浙江鼎力', '柳工',
+      '安徽合力', '杭叉集团', '艾迪精密', '建设机械', '山河智能', '厦工', '山推',
+      '中铁工业', '铁建重工', '工程机械', '重工', '叉车', '挖掘机', '起重机', '推土机',
+      '液压', '桩工'])) return '工程机械';
+
+    // Environmental Protection
+    if (_containsAny(n, ['伟明环保', '瀚蓝环境', '碧水源', '清新环境', '启迪环境', '上海环境',
+      '绿色动力', '中再资环', '浙富控股', '高能环境', '盈峰环境', '玉禾田', '侨银股份',
+      '龙马环卫', '维尔利', '中环环保', '首创环保', '节能环境', '环保', '污水', '垃圾',
+      '环卫', '固废', '危废', '水务', '脱硫', '脱硝', '除尘'])) return '环保';
+
+    // Paper & Packaging
+    if (_containsAny(n, ['太阳纸业', '晨鸣纸业', '博汇纸业', '山鹰国际', '玖龙纸业', '理文造纸',
+      '裕同科技', '合兴包装', '劲嘉股份', '美盈森', '吉宏股份', '环球印务', '造纸',
+      '纸业', '包装', '印刷', '纸板', '瓦楞'])) return '造纸/包装';
+
+    // Tourism & Hotels
+    if (_containsAny(n, ['锦江酒店', '首旅酒店', '长白山', '中青旅', '宋城演艺', '黄山旅游',
+      '峨眉山', '丽江股份', '桂林旅游', '九华旅游', '天目湖', '华住集团', '复星旅游文化',
+      '携程集团', '同程旅行', '酒店', '旅游', '景区', '旅行社', '度假村', '索道'])) return '旅游酒店';
+
+    // New Materials
+    if (_containsAny(n, ['光威复材', '中简科技', '中复神鹰', '金发科技', '沃特股份', '道恩股份',
+      '国瓷材料', '天奈科技', '德方纳米', '当升科技', '容百科技', '中伟股份', '恩捷股份',
+      '星源材质', '天赐材料', '新宙邦', '多氟多', '石大胜华', '璞泰来', '碳纤维',
+      '新材料', '复合材料', '高温合金', '钛合金', '磁性材料', '稀土永磁', '纳米材料',
+      '半导体材料', '电子化学品', '膜材料'])) return '新材料';
+
+    // Glass & Building Materials (non-cement)
+    if (_containsAny(n, ['旗滨集团', '南玻', '金晶科技', '信义光能', '信义玻璃', '福莱特',
+      '亚玛顿', '洛阳玻璃', '凯盛新能', '玻璃', 'low-e', '镀膜', '光伏玻璃',
+      '陶瓷', '瓷砖', '蒙娜丽莎', '东鹏控股', '帝欧家居', '防水材料', '科顺'])) return '玻璃/建材';
+
+    // Non-bank Financial
+    if (_containsAny(n, ['九鼎投资', '鲁信创投', '中国信达', '中国华融', '东方资产', '长城资产',
+      '蚂蚁集团', '陆金所', '京东数科', '度小满', '马上消费', '金融科技', '互联网金融',
+      '小额贷款', '融资租赁', '消费金融', '征信', '支付', 'AMC', '不良资产', '信托',
+      '期货', '典当'])) return '非银金融';
+
     // Dual feature recognition fallback for STAR / ChiNext stocks.
     // If keyword matching fell through to "其他", use exchange + name hints
     // to classify common categories (e.g. energy, electronics) instead of
@@ -542,7 +666,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final valuePct = (dist['价值占比']! * 100).round();
     final growthPct = (dist['成长占比']! * 100).round();
 
-    final topIndustry = _getTopIndustry();
+    final topIndustries = _getTopIndustries(count: 3);
     String conclusion = '';
 
     if (large >= 40) {
@@ -561,8 +685,18 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       conclusion += '成长与价值风格均衡；';
     }
 
-    if (topIndustry.isNotEmpty) {
-      conclusion += '重点行业为$topIndustry。';
+    if (topIndustries.isNotEmpty) {
+      final top = topIndustries.first;
+      if (top.key != '其他') {
+        conclusion += '重点行业为${top.key}（占比${top.value.toStringAsFixed(1)}%）';
+      }
+      if (topIndustries.length > 1 && topIndustries[1].key != '其他') {
+        conclusion += '、${topIndustries[1].key}（占比${topIndustries[1].value.toStringAsFixed(1)}%）';
+      }
+      if (topIndustries.length > 2 && topIndustries[2].key != '其他') {
+        conclusion += '、${topIndustries[2].key}（占比${topIndustries[2].value.toStringAsFixed(1)}%）';
+      }
+      conclusion += '。';
     } else {
       conclusion += '行业分布较为分散。';
     }
@@ -692,23 +826,38 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       final pct = h.totalCost / total * 100;
       if (pct < 0.01) continue;
       final color = _chartColor(i);
+      final isTouched = _touchedPieIndex == i;
 
       sections.add(PieChartSectionData(
-        value: h.totalCost, color: color, radius: 30,
+        value: h.totalCost, color: color,
+        radius: isTouched ? 36 : 28,
         title: '', titleStyle: const TextStyle(fontSize: 0),
+        borderSide: isTouched ? const BorderSide(color: CupertinoColors.white, width: 2) : BorderSide.none,
       ));
 
       legendItems.add(Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: Row(children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(width: 6),
-          Expanded(child: Text('${h.fundName} (${h.fundCode})', style: TextStyle(fontSize: 11, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          const SizedBox(width: 4),
-          Text('¥${h.totalCost.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textColor)),
-          const SizedBox(width: 4),
-          Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, color: subTextColor)),
-        ]),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isTouched ? 4 : 0, vertical: isTouched ? 2 : 0),
+          decoration: BoxDecoration(
+            color: isTouched ? color.withValues(alpha: 0.12) : const Color(0x00000000),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(children: [
+            Container(width: isTouched ? 10 : 8, height: isTouched ? 10 : 8,
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 6),
+            Expanded(child: Text('${h.fundName} (${h.fundCode})',
+              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w700 : FontWeight.w400, color: textColor),
+              maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 4),
+            Text('¥${h.totalCost.toStringAsFixed(0)}',
+              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w700 : FontWeight.w600, color: textColor)),
+            const SizedBox(width: 4),
+            Text('${pct.toStringAsFixed(1)}%',
+              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w600 : FontWeight.w400, color: subTextColor)),
+          ]),
+        ),
       ));
     }
 
@@ -720,7 +869,21 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       const SizedBox(height: 12),
       Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         SizedBox(width: 100, height: 100,
-          child: PieChart(PieChartData(sections: sections, centerSpaceRadius: 24, sectionsSpace: 2, borderData: FlBorderData(show: false))),
+          child: PieChart(PieChartData(
+            sections: sections, centerSpaceRadius: 24, sectionsSpace: 2,
+            borderData: FlBorderData(show: false),
+            pieTouchData: PieTouchData(
+              touchCallback: (FlTouchEvent event, PieTouchResponse? response) {
+                setState(() {
+                  if (!event.isInterestedForInteractions || response == null || response.touchedSection == null) {
+                    _touchedPieIndex = -1;
+                    return;
+                  }
+                  _touchedPieIndex = response.touchedSection!.touchedSectionIndex;
+                });
+              },
+            ),
+          )),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(children: legendItems)),
@@ -782,42 +945,44 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         padding: const EdgeInsets.only(bottom: 6),
         child: Row(children: [
           SizedBox(
-            width: 90,
+            width: 72,
             child: Text(displayName, style: TextStyle(fontSize: 11, color: textColor),
               maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           SizedBox(
-            width: 64,
+            width: 56,
             child: Text('${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(0)}',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _getProfitColor(profit)),
               textAlign: TextAlign.right),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: LayoutBuilder(builder: (context, constraints) {
-              final barWidth = constraints.maxWidth * barFraction;
-              final displayWidth = barWidth.clamp(0.0, constraints.maxWidth);
-              return Row(children: [
-                if (isLoss) ...[
-                  Expanded(child: Align(alignment: Alignment.centerRight,
-                    child: Container(height: 12, width: displayWidth,
-                      decoration: BoxDecoration(color: barColor.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(3))),
-                  )),
-                ] else if (isProfit) ...[
-                  Align(alignment: Alignment.centerLeft,
-                    child: Container(height: 12, width: displayWidth,
-                      decoration: BoxDecoration(color: barColor.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(3))),
-                  ),
-                ],
-                if (isLoss) Container(width: 1, color: subTextColor.withValues(alpha: 0.4))
-                else Expanded(child: const SizedBox()),
-                if (isProfit) Container(width: 1, color: subTextColor.withValues(alpha: 0.4)),
-              ]);
-            }),
+            child: ClipRect(
+              child: LayoutBuilder(builder: (context, constraints) {
+                final barWidth = constraints.maxWidth * barFraction;
+                final displayWidth = barWidth.clamp(0.0, constraints.maxWidth);
+                return Row(children: [
+                  if (isLoss) ...[
+                    Expanded(child: Align(alignment: Alignment.centerRight,
+                      child: Container(height: 12, width: displayWidth,
+                        decoration: BoxDecoration(color: barColor.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(3))),
+                    )),
+                  ] else if (isProfit) ...[
+                    Align(alignment: Alignment.centerLeft,
+                      child: Container(height: 12, width: displayWidth,
+                        decoration: BoxDecoration(color: barColor.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(3))),
+                    ),
+                  ],
+                  if (isLoss) Container(width: 1, color: subTextColor.withValues(alpha: 0.4))
+                  else Expanded(child: const SizedBox()),
+                  if (isProfit) Container(width: 1, color: subTextColor.withValues(alpha: 0.4)),
+                ]);
+              }),
+            ),
           ),
-          const SizedBox(width: 6),
-          SizedBox(width: 42,
+          const SizedBox(width: 4),
+          SizedBox(width: 38,
             child: Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, color: subTextColor), textAlign: TextAlign.right)),
         ]),
       );
@@ -830,20 +995,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         Text('${totalProfit >= 0 ? '+' : ''}¥${totalProfit.toStringAsFixed(0)}',
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: totalColor)),
       ]),
-      const SizedBox(height: 8),
-      // Center axis legend
-      Row(children: [
-        const SizedBox(width: 90 + 6 + 64 + 4),
-        Expanded(
-          child: Row(children: [
-            Expanded(child: Text('← 亏损', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGreen), textAlign: TextAlign.right)),
-            Container(width: 1, color: subTextColor.withValues(alpha: 0.3)),
-            Expanded(child: Text('盈利 →', style: TextStyle(fontSize: 9, color: CupertinoColors.systemRed))),
-          ]),
-        ),
-        const SizedBox(width: 6 + 42),
-      ]),
-      const SizedBox(height: 6),
+      const SizedBox(height: 12),
       ...visible.map((h) => buildBarRow(h)),
       // Collapsed "其他" row
       if (hasOverflow && !_profitBarExpanded && overflowAbs > 0)
@@ -879,58 +1031,82 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
   Widget _buildWeightedHoldingsTable(bool isDark, Color textColor, Color subTextColor) {
     final top = _weightedHoldings.take(10).toList();
+    final left = top.take(5).toList();
+    final right = top.skip(5).take(5).toList();
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Compact header
-      Padding(
-        padding: const EdgeInsets.only(bottom: 4),
+    Widget buildItem(int idx, _WeightedHolding wh) {
+      final fullCode = _quoteService.toFullCode(wh.stockCode);
+      final q = _stockQuotes[fullCode];
+      final marketLabel = q?.marketLabel ?? _marketLabelFromCode(wh.stockCode);
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          SizedBox(width: 20, child: Text('#', style: TextStyle(fontSize: 10, color: subTextColor))),
-          const Expanded(child: Text('股票', style: TextStyle(fontSize: 10, color: CupertinoColors.systemGrey))),
-          SizedBox(width: 48, child: Text('权重', style: TextStyle(fontSize: 10, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
-          SizedBox(width: 40, child: Text('基金', style: TextStyle(fontSize: 10, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
+          SizedBox(width: 18, child: Text('${idx + 1}', style: TextStyle(fontSize: 10, color: subTextColor))),
+          Expanded(
+            child: Row(children: [
+              Flexible(
+                child: Text('${wh.stockName}', style: TextStyle(fontSize: 10, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 2),
+              Flexible(
+                child: Text('${wh.stockCode}', style: TextStyle(fontSize: 9, color: subTextColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              if (marketLabel.isNotEmpty) ...[
+                const SizedBox(width: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+                  decoration: BoxDecoration(
+                    color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.15) : CupertinoColors.systemBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Text(marketLabel, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
+                    color: marketLabel == 'HK' ? CupertinoColors.systemOrange : CupertinoColors.systemBlue)),
+                ),
+              ],
+            ]),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(width: 40, child: Text('${wh.weightedRatio.toStringAsFixed(2)}%',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _ratioColor(wh.weightedRatio)),
+            textAlign: TextAlign.right)),
+          const SizedBox(width: 2),
+          SizedBox(width: 24, child: Text('${wh.fundCodes.length}支',
+            style: TextStyle(fontSize: 9, color: subTextColor), textAlign: TextAlign.right)),
+        ]),
+      );
+    }
+
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              SizedBox(width: 18, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
+              const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
+              SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
+            ]),
+          ),
+          Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
+          ...left.asMap().entries.map((e) => buildItem(e.key, e.value)),
         ]),
       ),
-      Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
-      ...top.asMap().entries.map((entry) {
-        final idx = entry.key;
-        final wh = entry.value;
-        final fullCode = _quoteService.toFullCode(wh.stockCode);
-        final q = _stockQuotes[fullCode];
-        final marketLabel = q?.marketLabel ?? _marketLabelFromCode(wh.stockCode);
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(children: [
-            SizedBox(width: 20, child: Text('${idx + 1}', style: TextStyle(fontSize: 11, color: subTextColor))),
-            Expanded(
-              child: Row(children: [
-                Flexible(
-                  child: Text('${wh.stockName}', style: TextStyle(fontSize: 11, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-                Text(' ${wh.stockCode}', style: TextStyle(fontSize: 10, color: subTextColor)),
-                if (marketLabel.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
-                    decoration: BoxDecoration(
-                      color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.15) : CupertinoColors.systemBlue.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(marketLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600,
-                      color: marketLabel == 'HK' ? CupertinoColors.systemOrange : CupertinoColors.systemBlue)),
-                  ),
-                ],
-              ]),
-            ),
-            SizedBox(width: 48, child: Text('${wh.weightedRatio.toStringAsFixed(2)}%',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _ratioColor(wh.weightedRatio)),
-              textAlign: TextAlign.right)),
-            SizedBox(width: 40, child: Text('${wh.fundCodes.length}支',
-              style: TextStyle(fontSize: 10, color: subTextColor), textAlign: TextAlign.right)),
-          ]),
-        );
-      }),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              SizedBox(width: 18, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
+              const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
+              SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
+            ]),
+          ),
+          Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
+          ...right.asMap().entries.map((e) => buildItem(e.key + 5, e.value)),
+        ]),
+      ),
     ]);
   }
 
@@ -975,6 +1151,14 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         const SizedBox(height: 16),
       ],
 
+      // Industry distribution
+      if (_weightedHoldings.isNotEmpty) ...[
+        Text('行业分布', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+        const SizedBox(height: 8),
+        _buildIndustryDistributionTable(isDark, textColor, subTextColor),
+        const SizedBox(height: 16),
+      ],
+
       // Overlapping stocks
       if (overlapCount > 0) ...[
         Text('重叠重仓股（被多支基金持有）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
@@ -992,6 +1176,29 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         child: Text(smartSummary, style: TextStyle(fontSize: 13, color: textColor, height: 1.6)),
       ),
     ]);
+  }
+
+  Widget _buildIndustryDistributionTable(bool isDark, Color textColor, Color subTextColor) {
+    final industries = _getTopIndustries(count: 8);
+    if (industries.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(spacing: 8, runSpacing: 4, children: industries.map((e) {
+      final pct = e.value;
+      final totalWeight = _weightedHoldings.fold(0.0, (sum, w) => sum + w.weightedRatio);
+      final displayPct = totalWeight > 0 ? (pct / totalWeight * 100) : 0.0;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(e.key, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textColor)),
+          const SizedBox(width: 4),
+          Text('${displayPct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, color: subTextColor)),
+        ]),
+      );
+    }).toList());
   }
 
   Widget _buildStyleBar(String label, double ratio, Color color, Color textColor, Color subTextColor) {

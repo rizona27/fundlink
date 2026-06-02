@@ -51,3 +51,5 @@ env
 /backend
 /docs
 /test
+/doc
+*.log
