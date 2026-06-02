@@ -106,17 +106,14 @@ class StockQuoteService {
     return rawCode;
   }
 
-  /// Fallback market cap style based on stock exchange / board when API data
-  /// is unavailable.
+  /// Fallback market cap style when API data is unavailable.
+  ///
+  /// Returns '未知' instead of guessing based on exchange/board because
+  /// every board contains a wide range of market caps (e.g. Shanghai main
+  /// board has both 50 亿 and 5000 亿 stocks).  The caller should treat
+  /// unknown stocks conservatively or exclude them from the calculation.
   static String fallbackMarketCapStyle(String rawCode) {
-    if (rawCode.length == 5 && RegExp(r'^\d{5}$').hasMatch(rawCode)) {
-      return '中盘'; // HK stocks: too varied, assume mid
-    }
-    if (rawCode.startsWith('688')) return '中盘'; // STAR board
-    if (rawCode.startsWith('300') || rawCode.startsWith('301')) return '中盘'; // ChiNext
-    if (rawCode.startsWith('6')) return '大盘'; // Shanghai main
-    if (rawCode.startsWith('0') || rawCode.startsWith('3')) return '中盘'; // SZ main / ChiNext
-    return '中盘';
+    return '未知';
   }
 
   // ---------------------------------------------------------------------------
@@ -190,9 +187,20 @@ class StockQuoteService {
         if (parts.length > 45) {
           final v = parts[45].trim();
           if (v.isNotEmpty && v != '-' && v != '--') {
-            final wan = double.tryParse(v);
-            if (wan != null && wan > 0) {
-              totalMvYi = wan / 10000; // 万元 → 亿元
+            final raw = double.tryParse(v);
+            if (raw != null && raw > 0) {
+              // Tencent API returns total market value in 亿元 directly,
+              // but to be safe, detect the unit from magnitude.
+              if (raw > 100000000) {
+                // Value in 元 → 亿元 (e.g. ICBC: 2e12 元)
+                totalMvYi = raw / 100000000;
+              } else if (raw > 100000) {
+                // Value in 万元 → 亿元 (e.g. ICBC: 2e8 万元)
+                totalMvYi = raw / 10000;
+              } else {
+                // Already in 亿元, use directly
+                totalMvYi = raw;
+              }
             }
           }
         }
