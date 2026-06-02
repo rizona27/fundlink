@@ -15,8 +15,14 @@ class FundService {
 
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
-  
+
   final Map<String, List<NetWorthPoint>> _navCache = {};
+
+  // Portfolio analysis cache — keyed by a hash of fund composition so that
+  // re-opening the same client's summary view is instant.
+  final Map<String, Map<String, dynamic>> _portfolioCache = {};
+  final Map<String, DateTime> _portfolioCacheTimestamps = {};
+  static const Duration _portfolioCacheTtl = Duration(minutes: 30);
 
   FundService([this._dataManager]);
 
@@ -28,6 +34,18 @@ class FundService {
       _cache.clear();
       _activeRequests.clear();
     }
+  }
+
+  /// Clear the in-memory portfolio analysis cache.
+  void clearPortfolioCache() {
+    _portfolioCache.clear();
+    _portfolioCacheTimestamps.clear();
+  }
+
+  /// Build a stable cache key from a list of fund maps.
+  String _portfolioCacheKey(List<Map<String, dynamic>> funds) {
+    final codes = funds.map((f) => '${f['code']}=${f['cost']}').toList()..sort();
+    return codes.join('|');
   }
 
   String _formatDate(DateTime date) {
@@ -679,6 +697,20 @@ class FundService {
   Future<Map<String, dynamic>?> fetchPortfolioAnalysis(
       List<Map<String, dynamic>> funds) async {
     if (funds.isEmpty) return null;
+
+    // Check memory cache first
+    final cacheKey = _portfolioCacheKey(funds);
+    final cached = _portfolioCache[cacheKey];
+    final cachedTime = _portfolioCacheTimestamps[cacheKey];
+    if (cached != null && cachedTime != null &&
+        DateTime.now().difference(cachedTime) < _portfolioCacheTtl) {
+      _dataManager?.addLog(
+        '📦 组合分析数据已缓存（${funds.length}只基金），直接使用本地数据',
+        type: LogType.cache,
+      );
+      return cached;
+    }
+
     try {
       final url = Uri.parse(AppConstants.apiPortfolioAnalysis);
       print('[FundService] POST $url (${funds.length} funds)');
@@ -694,15 +726,22 @@ class FundService {
             ? '${response.body.substring(0, 200)}...'
             : response.body;
         print('[FundService] 后端返回非200: $snippet');
-        return null;
+        // Return stale cache if available even if expired
+        return cached;
       }
 
       final body = jsonDecode(response.body);
-      return body['data'] as Map<String, dynamic>?;
+      final result = body['data'] as Map<String, dynamic>?;
+      if (result != null) {
+        _portfolioCache[cacheKey] = result;
+        _portfolioCacheTimestamps[cacheKey] = DateTime.now();
+      }
+      return result;
     } catch (e) {
       print('[FundService] 后端组合分析失败: $e');
       _dataManager?.addLog('后端组合分析失败: $e', type: LogType.warning);
-      return null;
+      // Return stale cache on error if available
+      return cached;
     }
   }
 

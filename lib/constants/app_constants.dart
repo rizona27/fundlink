@@ -88,6 +88,9 @@ class AppConstants {
   static const Duration cacheCleanupInterval = Duration(minutes: 5);
   static const int profitCacheMaxSize = 50;
   static const Duration profitCacheTtl = Duration(minutes: 30);
+  static const int portfolioAnalysisCacheMaxSize = 10;
+  static const Duration portfolioAnalysisCacheTtl = Duration(minutes: 30);
+  static const Duration stockQuoteCacheTtl = Duration(minutes: 10);
   static const int transactionHistoryCacheMaxSize = 30;
   static const Duration transactionHistoryCacheTtl = Duration(hours: 1);
   

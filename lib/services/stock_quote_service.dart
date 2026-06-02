@@ -50,7 +50,7 @@ class StockQuote {
 
 class StockQuoteService {
   static const int _batchSize = 20;
-  static const Duration _ttl = Duration(minutes: 3);
+  static const Duration _ttl = Duration(minutes: 10);
 
   final Map<String, StockQuote> _cache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
@@ -189,21 +189,40 @@ class StockQuoteService {
           if (v.isNotEmpty && v != '-' && v != '--') {
             final raw = double.tryParse(v);
             if (raw != null && raw > 0) {
-              // Tencent API returns total market value in 亿元 directly,
-              // but to be safe, detect the unit from magnitude.
+              // Tencent GTIMG API parts[45] = 总市值 (total market value)
+              // For A-shares: value is in 元 (RMB yuan)
+              // For HK stocks: value is in 港元 (HKD), same unit logic
+              //
+              // Unit detection via magnitude:
+              //   > 1e8  → raw is 元 → convert to 亿元
+              //   > 1e5  → raw is 万元 → convert to 亿元
+              //   else   → raw is already 亿元
+              String unitLabel;
               if (raw > 100000000) {
-                // Value in 元 → 亿元 (e.g. ICBC: 2e12 元)
                 totalMvYi = raw / 100000000;
+                unitLabel = '元→${totalMvYi.toStringAsFixed(1)}亿';
               } else if (raw > 100000) {
-                // Value in 万元 → 亿元 (e.g. ICBC: 2e8 万元)
                 totalMvYi = raw / 10000;
+                unitLabel = '万元→${totalMvYi.toStringAsFixed(1)}亿';
               } else {
-                // Already in 亿元, use directly
                 totalMvYi = raw;
+                unitLabel = '亿元(原值)';
               }
+              print('[StockQuote] $code 总市值: raw=$raw → $unitLabel');
             }
+          } else {
+            print('[StockQuote] $code 总市值: parts[45]="$v" → 无法解析');
           }
+        } else {
+          print('[StockQuote] $code 总市值: parts长度=${parts.length} ≤45, 无总市值字段');
         }
+
+        // One-line audit log per stock (grep-friendly: [StockQuote] code)
+        final stockName = parts.length > 1 ? parts[1] : '';
+        print('[StockQuote] $code ($stockName) '
+            'price=$price pe=${pe?.toStringAsFixed(1) ?? "-"} '
+            'pb=${pb?.toStringAsFixed(1) ?? "-"} '
+            'totalMvYi=${totalMvYi?.toStringAsFixed(0) ?? "-"}亿');
 
         _cache[code] = StockQuote(
           code: code,

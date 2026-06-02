@@ -93,6 +93,9 @@ lib/
 ├── constants/
 │   └── app_constants.dart                 # 全局常量管理，统一管理 API 地址、缓存键名、业务常量、User-Agent 等
 │
+├── data/
+│   └── industry_classification.dart        # 行业分类硬编码映射表，覆盖 600+ 只重点股票的代码→行业精确映射，作为分类降级策略的第二层
+│
 ├── utils/
 │   ├── animation_config.dart              # 动画配置工具类，统一定义动画时长、曲线等参数
 │   ├── desktop_focus_manager.dart         # 桌面端焦点管理工具，处理 Tab 键导航和焦点切换逻辑
@@ -115,6 +118,7 @@ lib/
 │   ├── file_import_service.dart           # 文件导入服务，支持 CSV/Excel 格式，具备模糊匹配、编码检测和完整备份解析能力
 │   ├── fund_service.dart                  # 基金 API 服务，调用接口获取数据，含多源冗余、缓存和重试机制
 │   ├── http_client_provider.dart          # HTTP Client 提供者，全局共享 HTTP 客户端实例，实现连接池复用，提高网络请求效率
+│   ├── industry_classifier.dart            # 行业分类服务，三层降级策略：后端 (akshare) 数据 → 硬编码精确映射（600+只股票）→ 关键词匹配
 │   ├── stock_quote_service.dart           # 腾讯行情 API 股票报价服务，支持批量获取 A 股/港股实时行情（价格/PE/PB/市值），含 GBK 解码、TTL 缓存与风格分类
 │   ├── ui_state_service.dart              # UI 状态管理服务，使用 SQLite 存储 UI 状态（如展开/折叠状态）
 │   └── version_check_service.dart         # 版本检查服务，优先从后端检查，失败时回退到 GitHub Release API
@@ -127,12 +131,13 @@ lib/
 │   ├── net_worth_point.dart               # 净值及趋势数据点
 │   ├── profit_result.dart                 # 收益结果模型，绝对收益、年化收益率
 │   ├── top_holding.dart                   # 十大重仓股数据
-│   └── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息
+│   ├── transaction_record.dart            # 交易记录模型，单笔买入/卖出交易的详细信息
+│   └── weighted_holding.dart              # 加权持仓模型，按总投资金额加权计算后的股票持仓数据（股票代码/名称/加权比例/覆盖基金）
 │
 ├── views/
 │   ├── add_holding_view.dart              # 新增持仓页，表单输入客户信息、基金代码、交易金额/份额/日期
 │   ├── client_view.dart                   # 客户视图页，分组展示持仓，展开后可通过三点按钮进入汇总分析
-│   ├── client_fund_summary_view.dart       # 客户基金汇总分析页，含四大模块：①投资金额饼图+盈亏双向柱状图 ②十大重仓股（加权本金）③风格分布+行业分类+重叠检测 ④智能投资方向总结
+│   ├── client_fund_summary_view.dart       # 客户基金汇总分析页：①投资金额饼图（含盈亏集成）②十大重仓股（加权）③风格分布（分段条形图）+行业分类（Top3高亮）+重叠检测 ④客观数据总结；适配深色/浅色模式，响应式布局
 │   ├── config_view.dart                   # 程序设置页面，隐私/主题切换/日志查询/持仓管理等
 │   ├── edit_holding_view.dart             # 编辑持仓页，显示持仓详情，支持加仓/减仓操作，查看交易历史，编辑基金备注
 │   ├── export_holding_view.dart           # 导出数据页面，支持 CSV/Excel 格式

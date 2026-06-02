@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import '../data/industry_classification.dart';
 import '../models/fund_holding.dart';
 import '../models/top_holding.dart';
+import '../models/weighted_holding.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
+import '../services/industry_classifier.dart';
 import '../services/stock_quote_service.dart';
+import '../widgets/adaptive_top_bar.dart';
 
 class ClientFundSummaryPage extends StatefulWidget {
   final String clientName;
@@ -33,14 +38,25 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
   bool _loadingTopHoldings = true;
   bool _loadingQuotes = true;
-  bool _profitBarExpanded = false;
   int _touchedPieIndex = -1;
   bool _usingBackendData = false;
 
   Map<String, StockQuote> _stockQuotes = {};
   Map<String, String> _stockIndustries = {};    // stockCode → industry (from backend)
-  Map<String, dynamic>? _backendAnalysis;       // cached portfolio analysis result
-  List<_WeightedHolding> _weightedHoldings = [];
+  // ignore: unused_field — cached for potential diagnostic use
+  Map<String, dynamic>? _backendAnalysis;
+  List<WeightedHolding> _weightedHoldings = [];
+  late IndustryClassifier _classifier;
+
+  // --- Display layout constants ---
+  static const int _topIndustriesCount = 3;
+  static const int _maxIndustriesVisible = 8;
+  static const double _cardBorderRadius = 10.0;
+  static const double _cardInnerRadius = 6.0;
+  static const double _sectionPaddingWide = 16.0;
+  static const double _sectionPaddingNarrow = 10.0;
+  static const double _sectionSpacingWide = 14.0;
+  static const double _sectionSpacingNarrow = 8.0;
 
   // --- Chart colour palette ---
   static const List<Color> _chartColors = [
@@ -55,6 +71,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   @override
   void initState() {
     super.initState();
+    _classifier = const IndustryClassifier();
     _loadData();
   }
 
@@ -73,6 +90,11 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         debugPrint('[FundSummary] 后端分析成功，加权持仓: ${analysis['weightedHoldings']?.length ?? 0}条');
         _applyBackendAnalysis(analysis);
         _usingBackendData = true;
+
+        // Supplement missing data with Tencent API
+        await _supplementWithTencentQuotes();
+        _logIndustryClassificationSources();
+
         setState(() { _loadingTopHoldings = false; _loadingQuotes = false; });
         return;
       }
@@ -109,15 +131,13 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   /// Populate local state from the backend's portfolio analysis response.
   void _applyBackendAnalysis(Map<String, dynamic> analysis) {
     // 1. Weighted holdings — backend weightedRatio is already a percentage
-    //    (same as the client-side _computeWeightedHoldings produces), e.g.
-    //    5.2 means 5.2%.  Do NOT divide by 100.
     final rawHoldings = analysis['weightedHoldings'] as List<dynamic>? ?? [];
     _weightedHoldings = rawHoldings.map((h) {
       final rawPct = (h['weightedRatio'] as num?)?.toDouble() ?? 0;
-      return _WeightedHolding(
+      return WeightedHolding(
         stockCode: h['stockCode']?.toString() ?? '',
         stockName: h['stockName']?.toString() ?? '',
-        weightedRatio: rawPct,   // already percentage
+        weightedRatio: rawPct,
         totalRatio: rawPct,
         fundCodes: (h['fundCodes'] as List<dynamic>?)
             ?.map((e) => e.toString()).toSet() ?? {},
@@ -126,7 +146,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       );
     }).toList();
 
-    // 2. Stock quotes (populate _stockQuotes for UI methods that read it)
+    // 2. Stock quotes
     _stockQuotes.clear();
     _stockIndustries.clear();
     for (final h in rawHoldings) {
@@ -146,8 +166,14 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       }
     }
 
-    // 3. Cache the full backend response for style/summary use
+    // 3. Cache the full backend response
     _backendAnalysis = analysis;
+
+    // 4. Update classifier with backend data
+    _classifier = IndustryClassifier(
+      usingBackendData: true,
+      stockIndustries: Map<String, String>.from(_stockIndustries),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -158,7 +184,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final totalInv = _totalInvestment;
     if (totalInv <= 0) return;
 
-    final map = <String, _WeightedHolding>{};
+    final map = <String, WeightedHolding>{};
     for (final h in widget.holdings) {
       final weight = h.totalCost / totalInv;
       final holdings = _fundTopHoldings[h.fundCode] ?? [];
@@ -168,7 +194,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         if (map.containsKey(key)) {
           map[key] = map[key]!.add(wr, th.ratio, h.fundCode, h.fundName);
         } else {
-          map[key] = _WeightedHolding(
+          map[key] = WeightedHolding(
             stockCode: th.stockCode, stockName: th.stockName,
             weightedRatio: wr, totalRatio: th.ratio,
             fundCodes: {h.fundCode}, fundNames: {h.fundName},
@@ -188,57 +214,142 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     _stockQuotes = await _quoteService.fetchQuotes(allCodes);
   }
 
+  /// Supplement stocks with missing totalMv/PE/PB from Tencent GTIMG API.
+  Future<void> _supplementWithTencentQuotes() async {
+    final missingCodes = <String>[];
+    for (final wh in _weightedHoldings) {
+      final fullCode = _quoteService.toFullCode(wh.stockCode);
+      final q = _stockQuotes[fullCode];
+      if (q == null || q.totalMv == null || q.pe == null || q.pb == null) {
+        missingCodes.add(wh.stockCode);
+      }
+    }
+
+    if (missingCodes.isEmpty) {
+      debugPrint('[FundSummary] 腾讯补全: 所有股票数据完整，无需补充');
+      return;
+    }
+
+    debugPrint('[FundSummary] 腾讯补全: ${missingCodes.length}只股票缺少数据 → '
+        'codes=${missingCodes.join(",")}');
+    final tencentQuotes = await _quoteService.fetchQuotes(missingCodes);
+
+    int supplemented = 0;
+    int totalMvFilled = 0;
+    int peFilled = 0;
+    int pbFilled = 0;
+
+    for (final entry in tencentQuotes.entries) {
+      final existing = _stockQuotes[entry.key];
+      if (existing != null) {
+        final hadTotalMv = existing.totalMv != null;
+        final hadPe = existing.pe != null;
+        final hadPb = existing.pb != null;
+
+        _stockQuotes[entry.key] = StockQuote(
+          code: entry.key,
+          price: existing.price > 0 ? existing.price : entry.value.price,
+          pe: existing.pe ?? entry.value.pe,
+          pb: existing.pb ?? entry.value.pb,
+          totalMv: existing.totalMv ?? entry.value.totalMv,
+        );
+
+        if (!hadTotalMv && entry.value.totalMv != null) totalMvFilled++;
+        if (!hadPe && entry.value.pe != null) peFilled++;
+        if (!hadPb && entry.value.pb != null) pbFilled++;
+        supplemented++;
+      } else {
+        _stockQuotes[entry.key] = entry.value;
+        if (entry.value.totalMv != null) totalMvFilled++;
+        if (entry.value.pe != null) peFilled++;
+        if (entry.value.pb != null) pbFilled++;
+        supplemented++;
+      }
+    }
+
+    debugPrint('[FundSummary] 腾讯补全完成: $supplemented只已补充 '
+        '(totalMv=$totalMvFilled, pe=$peFilled, pb=$pbFilled)');
+  }
+
+  /// Log the source tier used for each stock's industry classification.
+  void _logIndustryClassificationSources() {
+    int akshareCount = 0;
+    int hardcodedCount = 0;
+    int keywordCount = 0;
+    int fallbackCount = 0;
+
+    for (final wh in _weightedHoldings) {
+      final code = wh.stockCode;
+      final name = wh.stockName;
+      final result = _classifier.classify(name, code: code);
+
+      String tier;
+      if (_usingBackendData && code.isNotEmpty && _stockIndustries.containsKey(code)) {
+        tier = 'akshare';
+        akshareCount++;
+      } else if (code.isNotEmpty && hardcodedIndustryMap.containsKey(code)) {
+        tier = 'hardcoded';
+        hardcodedCount++;
+      } else if (result == '其他') {
+        tier = 'fallback-其他';
+        fallbackCount++;
+      } else {
+        tier = 'keyword';
+        keywordCount++;
+      }
+
+      debugPrint('[FundSummary] 行业分类: $code($name) → $result [$tier]');
+    }
+
+    debugPrint('[FundSummary] 行业分类来源统计: '
+        'akshare=$akshareCount, hardcoded=$hardcodedCount, '
+        'keyword=$keywordCount, fallback-其他=$fallbackCount, '
+        'total=${_weightedHoldings.length}');
+  }
+
   double get _totalInvestment =>
       widget.holdings.fold(0.0, (sum, h) => sum + h.totalCost);
   double get _totalProfit =>
       widget.holdings.fold(0.0, (sum, h) => sum + h.profit);
-  double get _totalAbsProfit =>
-      widget.holdings.fold(0.0, (sum, h) => sum + h.profit.abs());
-  double get _maxAbsProfit {
-    double m = 0;
-    for (final h in widget.holdings) { if (h.profit.abs() > m) m = h.profit.abs(); }
-    return m;
-  }
 
   // ---------------------------------------------------------------------------
   // Style & industry helpers
   // ---------------------------------------------------------------------------
 
   /// Asset-weighted style distribution.
-  /// Instead of counting stocks, each stock's vote is multiplied by its
-  /// final weighted ratio in the client's total portfolio:
-  ///   StyleRatio = Σ (FundWeight × StockInFundWeight) × IsStyle
-  /// This ensures the numbers reflect real capital exposure, not just
-  /// head-count of holdings.
   Map<String, double> _calculateStyleDistribution() {
     double largeW = 0, midW = 0, smallW = 0;
     double valueW = 0, growthW = 0, balancedW = 0;
+    int missingTotalMv = 0;
+    int missingValueStyle = 0;
+    int totalStocks = 0;
 
     for (final wh in _weightedHoldings) {
       final w = wh.weightedRatio;
       if (w <= 0) continue;
+      totalStocks++;
 
       final fullCode = _quoteService.toFullCode(wh.stockCode);
       final q = _stockQuotes[fullCode];
 
-      // Market cap style — only use actual API data; skip unknown.
+      // Market cap style
       if (q != null && q.totalMv != null) {
-        final cap = q.marketCapStyle;
-        switch (cap) {
+        switch (q.marketCapStyle) {
           case '大盘': largeW += w; break;
           case '中盘': midW += w; break;
           case '小盘': smallW += w; break;
         }
+      } else {
+        missingTotalMv++;
       }
-      // Stocks without API market-cap data are excluded from the
-      // style calculation — we do NOT guess based on exchange/board.
 
-      // Value / Growth style — use API data if available.
+      // Value / Growth style
       String style;
       if (q != null && (q.pe != null || q.pb != null)) {
         style = q.valueStyle;
       } else {
         style = '均衡';
+        if (q == null || (q.pe == null && q.pb == null)) missingValueStyle++;
       }
       switch (style) {
         case '价值': valueW += w; break;
@@ -249,7 +360,61 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     }
 
     final totalW = largeW + midW + smallW;
-    if (totalW <= 0) return {};
+    if (totalW <= 0) {
+      debugPrint('[FundSummary] 风格分布为空! totalW=0, '
+          'totalStocks=$totalStocks, missingTotalMv=$missingTotalMv, '
+          'missingValueStyle=$missingValueStyle, '
+          'stockQuotesSize=${_stockQuotes.length}');
+      return {};
+    }
+
+    // Audit logs
+    final largeList = <String>[];
+    final midList = <String>[];
+    final smallList = <String>[];
+    for (final wh in _weightedHoldings) {
+      final fullCode = _quoteService.toFullCode(wh.stockCode);
+      final q = _stockQuotes[fullCode];
+      if (q != null && q.totalMv != null) {
+        final label = '${wh.stockName}(${wh.stockCode},${q.totalMv!.toStringAsFixed(0)}亿)';
+        switch (q.marketCapStyle) {
+          case '大盘': largeList.add(label); break;
+          case '中盘': midList.add(label); break;
+          case '小盘': smallList.add(label); break;
+        }
+      }
+    }
+    debugPrint('[FundSummary] 市值分类明细:');
+    debugPrint('[FundSummary]   大盘(${largeList.length}只): ${largeList.join(", ")}');
+    debugPrint('[FundSummary]   中盘(${midList.length}只): ${midList.join(", ")}');
+    debugPrint('[FundSummary]   小盘(${smallList.length}只): ${smallList.join(", ")}');
+
+    final valueList = <String>[];
+    final growthList = <String>[];
+    final balancedList = <String>[];
+    for (final wh in _weightedHoldings) {
+      final fullCode = _quoteService.toFullCode(wh.stockCode);
+      final q = _stockQuotes[fullCode];
+      if (q != null) {
+        final peStr = q.pe?.toStringAsFixed(1) ?? '-';
+        final pbStr = q.pb?.toStringAsFixed(1) ?? '-';
+        final label = '${wh.stockName}(${wh.stockCode},PE=$peStr,PB=$pbStr)';
+        if (q.pe == null && q.pb == null) continue;
+        switch (q.valueStyle) {
+          case '价值': valueList.add(label); break;
+          case '成长': growthList.add(label); break;
+          case '均衡': balancedList.add(label); break;
+        }
+      }
+    }
+    debugPrint('[FundSummary] 价值风格明细:');
+    debugPrint('[FundSummary]   价值(${valueList.length}只): ${valueList.join(", ")}');
+    debugPrint('[FundSummary]   成长(${growthList.length}只): ${growthList.join(", ")}');
+    debugPrint('[FundSummary]   均衡(${balancedList.length}只): ${balancedList.join(", ")}');
+
+    debugPrint('[FundSummary] 风格分布: 覆盖${totalW.toStringAsFixed(2)}权重, '
+        'totalStocks=$totalStocks, missingTotalMv=$missingTotalMv, '
+        'missingValueStyle=$missingValueStyle');
     return {
       '大盘占比': largeW / totalW, '中盘占比': midW / totalW,
       '小盘占比': smallW / totalW, '价值占比': valueW / totalW,
@@ -263,515 +428,13 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   List<MapEntry<String, double>> _getTopIndustries({int count = 3}) {
     final industryMap = <String, double>{};
     for (final wh in _weightedHoldings) {
-      final label = _classifyIndustry(wh.stockName, code: wh.stockCode);
+      final label = _classifier.classify(wh.stockName, code: wh.stockCode);
       industryMap[label] = (industryMap[label] ?? 0) + wh.weightedRatio;
     }
     if (industryMap.isEmpty) return [];
     final sorted = industryMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return sorted.take(count).toList();
-  }
-
-  /// Hardcoded precision mapping for well-known heavy-weight stocks.
-  /// Stock code → industry label.  Checked BEFORE keyword matching so
-  /// stocks with ambiguous names (e.g. "某某发展", "某某股份") land in the
-  /// correct bucket regardless of their name.
-    static const Map<String, String> _hardcodedIndustryMap = {
-    // ── Insurance ──
-    '601318': '保险', '601628': '保险', '601601': '保险', '601336': '保险', '601319': '保险', '000627': '保险', '02318': '保险', '02628': '保险', '02601': '保险', '01339': '保险',
-    '06060': '保险',
-    // ── Banks ──
-    '600036': '银行', '601398': '银行', '601939': '银行', '601288': '银行', '601988': '银行', '600016': '银行', '601166': '银行', '000001': '银行', '002142': '银行', '601328': '银行',
-    '600000': '银行', '601818': '银行', '601009': '银行', '600919': '银行', '601229': '银行', '600926': '银行', '601997': '银行', '601838': '银行', '00939': '银行', '01398': '银行',
-    '03988': '银行', '01288': '银行', '03968': '银行', '06818': '银行', '00005': '银行', '00011': '银行', '02388': '银行', '601860': '银行', '002839': '银行', '600928': '银行',
-    '601187': '银行', '002936': '银行', '603323': '银行', '601577': '银行', '002948': '银行', '601963': '银行', '002966': '银行', '601528': '银行',
-    // ── Securities ──
-    '600030': '券商', '300059': '券商', '601211': '券商', '600837': '券商', '601688': '券商', '000776': '券商', '600999': '券商', '601066': '券商', '601878': '券商', '600958': '券商',
-    '002736': '券商', '600061': '券商', '00388': '券商', '06030': '券商', '06886': '券商', '06837': '券商', '01776': '券商', '03908': '券商', '601995': '券商', '601236': '券商',
-    '601375': '券商', '601696': '券商', '600909': '券商', '000750': '券商', '002673': '券商', '600369': '券商', '000783': '券商', '000166': '券商', '601162': '券商',
-    // ── Oil & Petrochemical ──
-    '601857': '石油石化', '600028': '石油石化', '600938': '石油石化', '600256': '石油石化', '000059': '石油石化', '00883': '石油石化', '00386': '石油石化',
-    // ── Coal ──
-    '601088': '煤炭', '601225': '煤炭', '600188': '煤炭', '601898': '煤炭', '000983': '煤炭', '601699': '煤炭', '600985': '煤炭', '601001': '煤炭', '01088': '煤炭', '01171': '煤炭',
-    '01898': '煤炭', '600971': '煤炭', '000552': '煤炭', '600123': '煤炭', '600395': '煤炭', '601101': '煤炭',
-    // ── Non-ferrous Metals ──
-    '601899': '有色金属', '603993': '有色金属', '600547': '有色金属', '002460': '有色金属', '002466': '有色金属', '600111': '有色金属', '600362': '有色金属', '000630': '有色金属', '000603': '有色金属',
-    '002155': '有色金属', '000960': '有色金属', '002237': '有色金属', '000831': '有色金属', '600497': '有色金属', '02899': '有色金属', '03993': '有色金属', '01208': '有色金属', '000612': '有色金属',
-    '000878': '有色金属', '002378': '有色金属', '600459': '有色金属', '600549': '有色金属', '000969': '有色金属',
-    // ── Power ──
-    '600900': '电力', '600025': '电力', '601985': '电力', '003816': '电力', '600886': '电力', '600674': '电力', '600011': '电力', '000883': '电力', '600023': '电力', '000027': '电力',
-    '600795': '电力', '000539': '电力', '002039': '电力', '600236': '电力', '600483': '电力', '00902': '电力', '01071': '电力', '00916': '电力', '01816': '电力', '02380': '电力',
-    '688819': '电力', '600509': '电力', '600578': '电力', '000600': '电力', '600642': '电力',
-    // ── Electronics & Semiconductors ──
-    '688981': '电子/半导体', '603501': '电子/半导体', '002371': '电子/半导体', '603986': '电子/半导体', '002049': '电子/半导体', '688041': '电子/半导体', '688256': '电子/半导体', '688012': '电子/半导体',
-    '688396': '电子/半导体', '688536': '电子/半导体', '603290': '电子/半导体', '688072': '电子/半导体', '688047': '电子/半导体', '688608': '电子/半导体', '603160': '电子/半导体', '688099': '电子/半导体',
-    '002156': '电子/半导体', '600584': '电子/半导体', '600460': '电子/半导体', '603005': '电子/半导体', '300782': '电子/半导体', '002415': '电子/半导体', '002236': '电子/半导体', '00981': '电子/半导体',
-    '01385': '电子/半导体', '00522': '电子/半导体', '688261': '电子/半导体', '300672': '电子/半导体', '688110': '电子/半导体', '688262': '电子/半导体', '300327': '电子/半导体', '688368': '电子/半导体',
-    '603068': '电子/半导体', '688525': '电子/半导体', '688728': '电子/半导体', '688486': '电子/半导体', '300567': '电子/半导体', '300623': '电子/半导体', '688601': '电子/半导体', '688126': '电子/半导体',
-    '688521': '电子/半导体', '688153': '电子/半导体', '688508': '电子/半导体', '688416': '电子/半导体', '688220': '电子/半导体', '688107': '电子/半导体', '688595': '电子/半导体', '688049': '电子/半导体',
-    '688798': '电子/半导体', '300661': '电子/半导体', '688120': '电子/半导体', '688147': '电子/半导体', '688559': '电子/半导体', '688652': '电子/半导体', '300223': '电子/半导体', '300458': '电子/半导体',
-    // ── Electronic Components ──
-    '002475': '电子元器件', '601138': '电子元器件', '600745': '电子元器件', '002241': '电子元器件', '300433': '电子元器件', '02382': '电子元器件', '01415': '电子元器件', '02018': '电子元器件', '300476': '电子元器件',
-    '688183': '电子元器件', '688618': '电子元器件', '300408': '电子元器件', '002138': '电子元器件', '688210': '电子元器件', '300602': '电子元器件', '603920': '电子元器件', '002463': '电子元器件',
-    '002384': '电子元器件', '002916': '电子元器件',
-    // ── Panel / Display ──
-    '000725': '面板/显示', '000100': '面板/显示', '600707': '面板/显示', '002841': '面板/显示', '300088': '面板/显示',
-    // ── Baijiu / Liquor ──
-    '600519': '白酒', '000858': '白酒', '000568': '白酒', '600809': '白酒', '002304': '白酒', '000596': '白酒', '603369': '白酒', '603198': '白酒', '600702': '白酒', '600559': '白酒',
-    '000799': '白酒',
-    // ── Food & Beverage ──
-    '600887': '食品饮料', '603288': '食品饮料', '600882': '食品饮料', '002557': '食品饮料', '603345': '食品饮料', '002847': '食品饮料', '600873': '食品饮料', '300146': '食品饮料', '603027': '食品饮料',
-    '002568': '食品饮料', '600132': '食品饮料', '000895': '食品饮料', '002582': '食品饮料', '603866': '食品饮料', '002216': '食品饮料', '06862': '食品饮料', '00291': '食品饮料', '00168': '食品饮料',
-    '00220': '食品饮料', '00151': '食品饮料', '09633': '食品饮料', '06979': '食品饮料', '02319': '食品饮料', '06049': '食品饮料', '003000': '食品饮料', '002991': '食品饮料', '001215': '食品饮料',
-    '603719': '食品饮料', '300973': '食品饮料', '605499': '食品饮料', '600298': '食品饮料', '603589': '食品饮料', '600305': '食品饮料', '002461': '食品饮料', '600597': '食品饮料', '600866': '食品饮料',
-    '002650': '食品饮料', '603696': '食品饮料', '300741': '食品饮料', '600381': '食品饮料', '300149': '食品饮料', '002852': '食品饮料', '000639': '食品饮料', '002286': '食品饮料', '600300': '食品饮料',
-    '300783': '食品饮料', '600429': '食品饮料', '002329': '食品饮料',
-    // ── Home Appliances ──
-    '000333': '家电', '000651': '家电', '600690': '家电', '002050': '家电', '000921': '家电', '002032': '家电', '688169': '家电', '002242': '家电', '00669': '家电', '01691': '家电',
-    '06690': '家电', '00921': '家电', '002959': '家电', '603355': '家电', '002508': '家电', '300894': '家电', '688696': '家电',
-    // ── Automobiles ──
-    '002594': '汽车', '601633': '汽车', '000625': '汽车', '600104': '汽车', '601238': '汽车', '600418': '汽车', '000800': '汽车', '601799': '汽车', '600733': '汽车', '601127': '汽车',
-    '09868': '汽车', '02015': '汽车', '09863': '汽车', '00175': '汽车', '01211': '汽车', '02333': '汽车',
-    // ── Lithium Battery ──
-    '300750': '锂电池', '300014': '锂电池', '002074': '锂电池', '002812': '锂电池', '300769': '锂电池', '688567': '锂电池', '300457': '锂电池', '688779': '锂电池', '300568': '锂电池',
-    '002709': '锂电池', '300037': '锂电池', '002340': '锂电池', '600884': '锂电池', '688772': '锂电池', '688707': '锂电池', '300890': '锂电池', '301358': '锂电池', '688184': '锂电池',
-    '300919': '锂电池', '688700': '锂电池', '688778': '锂电池', '603799': '锂电池', '603026': '锂电池', '300035': '锂电池',
-    // ── Solar / PV ──
-    '601012': '光伏', '600438': '光伏', '300274': '光伏', '002459': '光伏', '688599': '光伏', '688223': '光伏', '688390': '光伏', '002129': '光伏', '688303': '光伏', '300763': '光伏',
-    '300118': '光伏', '600732': '光伏', '688680': '光伏', '603806': '光伏', '688472': '光伏', '688560': '光伏', '002865': '光伏', '688598': '光伏', '688032': '光伏', '688516': '光伏',
-    // ── Wind Power ──
-    '002202': '风电', '601615': '风电', '300772': '风电', '603218': '风电', '300185': '风电', '002531': '风电', '688349': '风电', '688660': '风电', '601016': '风电', '300129': '风电',
-    // ── Innovative Pharma ──
-    '600276': '创新药', '688235': '创新药', '688180': '创新药', '688331': '创新药', '688428': '创新药', '688192': '创新药', '300558': '创新药', '002294': '创新药', '01177': '创新药',
-    '06160': '创新药', '01801': '创新药', '09926': '创新药', '02162': '创新药', '09969': '创新药', '02171': '创新药',
-    // ── Medical Devices ──
-    '300760': '医疗器械', '688271': '医疗器械', '300832': '医疗器械', '688617': '医疗器械', '300529': '医疗器械', '300003': '医疗器械', '688029': '医疗器械', '002223': '医疗器械', '300206': '医疗器械',
-    '002901': '医疗器械', '688139': '医疗器械', '300633': '医疗器械', '01093': '医疗器械', '02196': '医疗器械', '00853': '医疗器械', '06127': '医疗器械', '02509': '医疗器械', '688050': '医疗器械',
-    '300595': '医疗器械', '688581': '医疗器械', '300653': '医疗器械', '688389': '医疗器械', '300406': '医疗器械', '688085': '医疗器械', '688677': '医疗器械', '603392': '医疗器械',
-    // ── Healthcare Services ──
-    '300015': '医疗服务', '300244': '医疗服务', '002044': '医疗服务', '603882': '医疗服务', '300676': '医疗服务', '300759': '医疗服务', '600763': '医疗服务',
-    // ── Pharma R&D Outsourcing ──
-    '603259': '医药研发外包', '300347': '医药研发外包', '002821': '医药研发外包', '300363': '医药研发外包', '688202': '医药研发外包', '300725': '医药研发外包', '688131': '医药研发外包', '688105': '医药研发外包',
-    '02269': '医药研发外包', '09939': '医药研发外包', '688276': '医药研发外包', '300122': '医药研发外包', '688179': '医药研发外包', '688278': '医药研发外包',
-    // ── Traditional Chinese Medicine ──
-    '600436': '中药', '000538': '中药', '000423': '中药', '600085': '中药', '603939': '中药', '600332': '中药', '002603': '中药', '000999': '中药', '600750': '中药', '600535': '中药',
-    '600329': '中药', '300026': '中药', '603896': '中药', '00867': '中药', '00570': '中药', '01666': '中药', '01179': '中药',
-    // ── Internet ──
-    '00700': '互联网', '09988': '互联网', '03690': '互联网', '09888': '互联网', '09618': '互联网', '01024': '互联网', '09999': '互联网', '09961': '互联网', '02013': '互联网', '01810': '互联网',
-    '09992': '互联网', '09626': '互联网', '09899': '互联网', '09698': '互联网', '09901': '互联网', '09660': '互联网', '09890': '互联网', '01347': '互联网', '06618': '互联网', '02518': '互联网',
-    '00020': '互联网', '002315': '互联网', '300785': '互联网', '300792': '互联网', '002127': '互联网',
-    // ── AI ──
-    '002230': '人工智能', '688088': '人工智能', '300496': '人工智能', '603019': '人工智能', '688568': '人工智能', '300624': '人工智能',
-    // ── Computer / Software ──
-    '688111': '计算机/软件', '002410': '计算机/软件', '600588': '计算机/软件', '600570': '计算机/软件', '300454': '计算机/软件', '688561': '计算机/软件', '688083': '计算机/软件', '688066': '计算机/软件',
-    '688188': '计算机/软件', '002439': '计算机/软件', '300369': '计算机/软件', '300379': '计算机/软件', '688777': '计算机/软件', '00992': '计算机/软件', '09688': '计算机/软件', '09959': '计算机/软件',
-    '00268': '计算机/软件', '00354': '计算机/软件', '688259': '计算机/软件', '688039': '计算机/软件', '300525': '计算机/软件', '300378': '计算机/软件', '300773': '计算机/软件', '688201': '计算机/软件',
-    '688031': '计算机/软件', '300451': '计算机/软件', '300559': '计算机/软件',
-    // ── Telecom ──
-    '600941': '通信', '601728': '通信', '600050': '通信', '000063': '通信', '002281': '通信', '688036': '通信', '600498': '通信', '688387': '通信', '300394': '通信', '600487': '通信',
-    '603236': '通信', '00941': '通信', '00728': '通信', '00762': '通信', '06823': '通信', '00788': '通信', '601869': '通信', '688313': '通信', '603118': '通信', '301191': '通信',
-    // ── Shipping & Ports ──
-    '601919': '航运/港口', '601872': '航运/港口', '601975': '航运/港口', '600026': '航运/港口', '601598': '航运/港口', '001872': '航运/港口', '01138': '航运/港口', '01919': '航运/港口', '02866': '航运/港口',
-    '01308': '航运/港口', '02343': '航运/港口', '03378': '航运/港口', '00144': '航运/港口', '01199': '航运/港口', '300228': '航运/港口', '000039': '航运/港口', '601866': '航运/港口', '600428': '航运/港口',
-    '601228': '航运/港口', '600017': '航运/港口', '600018': '航运/港口', '601000': '航运/港口', '002930': '航运/港口',
-    // ── Express / Logistics ──
-    '002352': '快递/物流', '600233': '快递/物流', '002120': '快递/物流', '603056': '快递/物流', '600057': '快递/物流', '02618': '快递/物流', '00636': '快递/物流', '02057': '快递/物流', '603713': '快递/物流',
-    '600704': '快递/物流', '603128': '快递/物流',
-    // ── Aviation & Airports ──
-    '600029': '航空/机场', '601111': '航空/机场', '600115': '航空/机场', '600009': '航空/机场', '600004': '航空/机场', '600897': '航空/机场', '00753': '航空/机场', '00670': '航空/机场', '00694': '航空/机场',
-    '002928': '航空/机场', '603885': '航空/机场', '601021': '航空/机场',
-    // ── Railway ──
-    '601816': '铁路', '601006': '铁路', '601333': '铁路', '600125': '铁路',
-    // ── Defense & Aerospace ──
-    '600760': '军工/航天', '000768': '军工/航天', '600893': '军工/航天', '002179': '军工/航天', '600862': '军工/航天', '000733': '军工/航天', '600118': '军工/航天', '600391': '军工/航天',
-    '688239': '军工/航天', '300034': '军工/航天', '600765': '军工/航天', '688297': '军工/航天', '600372': '军工/航天', '002025': '军工/航天', '600967': '军工/航天', '300395': '军工/航天',
-    '002013': '军工/航天', '300114': '军工/航天', '000547': '军工/航天', '300775': '军工/航天', '688283': '军工/航天', '688237': '军工/航天', '688776': '军工/航天', '688281': '军工/航天',
-    '688333': '军工/航天', '688375': '军工/航天',
-    // ── Agriculture ──
-    '002714': '农牧/农化', '300498': '农牧/农化', '000876': '农牧/农化', '002311': '农牧/农化', '002385': '农牧/农化', '000998': '农牧/农化', '300087': '农牧/农化', '600598': '农牧/农化',
-    '002041': '农牧/农化', '600737': '农牧/农化', '300138': '农牧/农化', '002100': '农牧/农化', '002567': '农牧/农化', '002124': '农牧/农化', '002157': '农牧/农化', '002548': '农牧/农化',
-    '000713': '农牧/农化', '600251': '农牧/农化',
-    // ── Media & Education ──
-    '002027': '传媒/教育', '300413': '传媒/教育', '603444': '传媒/教育', '300251': '传媒/教育', '002624': '传媒/教育', '300182': '传媒/教育', '600637': '传媒/教育', '601928': '传媒/教育',
-    '300364': '传媒/教育', '002607': '传媒/教育', '06169': '传媒/教育', '02007': '传媒/教育', '00839': '传媒/教育',
-    // ── Real Estate ──
-    '000002': '房地产', '600048': '房地产', '001979': '房地产', '600325': '房地产', '600383': '房地产', '600606': '房地产', '002244': '房地产', '000069': '房地产', '600340': '房地产',
-    '600515': '房地产', '01109': '房地产', '00688': '房地产', '00017': '房地产', '01918': '房地产', '00884': '房地产', '03380': '房地产', '00960': '房地产', '06098': '房地产', '01997': '房地产',
-    '01209': '房地产', '00101': '房地产', '00012': '房地产', '02202': '房地产', '03900': '房地产', '000560': '房地产', '000671': '房地产', '600266': '房地产', '002146': '房地产', '600376': '房地产',
-    '000736': '房地产', '600239': '房地产',
-    // ── Steel ──
-    '600019': '钢铁', '000898': '钢铁', '600010': '钢铁', '000932': '钢铁', '600282': '钢铁', '600808': '钢铁', '000959': '钢铁', '000825': '钢铁', '000708': '钢铁', '002318': '钢铁',
-    '600507': '钢铁', '002756': '钢铁', '600231': '钢铁',
-    // ── Chemicals ──
-    '600309': '化工', '600346': '化工', '002493': '化工', '000703': '化工', '600426': '化工', '600989': '化工', '002601': '化工', '600160': '化工', '002064': '化工', '600352': '化工',
-    '600486': '化工', '000301': '化工', '002648': '化工', '600141': '化工', '600409': '化工', '002326': '化工', '603225': '化工', '00189': '化工', '00338': '化工', '02096': '化工',
-    '300401': '化工', '002810': '化工', '603650': '化工', '300910': '化工', '688065': '化工', '603181': '化工', '300596': '化工', '002802': '化工', '600096': '化工', '000822': '化工',
-    '000902': '化工', '002539': '化工', '002092': '化工', '600075': '化工', '603299': '化工', '002545': '化工', '002274': '化工', '603077': '化工', '600277': '化工', '600230': '化工',
-    '000818': '化工', '000731': '化工',
-    // ── Textile & Apparel ──
-    '02020': '纺织服装', '02331': '纺织服装', '03998': '纺织服装', '600398': '纺织服装', '300979': '纺织服装', '603116': '纺织服装', '002563': '纺织服装', '603877': '纺织服装', '002832': '纺织服装',
-    // ── Retail ──
-    '601888': '商业零售', '601933': '商业零售', '002024': '商业零售', '600859': '商业零售', '000501': '商业零售', '002419': '商业零售', '600415': '商业零售', '600729': '商业零售', '01929': '商业零售',
-    '06808': '商业零售', '000061': '商业零售', '000028': '商业零售', '600827': '商业零售', '600694': '商业零售', '603708': '商业零售', '601116': '商业零售',
-    // ── Construction Machinery ──
-    '600031': '工程机械', '000157': '工程机械', '000425': '工程机械', '601100': '工程机械', '603338': '工程机械', '600984': '工程机械', '000528': '工程机械', '688425': '工程机械', '03808': '工程机械',
-    '00631': '工程机械', '688570': '工程机械',
-    // ── Environmental Protection ──
-    '603568': '环保', '600323': '环保', '300070': '环保', '600008': '环保', '000544': '环保', '601200': '环保', '002672': '环保', '603588': '环保', '00257': '环保', '01330': '环保',
-    '00895': '环保', '00586': '环保', '03989': '环保', '002210': '环保', '603359': '环保', '603279': '环保', '688101': '环保', '300815': '环保',
-    // ── Paper & Packaging ──
-    '002078': '造纸/包装', '000488': '造纸/包装', '002831': '造纸/包装', '002191': '造纸/包装', '002014': '造纸/包装', '02689': '造纸/包装', '01812': '造纸/包装',
-    // ── Tourism & Hotels ──
-    '600754': '旅游酒店', '600258': '旅游酒店', '603099': '旅游酒店', '000888': '旅游酒店', '600054': '旅游酒店', '603136': '旅游酒店',
-    // ── Testing & Inspection ──
-    '300012': '检验检测', '002967': '检验检测', '300887': '检验检测', '603060': '检验检测',
-    // ── New Materials ──
-    '300699': '新材料', '600143': '新材料', '688005': '新材料', '300073': '新材料', '002130': '新材料', '600456': '新材料', '300855': '新材料', '002057': '新材料', '300554': '新材料',
-    '688357': '新材料', '605589': '新材料', '688181': '新材料', '688116': '新材料', '600516': '新材料', '300748': '新材料',
-    // ── Auto Parts ──
-    '600660': '汽车零部件', '00425': '汽车零部件', '01316': '汽车零部件', '01760': '汽车零部件', '688208': '汽车零部件', '601689': '汽车零部件', '603179': '汽车零部件', '002920': '汽车零部件', '603786': '汽车零部件',
-    '300258': '汽车零部件', '603197': '汽车零部件', '002906': '汽车零部件',
-    // ── Glass & Building Materials ──
-    '601636': '玻璃/建材', '000012': '玻璃/建材', '600586': '玻璃/建材',
-    // ── Non-bank Financial ──
-    '600053': '非银金融', '600318': '非银金融', '002423': '非银金融', '600816': '非银金融', '000563': '非银金融', '02562': '非银金融',
-    // ── Building Materials ──
-    '600585': '建筑建材', '000786': '建筑建材', '002271': '建筑建材', '002372': '建筑建材', '600176': '建筑建材', '002080': '建筑建材', '601668': '建筑建材', '601390': '建筑建材', '601186': '建筑建材',
-    '601800': '建筑建材', '601618': '建筑建材', '00914': '建筑建材', '03323': '建筑建材', '01313': '建筑建材', '01800': '建筑建材', '00390': '建筑建材',
-    // ── Shipbuilding ──
-    '600150': '船舶制造', '601989': '船舶制造', '600685': '船舶制造', '600482': '船舶制造',
-    // ── Consumer Electronics ──
-    '002456': '消费电子', '300136': '消费电子', '300115': '消费电子', '000049': '消费电子', '300866': '消费电子', '603296': '消费电子', '300735': '消费电子', '300207': '消费电子', '002635': '消费电子',
-    '688678': '消费电子',
-    // ── Home & Furniture ──
-    '603833': '家居/建材', '002572': '家居/建材', '603816': '家居/建材', '603208': '家居/建材', '002790': '家居/建材',
-    // ── Robotics ──
-    '002747': '机器人', '300124': '机器人', '688017': '机器人', '002527': '机器人', '300024': '机器人', '688165': '机器人', '002698': '机器人', '603728': '机器人', '688320': '机器人',
-    '301368': '机器人', '002444': '机器人', '300607': '机器人',
-    // ── Power Equipment ──
-    '600406': '电力设备', '601877': '电力设备', '600580': '电力设备', '300001': '电力设备', '002028': '电力设备', '601126': '电力设备', '603606': '电力设备', '002276': '电力设备', '688800': '电力设备',
-    '300693': '电力设备', '002335': '电力设备', '300820': '电力设备', '688663': '电力设备', '603985': '电力设备', '002851': '电力设备', '688330': '电力设备', '300360': '电力设备', '300660': '电力设备',
-    '600481': '电力设备', '002534': '电力设备', '688611': '电力设备', '300850': '电力设备', '688248': '电力设备',
-    // ── Rail Transit Equipment ──
-    '601766': '轨交设备', '000008': '轨交设备', '603111': '轨交设备', '300351': '轨交设备', '002296': '轨交设备', '688187': '轨交设备', '600458': '轨交设备',
-    // ── Beauty & Personal Care ──
-    '603605': '美容护理', '300740': '美容护理', '600315': '美容护理', '603983': '美容护理', '300896': '美容护理', '300957': '美容护理', '688363': '美容护理', '301371': '美容护理',
-    // ── Sports & Outdoor ──
-    '300005': '体育/户外', '002780': '体育/户外', '300651': '体育/户外', '01368': '体育/户外', '06110': '体育/户外',
-    // ── Industrial Parks ──
-    '600895': '产业园区', '600658': '产业园区',
-  };
-
-  /// Industry classification: prefers backend (akshare) data when available,
-  /// falls back to hardcoded precision-map + keyword matching on the name.
-  String _classifyIndustry(String n, {String code = ''}) {
-    // 0. Backend data (akshare) — most accurate, checked first
-    if (_usingBackendData && code.isNotEmpty && _stockIndustries.containsKey(code)) {
-      return _stockIndustries[code]!;
-    }
-
-    // 1. Hardcoded precision map — checked second
-    if (code.isNotEmpty && _hardcodedIndustryMap.containsKey(code)) {
-      return _hardcodedIndustryMap[code]!;
-    }
-
-    // Finance & Insurance
-    if (_containsAny(n, ['银行', '招商银行', '工商', '建设', '农业', '中国银行', '交通',
-      '浦发', '民生', '中信银行', '光大银行', '平安银行', '华夏银行', '北京银行', '宁波银行', '南京银行',
-      '江苏银行', '上海银行', '杭州银行', '成都银行', '长沙银行', '贵阳银行', '郑州银行', '西安银行',
-      '青岛银行', '苏州银行', '厦门银行', '重庆银行', '齐鲁银行', '兰州银行', '沪农商'])) return '银行';
-    if (_containsAny(n, ['保险', '中国平安', '中国太保', '中国人寿', '新华保险', '人保', '太平'])) return '保险';
-    if (_containsAny(n, ['中信证券', '华泰证券', '海通证券', '国泰君安', '广发证券', '招商证券',
-      '东方证券', '申万', '银河', '中金', '东方财富', '同花顺', '指南针', '证券'])) return '券商';
-
-    // Real Estate & Construction
-    if (_containsAny(n, ['万科', '保利发展', '保利地产', '招商蛇口', '金地', '绿城', '华润置地',
-      '龙湖', '中海地产', '中海发展', '新城控股', '滨江', '建发', '华发', '华侨城', '首开', '地产'])) return '房地产';
-    if (_containsAny(n, ['中国建筑', '中国中铁', '中国铁建', '中国交建', '中国电建', '中国中冶',
-      '中国化学', '中国能建', '隧道', '路桥', '上海建工', '四川路桥', '建筑', '建材', '海螺水泥',
-      '东方雨虹', '北新建材', '三棵树', '伟星新材', '坚朗五金'])) return '建筑建材';
-
-    // Energy & Resources
-    if (_containsAny(n, ['中国石油', '中国石化', '中海油', '中国海油', '石化', '石油', '能源',
-      '广汇能源', '新潮能源'])) return '石油石化';
-    if (_containsAny(n, ['中国神华', '陕西煤业', '中煤能源', '兖矿', '兖州煤业', '淮北矿业',
-      '平煤', '晋控煤业', '潞安环能', '华阳', '山煤', '煤炭', '煤业'])) return '煤炭';
-    if (_containsAny(n, ['紫金矿业', '洛阳钼业', '山东黄金', '中金黄金', '赤峰黄金', '银泰黄金',
-      '西部矿业', '铜陵有色', '江西铜业', '云南铜业', '中国铝业', '南山铝业', '云铝', '神火',
-      '天山铝业', '驰宏锌锗', '中金岭南', '锡业', '华友钴业', '赣锋锂业', '天齐锂业', '盐湖',
-      '盛新锂能', '雅化', '永兴材料', '北方稀土', '中国稀土', '盛和资源', '厦门钨业', '中钨',
-      '金力永磁', '有研新材', '矿业', '钴', '锂', '稀土', '钨', '钼'])) return '有色金属';
-
-    // Power & Utilities
-    if (_containsAny(n, ['长江电力', '华能水电', '国投电力', '川投能源', '中国核电', '中国广核',
-      '三峡能源', '华能国际', '华电国际', '大唐发电', '国电电力', '浙能电力', '申能', '深圳能源',
-      '湖北能源', '内蒙华电', '上海电力', '广州发展', '电力', '水电', '核电', '电网', '特高压',
-      '发电', '热电', '风电', '光伏'])) return '电力';
-    if (_containsAny(n, ['燃气', '天然气', '新奥', '华润燃气', '中国燃气', '深圳燃气',
-      '佛燃能源', '贵州燃气', '长春燃气', '重庆燃气', '供水', '自来水', '水务',
-      '首创环保', '中山公用', '公用'])) return '公用事业';
-
-    // Electronics & Semiconductors
-    if (_containsAny(n, ['中芯国际', '韦尔股份', '北方华创', '兆易创新', '紫光国微', '卓胜微',
-      '圣邦', '思瑞浦', '纳芯微', '北京君正', '国科微', '景嘉微', '长电科技', '通富微电',
-      '华天科技', '晶方科技', '士兰微', '华润微', '斯达半导', '时代电气', '扬杰科技', '捷捷微电',
-      '三安光电', '海光信息', '寒武纪', '澜起科技', '安路科技', '复旦微电', '半导体', '芯片',
-      '集成电路', '晶圆', '封测'])) return '电子/半导体';
-    if (_containsAny(n, ['立讯精密', '歌尔股份', '蓝思科技', '领益智造', '信维通信', '环旭电子',
-      '工业富联', '鹏鼎控股', '深南电路', '生益科技', '沪电股份', '景旺电子', '东山精密',
-      '胜宏科技', '崇达技术', '兴森科技', '超声电子', '依顿电子', 'PCB', 'FPC'])) return '电子元器件';
-    if (_containsAny(n, ['京东方', 'TCL科技', '深天马', '维信诺', '彩虹股份', '三利谱',
-      '面板', '显示', '偏光'])) return '面板/显示';
-    if (_containsAny(n, ['海康威视', '大华股份', '千方科技', '苏州科达', '安防', '监控'])) return '安防';
-
-    // Consumer
-    if (_containsAny(n, ['贵州茅台', '五粮液', '泸州老窖', '山西汾酒', '洋河股份', '古井贡酒',
-      '今世缘', '迎驾贡酒', '舍得酒业', '酒鬼酒', '水井坊', '口子窖', '金徽酒', '老白干',
-      '青岛啤酒', '重庆啤酒', '燕京啤酒', '珠江啤酒', '白酒', '啤酒', '黄酒', '葡萄酒'])) return '白酒';
-    if (_containsAny(n, ['伊利股份', '蒙牛', '光明乳业', '新乳业', '妙可蓝多', '乳业', '奶',
-      '乳品', '奶粉'])) return '乳制品';
-    if (_containsAny(n, ['海天味业', '中炬高新', '千禾味业', '恒顺醋业', '天味食品', '安井食品',
-      '涪陵榨菜', '恰恰食品', '三全食品', '绝味食品', '良品铺子', '来伊份', '盐津铺子', '甘源食品',
-      '调味', '酱油', '醋', '食品', '零食', '坚果', '卤', '速冻', '预制'])) return '食品饮料';
-    if (_containsAny(n, ['美的集团', '格力电器', '海尔智家', '海信家电', '老板电器', '苏泊尔',
-      '九阳', '小熊电器', '新宝', '飞科', '科沃斯', '石头科技', '极米', '家电', '电器',
-      '空调', '冰箱', '洗衣机', '厨卫', '扫地'])) return '家电';
-
-    // Auto & New Energy
-    if (_containsAny(n, ['比亚迪', '长城汽车', '长安汽车', '上汽集团', '广汽集团', '吉利汽车',
-      '赛力斯', '江淮汽车', '北汽蓝谷', '小康', '理想', '蔚来', '小鹏', '零跑', '汽车',
-      '整车', '乘用车'])) return '汽车';
-    if (_containsAny(n, ['福耀玻璃', '华域汽车', '星宇股份', '拓普集团', '德赛西威', '均胜电子',
-      '伯特利', '旭升', '文灿', '爱柯迪', '新泉', '继峰', '岱美', '宁波华翔',
-      '汽车零部件', '汽配', '轮胎', '轮毂'])) return '汽车零部件';
-    if (_containsAny(n, ['宁德时代', '亿纬锂能', '国轩高科', '欣旺达', '孚能科技', '德方纳米',
-      '当升科技', '容百科技', '中伟股份', '恩捷股份', '天赐材料', '新宙邦', '多氟多',
-      '石大胜华', '璞泰来', '科达利', '先导智能', '赢合科技', '杭可科技', '利元亨',
-      '电池', '电解液', '隔膜', '正极', '负极', '锂电'])) return '锂电池';
-    if (_containsAny(n, ['隆基绿能', '通威股份', '阳光电源', '晶澳科技', '天合光能', '晶科能源',
-      'TCL中环', '福斯特', '福莱特', '爱旭', '东方日升', '锦浪科技', '固德威', '禾迈',
-      '昱能', '德业', '上能电气', '光伏', '太阳能', '硅片', '逆变器', '组件'])) return '光伏';
-    if (_containsAny(n, ['金风科技', '明阳智能', '运达股份', '东方电缆', '中天科技', '亨通光电',
-      '大金重工', '天顺风能', '新强联', '日月股份', '风电', '风机', '海缆', '塔筒'])) return '风电';
-
-    // Healthcare
-    if (_containsAny(n, ['恒瑞医药', '百济神州', '信达生物', '君实生物', '荣昌生物', '贝达药业',
-      '康方生物', '诺诚健华', '再鼎', '康宁', '创新药', '抗癌', '肿瘤', '生物制药',
-      '生物医药'])) return '创新药';
-    if (_containsAny(n, ['药明康德', '药明生物', '康龙化成', '泰格医药', '凯莱英', '昭衍新药',
-      '博腾股份', '美迪西', '皓元医药', '药石科技', '诺泰生物', '维亚生物', '方达控股',
-      'CXO', 'CRO', 'CDMO', '医药研发', '医药外包'])) return '医药研发外包';
-    if (_containsAny(n, ['迈瑞医疗', '联影医疗', '鱼跃医疗', '乐普医疗', '微创医疗', '威高',
-      '健帆生物', '欧普康视', '爱博医疗', '心脉医疗', '惠泰医疗', '南微医学', '开立医疗',
-      '理邦仪器', '医疗器械', '医疗设备', '耗材', '心脉', '骨科', '支架'])) return '医疗器械';
-    if (_containsAny(n, ['片仔癀', '云南白药', '同仁堂', '东阿阿胶', '华润三九', '白云山',
-      '以岭药业', '天士力', '步长制药', '济川药业', '葵花药业', '马应龙', '九芝堂',
-      '广誉远', '众生药业', '康恩贝', '江中药业', '千金药业', '中药', '中成药', '药材'])) return '中药';
-    if (_containsAny(n, ['爱尔眼科', '通策医疗', '美年健康', '金域医学', '迪安诊断', '华大基因',
-      '国际医学', '新里程', '三星医疗', '海吉亚', '固生堂', '锦欣生殖', '医疗服务',
-      '眼科', '牙科', '口腔', '体检', '生殖'])) return '医疗服务';
-
-    // Technology & Internet
-    if (_containsAny(n, ['腾讯控股', '阿里巴巴', '美团', '百度', '网易', '京东', '拼多多',
-      '快手', '哔哩哔哩', '携程', '同程', '微博', '知乎', '贝壳', '互联网', '网络',
-      '电商', '在线', '游戏', '社交'])) return '互联网';
-    if (_containsAny(n, ['科大讯飞', '商汤', '云从', '依图', '旷视', '虹软', '格灵深瞳',
-      '人工智能', 'AI', '人脸', '语音'])) return '人工智能';
-    if (_containsAny(n, ['用友网络', '金蝶', '广联达', '金山办公', '深信服', '奇安信', '启明星辰',
-      '安恒信息', '绿盟科技', '中望软件', '致远互联', '泛微', '恒生电子', '宝信软件',
-      '石基信息', '卫宁健康', '创业慧康', '东华软件', '中科创达', '诚迈科技', '润和软件',
-      '中国软件', '浪潮信息', '中科曙光', '紫光股份', '锐捷网络', '中兴通讯', '软件',
-      '信息技术', '信创', 'ERP', '云计算', '信息安全', '网络安全'])) return '计算机/软件';
-
-    // Telecom
-    if (_containsAny(n, ['中国移动', '中国电信', '中国联通', '通信', '电信', '5G', '光通信',
-      '光纤', '基站', '天线', '射频'])) return '通信';
-
-    // Transportation & Logistics
-    if (_containsAny(n, ['中远海控', '中远海能', '招商轮船', '招商南油', '中谷物流', '航运',
-      '海运', '港口', '宁波港', '上港集团', '青岛港', '唐山港', '天津港', '盐田港', '北部湾港'])) return '航运/港口';
-    if (_containsAny(n, ['顺丰控股', '圆通速递', '韵达股份', '申通快递', '德邦', '京东物流',
-      '中通', '极兔', '快递', '物流', '运输'])) return '快递/物流';
-    if (_containsAny(n, ['中国国航', '南方航空', '中国东航', '春秋航空', '吉祥航空', '华夏航空',
-      '上海机场', '白云机场', '深圳机场', '首都机场', '航空', '机场', '民航'])) return '航空/机场';
-    if (_containsAny(n, ['京沪高铁', '大秦铁路', '广深铁路', '铁龙物流', '高铁', '铁路', '轨交'])) return '铁路';
-
-    // Military / Defense
-    if (_containsAny(n, ['中航沈飞', '中航西飞', '航发动力', '中直股份', '洪都航空', '中航光电',
-      '中航重机', '航天电器', '航天彩虹', '中无人机', '航天电子', '中国卫星', '中国卫通',
-      '军工', '航天', '航空工业', '兵器', '导弹', '雷达', '卫星'])) return '军工/航天';
-
-    // Agriculture
-    if (_containsAny(n, ['牧原股份', '温氏股份', '新希望', '海大集团', '大北农', '正邦科技',
-      '天邦食品', '唐人神', '傲农生物', '巨星农牧', '禾丰', '天康生物', '养猪', '养殖',
-      '饲料', '种业', '隆平高科', '登海种业', '荃银高科', '先正达', '北大荒', '农药',
-      '化肥', '扬农化工', '利尔化学', '兴发集团', '云天化', '新安股份'])) return '农牧/农化';
-
-    // Media & Entertainment
-    if (_containsAny(n, ['分众传媒', '芒果超媒', '光线传媒', '中国电影', '万达电影', '华策影视',
-      '慈文传媒', '横店影视', '幸福蓝海', '金逸影视', '广告', '传媒', '影视', '电影',
-      '院线', '出版', '凤凰传媒', '中南传媒', '山东出版', '中国出版', '新华文轩', '中信出版',
-      '教育'])) return '传媒/教育';
-
-    // Steel
-    if (_containsAny(n, ['宝钢股份', '鞍钢股份', '包钢股份', '华菱钢铁', '南钢股份', '马钢股份',
-      '首钢股份', '河钢股份', '沙钢股份', '太钢不锈', '新钢股份', '杭钢股份', '方大特钢',
-      '柳钢股份', '三钢闽光', '韶钢松山', '重庆钢铁', '中信特钢', '甬金股份', '久立特材',
-      '常宝股份', '武进不锈', '钢铁', '特钢', '钢管', '锻钢'])) return '钢铁';
-
-    // Chemicals
-    if (_containsAny(n, ['万华化学', '恒力石化', '荣盛石化', '恒逸石化', '华鲁恒升', '宝丰能源',
-      '龙佰集团', '巨化股份', '华峰化学', '桐昆股份', '东方盛虹', '鲁西化工', '三友化工',
-      '中泰化学', '湖北宜化', '卫星化学', '合盛硅业', '新和成', '浙江龙盛', '闰土股份',
-      '安迪苏', '沧州大化', '化学', '化工', '化纤', '聚酯', 'MDI', '钛白粉', '纯碱',
-      '氯碱', '氨纶', '涤纶', '粘胶', '有机硅', '氟化工', '磷化工', '煤化工'])) return '化工';
-
-    // Textile & Apparel
-    if (_containsAny(n, ['安踏体育', '李宁', '波司登', '海澜之家', '华利集团', '申洲国际',
-      '森马服饰', '雅戈尔', '太平鸟', '地素时尚', '比音勒芬', '特步国际', '361度',
-      '罗莱生活', '富安娜', '水星家纺', '百隆东方', '鲁泰', '新澳股份', '台华新材',
-      '纺织', '服装', '服饰', '家纺', '鞋业', '运动鞋', '制衣', '面料', '羽绒'])) return '纺织服装';
-
-    // Retail
-    if (_containsAny(n, ['中国中免', '永辉超市', '苏宁易购', '王府井', '家家悦', '红旗连锁',
-      '百联股份', '重庆百货', '天虹股份', '小商品城', '居然之家', '美凯龙', '豫园股份',
-      '老凤祥', '周大福', '周大生', '中国黄金', '菜百股份', '免税', '超市', '百货',
-      '零售', '商业连锁', '便利店', '珠宝', '黄金首饰'])) return '商业零售';
-
-    // Construction Machinery
-    if (_containsAny(n, ['三一重工', '中联重科', '徐工机械', '恒立液压', '浙江鼎力', '柳工',
-      '安徽合力', '杭叉集团', '艾迪精密', '建设机械', '山河智能', '厦工', '山推',
-      '中铁工业', '铁建重工', '工程机械', '重工', '叉车', '挖掘机', '起重机', '推土机',
-      '液压', '桩工'])) return '工程机械';
-
-    // Environmental Protection
-    if (_containsAny(n, ['伟明环保', '瀚蓝环境', '碧水源', '清新环境', '启迪环境', '上海环境',
-      '绿色动力', '中再资环', '浙富控股', '高能环境', '盈峰环境', '玉禾田', '侨银股份',
-      '龙马环卫', '维尔利', '中环环保', '首创环保', '节能环境', '环保', '污水', '垃圾',
-      '环卫', '固废', '危废', '水务', '脱硫', '脱硝', '除尘'])) return '环保';
-
-    // Paper & Packaging
-    if (_containsAny(n, ['太阳纸业', '晨鸣纸业', '博汇纸业', '山鹰国际', '玖龙纸业', '理文造纸',
-      '裕同科技', '合兴包装', '劲嘉股份', '美盈森', '吉宏股份', '环球印务', '造纸',
-      '纸业', '包装', '印刷', '纸板', '瓦楞'])) return '造纸/包装';
-
-    // Tourism & Hotels
-    if (_containsAny(n, ['锦江酒店', '首旅酒店', '长白山', '中青旅', '宋城演艺', '黄山旅游',
-      '峨眉山', '丽江股份', '桂林旅游', '九华旅游', '天目湖', '华住集团', '复星旅游文化',
-      '携程集团', '同程旅行', '酒店', '旅游', '景区', '旅行社', '度假村', '索道'])) return '旅游酒店';
-
-    // New Materials
-    if (_containsAny(n, ['光威复材', '中简科技', '中复神鹰', '金发科技', '沃特股份', '道恩股份',
-      '国瓷材料', '天奈科技', '德方纳米', '当升科技', '容百科技', '中伟股份', '恩捷股份',
-      '星源材质', '天赐材料', '新宙邦', '多氟多', '石大胜华', '璞泰来', '碳纤维',
-      '新材料', '复合材料', '高温合金', '钛合金', '磁性材料', '稀土永磁', '纳米材料',
-      '半导体材料', '电子化学品', '膜材料'])) return '新材料';
-
-    // Glass & Building Materials (non-cement)
-    if (_containsAny(n, ['旗滨集团', '南玻', '金晶科技', '信义光能', '信义玻璃', '福莱特',
-      '亚玛顿', '洛阳玻璃', '凯盛新能', '玻璃', 'low-e', '镀膜', '光伏玻璃',
-      '陶瓷', '瓷砖', '蒙娜丽莎', '东鹏控股', '帝欧家居', '防水材料', '科顺'])) return '玻璃/建材';
-
-    // Non-bank Financial
-    if (_containsAny(n, ['九鼎投资', '鲁信创投', '中国信达', '中国华融', '东方资产', '长城资产',
-      '蚂蚁集团', '陆金所', '京东数科', '度小满', '马上消费', '金融科技', '互联网金融',
-      '小额贷款', '融资租赁', '消费金融', '征信', '支付', 'AMC', '不良资产', '信托',
-      '期货', '典当'])) return '非银金融';
-
-    // ── New sub-categories (checked after broader categories) ──
-
-    // Consumer Electronics
-    if (_containsAny(n, ['消费电子', '手机', '耳机', '音箱', '可穿戴', '智能手表',
-      'VR', 'AR', 'MR', '头显', '摄像头模组'])) return '消费电子';
-
-    // Robot & Automation
-    if (_containsAny(n, ['机器人', '埃斯顿', '新松', '拓斯达', '绿的谐波', '汇川',
-      '减速器', '伺服', '机器视觉', 'AGV', '无人叉车'])) return '机器人';
-
-    // Power Equipment
-    if (_containsAny(n, ['电力设备', '特变电工', '正泰电器', '宏发', '思源电气',
-      '许继电气', '平高电气', '国电南瑞', '四方', '继电器', '变压器',
-      '开关柜', '断路器', '配电网'])) return '电力设备';
-
-    // Rail Transit Equipment
-    if (_containsAny(n, ['中国中车', '时代新材', '康尼机电', '永贵电器', '鼎汉技术',
-      '轨交', '铁路设备', '高铁配件', '地铁', '轻轨', '动车组'])) return '轨交设备';
-
-    // Shipbuilding
-    if (_containsAny(n, ['中国船舶', '中船', '中国动力', '中国海防', '亚星锚链',
-      '船舶', '造船', '船用', '船配'])) return '船舶制造';
-
-    // Home & Furniture
-    if (_containsAny(n, ['欧派家居', '顾家家居', '索菲亚', '志邦', '金牌厨柜',
-      '尚品宅配', '喜临门', '梦百合', '慕思', '曲美',
-      '家居', '定制家具', '软体家具', '卫浴', '晾衣架'])) return '家居/建材';
-
-    // Beauty & Personal Care
-    if (_containsAny(n, ['珀莱雅', '华熙生物', '贝泰妮', '上海家化', '丸美',
-      '拉芳', '水羊', '敷尔佳', '润百颜',
-      '化妆品', '护肤品', '彩妆', '医美', '美容'])) return '美容护理';
-
-    // Sports & Outdoor
-    if (_containsAny(n, ['安踏', '李宁', '特步', '361', '探路者', '三夫户外',
-      '比音勒芬', '牧高笛', '浙江自然',
-      '户外', '露营', '登山', '滑雪', '运动器材'])) return '体育/户外';
-
-    // Industrial Parks
-    if (_containsAny(n, ['张江高科', '上海临港', '苏州高新', '东湖高新', '中关村',
-      '市北高新', '电子城', '南京高科',
-      '产业园区', '开发区', '科技园', '高新区'])) return '产业园区';
-
-    // New Energy (新能源 — broader umbrella, checked AFTER specific 光伏/风电/锂电池)
-    if (_containsAny(n, ['新能源', '储能', '氢能', '燃料电池', '钠离子',
-      '固态电池', '钙钛矿'])) return '新能源';
-
-    // Dual feature recognition fallback for STAR / ChiNext stocks.
-    // If keyword matching fell through, use exchange + name hints
-    // to classify common categories instead of lumping into "其他".
-    if (code.startsWith('688') || code.startsWith('300') || code.startsWith('301')) {
-      // Energy / New-energy keywords in name
-      if (_containsAny(n, ['光伏', '太阳能', '逆变', '储能', '电池材料', '正极',
-        '负极', '隔膜', '电解液', '锂电', '新能源'])) {
-        return '新能源';
-      }
-      // Electronics / Semi keywords
-      if (_containsAny(n, ['微', '芯', '半导', '集成', '晶圆', '封测', '光刻',
-        '硅片', '射频', '模拟芯片', 'EDA', 'IP核'])) {
-        return '电子/半导体';
-      }
-      // Biotech / Pharma keywords
-      if (_containsAny(n, ['药', '医', '生物', '基因', '细胞', '蛋白', '诊断',
-        '疫苗', '制剂', '新药'])) {
-        return '医药';
-      }
-      // Software / IT keywords
-      if (_containsAny(n, ['软件', '信息', '数据', '网络', '互联', '云计算',
-        '数字', '科技', 'SaaS', 'PaaS'])) {
-        return '计算机/软件';
-      }
-      // Advanced manufacturing / automation
-      if (_containsAny(n, ['精密', '机器', '装备', '制造', '激光', '检测',
-        '仪器', '测控', '自动化', '电机', '减速器'])) {
-        return '高端制造';
-      }
-      // Environmental / new materials
-      if (_containsAny(n, ['环保', '膜', '过滤', '碳纤维', '纳米', '复合',
-        '新材料', '催化', '分子筛'])) {
-        return '新材料';
-      }
-      // If nothing matched, label by exchange board for transparency
-      if (code.startsWith('688')) return '科创板';
-      return '创业板';
-    }
-
-    return '其他';
-  }
-
-  bool _containsAny(String target, List<String> keywords) {
-    for (final kw in keywords) {
-      if (target.contains(kw)) return true;
-    }
-    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -787,12 +450,15 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   Color _chartColor(int index) => _chartColors[index % _chartColors.length];
 
   // ---------------------------------------------------------------------------
-  // Smart summary
+  // Smart summary — neutral, objective, data-driven
   // ---------------------------------------------------------------------------
 
   String _generateSmartSummary() {
     final dist = _calculateStyleDistribution();
-    if (dist.isEmpty || _weightedHoldings.isEmpty) return '暂无足够数据进行分析。';
+    if (dist.isEmpty || _weightedHoldings.isEmpty) {
+      debugPrint('[FundSummary] 智能总结: 风格分布为空或加权持仓为空 → 暂无足够数据');
+      return '暂无足够数据进行分析。';
+    }
 
     final large = (dist['大盘占比']! * 100).round();
     final mid = (dist['中盘占比']! * 100).round();
@@ -800,46 +466,50 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final valuePct = (dist['价值占比']! * 100).round();
     final growthPct = (dist['成长占比']! * 100).round();
 
-    final topIndustries = _getTopIndustries(count: 3);
-    String conclusion = '';
+    final topIndustries = _getTopIndustries(count: _topIndustriesCount);
+    final buf = StringBuffer();
 
-    if (large >= 40) {
-      conclusion += '组合偏向大盘风格（大盘股占比$large%），';
-    } else if (mid >= 40) {
-      conclusion += '组合以中盘股为主（占比$mid%），';
+    // Market cap style — neutral, data-driven
+    if (large >= mid && large >= small) {
+      buf.write('组合大盘股占比较高（$large%），');
+    } else if (mid >= large && mid >= small) {
+      buf.write('组合中盘股占比较高（$mid%），');
     } else {
-      conclusion += '组合偏小盘风格（小盘股占比$small%），';
+      buf.write('组合小盘股占比较高（$small%），');
     }
 
+    // Value style — neutral, data-driven
     if (growthPct >= 40) {
-      conclusion += '成长型股票占主导（$growthPct%），进攻性强；';
+      buf.write('成长型股票权重$growthPct%，估值水平相对较高；');
     } else if (valuePct >= 40) {
-      conclusion += '价值型股票占主导（$valuePct%），防御性较好；';
+      buf.write('价值型股票权重$valuePct%，估值水平相对较低；');
     } else {
-      conclusion += '成长与价值风格均衡；';
+      buf.write('成长与价值风格分布较为均衡；');
     }
 
+    // Industry
     if (topIndustries.isNotEmpty) {
-      final visibleIndustries = topIndustries.where((e) => e.key != '其他').toList();
-      if (visibleIndustries.isNotEmpty) {
-        conclusion += '重点行业为${visibleIndustries.first.key}（占比${visibleIndustries.first.value.toStringAsFixed(1)}%）';
-        for (int i = 1; i < visibleIndustries.length; i++) {
-          conclusion += '、${visibleIndustries[i].key}（占比${visibleIndustries[i].value.toStringAsFixed(1)}%）';
+      final visible = topIndustries.where((e) => e.key != '其他').toList();
+      if (visible.isNotEmpty) {
+        buf.write('前三大行业为${visible[0].key}（${visible[0].value.toStringAsFixed(1)}%）');
+        for (int i = 1; i < visible.length; i++) {
+          buf.write('、${visible[i].key}（${visible[i].value.toStringAsFixed(1)}%）');
         }
-        conclusion += '。';
+        buf.write('。');
       } else {
-        conclusion += '行业分布较为分散。';
+        buf.write('行业分布较为分散。');
       }
     } else {
-      conclusion += '行业分布较为分散。';
+      buf.write('行业分布较为分散。');
     }
 
+    // Overlap — factual note
     final overlapCount = _getOverlapStockCount();
     if (overlapCount > 3) {
-      conclusion += '注意：有$overlapCount只股票被多只基金重仓，存在集中风险。';
+      buf.write('有$overlapCount只股票被多只基金同时重仓。');
     }
 
-    return conclusion;
+    return buf.toString();
   }
 
   // ===========================================================================
@@ -855,91 +525,100 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final subTextColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.6)
         : CupertinoColors.systemGrey;
+    final surfaceColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isWide = screenWidth >= 600;
+    final pad = isWide ? _sectionPaddingWide : _sectionPaddingNarrow;
+    final gap = isWide ? _sectionSpacingWide : _sectionSpacingNarrow;
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(widget.clientName, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: bgColor,
-      ),
-      child: SafeArea(
-        child: Container(
-          color: bgColor,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        color: bgColor,
+        child: SafeArea(
+          child: Column(
             children: [
-              // Debug: data source indicator (remove after verification)
-              if (!_usingBackendData && !_loadingTopHoldings && !_loadingQuotes)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('⚠ 后端未连接，使用本地抓取数据', style: TextStyle(fontSize: 10, color: CupertinoColors.systemOrange)),
-                ),
+              AdaptiveTopBar(
+                scrollOffset: 0,
+                showBack: true,
+                onBack: () => Navigator.of(context).pop(),
+                showRefresh: false,
+                showExpandCollapse: false,
+                showSearch: false,
+                showReset: false,
+                showFilter: false,
+                showSort: false,
+                backgroundColor: Colors.transparent,
+                iconColor: CupertinoTheme.of(context).primaryColor,
+              ),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.all(pad),
+                  children: [
+                    // Debug: data source indicator
+                    if (!_usingBackendData && !_loadingTopHoldings && !_loadingQuotes)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('⚠ 后端未连接，使用本地抓取数据',
+                          style: TextStyle(fontSize: 10, color: CupertinoColors.systemOrange)),
+                      ),
 
-              // ---- Module 1+2: Investment pie + Profit/Loss diverging bar ----
-              _buildSectionCard(
-                title: '持仓分析',
-                icon: CupertinoIcons.chart_pie,
-                isDark: isDark, cardColor: cardColor,
-                textColor: textColor, subTextColor: subTextColor,
-                children: [
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    // Module 1: Investment pie with integrated profit/loss
+                    _buildSectionCard(
+                      title: '持仓分析',
+                      icon: CupertinoIcons.chart_pie,
+                      isDark: isDark, cardColor: cardColor,
+                      textColor: textColor, subTextColor: subTextColor,
+                      pad: pad,
                       children: [
-                        Expanded(child: _buildInvestmentPie(isDark, textColor, subTextColor, cardColor)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildProfitBarChart(isDark, textColor, subTextColor)),
+                        _buildIntegratedPie(isDark, textColor, subTextColor, cardColor),
                       ],
-                    )
-                  else
-                    Column(children: [
-                      _buildInvestmentPie(isDark, textColor, subTextColor, cardColor),
-                      const SizedBox(height: 24),
-                      _buildProfitBarChart(isDark, textColor, subTextColor),
-                    ]),
-                ],
-              ),
-              const SizedBox(height: 16),
+                    ),
+                    SizedBox(height: gap),
 
-              // ---- Module 3: Weighted top holdings ----
-              _buildSectionCard(
-                title: '重仓统计（购买权重）',
-                icon: CupertinoIcons.star_circle,
-                isDark: isDark, cardColor: cardColor,
-                textColor: textColor, subTextColor: subTextColor,
-                children: [
-                  if (_loadingTopHoldings)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: CupertinoActivityIndicator()),
-                    )
-                  else if (_weightedHoldings.isEmpty)
-                    Text('暂无重仓股数据', style: TextStyle(fontSize: 13, color: subTextColor))
-                  else
-                    _buildWeightedHoldingsTable(isDark, textColor, subTextColor),
-                ],
-              ),
-              const SizedBox(height: 16),
+                    // Module 2: Weighted top holdings
+                    _buildSectionCard(
+                      title: '重仓统计（购买权重）',
+                      icon: CupertinoIcons.star_circle,
+                      isDark: isDark, cardColor: cardColor,
+                      textColor: textColor, subTextColor: subTextColor,
+                      pad: pad,
+                      children: [
+                        if (_loadingTopHoldings)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: CupertinoActivityIndicator()),
+                          )
+                        else if (_weightedHoldings.isEmpty)
+                          Text('暂无重仓股数据', style: TextStyle(fontSize: 13, color: subTextColor))
+                        else
+                          _buildWeightedHoldingsTable(isDark, textColor, subTextColor),
+                      ],
+                    ),
+                    SizedBox(height: gap),
 
-              // ---- Module 4: Investment direction ----
-              _buildSectionCard(
-                title: '投资方向',
-                icon: CupertinoIcons.scope,
-                isDark: isDark, cardColor: cardColor,
-                textColor: textColor, subTextColor: subTextColor,
-                children: [
-                  if (_loadingTopHoldings || _loadingQuotes)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: CupertinoActivityIndicator()),
-                    )
-                  else
-                    _buildInvestmentDirectionAnalysis(isDark, textColor, subTextColor),
-                ],
+                    // Module 3: Investment direction
+                    _buildSectionCard(
+                      title: '投资方向',
+                      icon: CupertinoIcons.scope,
+                      isDark: isDark, cardColor: cardColor,
+                      textColor: textColor, subTextColor: subTextColor,
+                      pad: pad,
+                      children: [
+                        if (_loadingTopHoldings || _loadingQuotes)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: CupertinoActivityIndicator()),
+                          )
+                        else
+                          _buildInvestmentDirectionAnalysis(isDark, textColor, subTextColor, surfaceColor, isWide),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -948,250 +627,152 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Module 1: Investment pie chart + legend
+  // Module 1: Investment donut chart with integrated profit/loss per fund
   // ---------------------------------------------------------------------------
 
-  Widget _buildInvestmentPie(bool isDark, Color textColor, Color subTextColor, Color cardColor) {
+  Widget _buildIntegratedPie(bool isDark, Color textColor, Color subTextColor, Color cardColor) {
     final funds = widget.holdings;
     final total = _totalInvestment;
+    final totalProfit = _totalProfit;
     if (total <= 0) {
-      return _emptySub(title: '投资金额分布', textColor: textColor, subTextColor: subTextColor);
+      return _emptySub(title: '持仓分析', textColor: textColor, subTextColor: subTextColor);
     }
 
     final sections = <PieChartSectionData>[];
-    final legendItems = <Widget>[];
+    final legendRows = <Widget>[];
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    final fs = isWide ? 11.0 : 10.0;
 
-    for (int i = 0; i < funds.length; i++) {
-      final h = funds[i];
+    // Sort by investment amount descending
+    final sorted = List<FundHolding>.from(funds)
+      ..sort((a, b) => b.totalCost.compareTo(a.totalCost));
+
+    for (int i = 0; i < sorted.length; i++) {
+      final h = sorted[i];
       final pct = h.totalCost / total * 100;
       if (pct < 0.01) continue;
       final color = _chartColor(i);
       final isTouched = _touchedPieIndex == i;
+      final profitColor = _getProfitColor(h.profit);
 
       sections.add(PieChartSectionData(
         value: h.totalCost, color: color,
         radius: isTouched ? 36 : 28,
         title: '', titleStyle: const TextStyle(fontSize: 0),
-        borderSide: isTouched ? const BorderSide(color: CupertinoColors.white, width: 2) : BorderSide.none,
+        borderSide: isTouched
+            ? const BorderSide(color: CupertinoColors.white, width: 2)
+            : BorderSide.none,
       ));
 
-      legendItems.add(Padding(
-        padding: const EdgeInsets.only(bottom: 4),
+      // Fixed-width columns for alignment: amount (L) | pct (L) | profit (R)
+      final amountW = isWide ? 70.0 : 62.0;
+      final pctW = 44.0;
+      final profitW = isWide ? 56.0 : 48.0;
+
+      legendRows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 2),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: isTouched ? 4 : 0, vertical: isTouched ? 2 : 0),
+          padding: EdgeInsets.symmetric(horizontal: isTouched ? 4 : 0, vertical: isTouched ? 1 : 0),
           decoration: BoxDecoration(
             color: isTouched ? color.withValues(alpha: 0.12) : const Color(0x00000000),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(children: [
-            Container(width: isTouched ? 10 : 8, height: isTouched ? 10 : 8,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: isTouched ? 9 : 7, height: isTouched ? 9 : 7,
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text('${h.fundName} (${h.fundCode})',
+                style: TextStyle(fontSize: fs,
+                  fontWeight: isTouched ? FontWeight.w700 : FontWeight.w400,
+                  color: textColor),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: amountW,
+              child: Text('¥${h.totalCost.toStringAsFixed(0)}',
+                style: TextStyle(fontSize: fs - 1, color: textColor),
+                textAlign: TextAlign.left),
+            ),
             const SizedBox(width: 6),
-            Expanded(child: Text('${h.fundName} (${h.fundCode})',
-              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w700 : FontWeight.w400, color: textColor),
-              maxLines: 1, overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 4),
-            Text('¥${h.totalCost.toStringAsFixed(0)}',
-              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w700 : FontWeight.w600, color: textColor)),
-            const SizedBox(width: 4),
-            Text('${pct.toStringAsFixed(1)}%',
-              style: TextStyle(fontSize: 11, fontWeight: isTouched ? FontWeight.w600 : FontWeight.w400, color: subTextColor)),
+            SizedBox(
+              width: pctW,
+              child: Text('${pct.toStringAsFixed(1)}%',
+                style: TextStyle(fontSize: fs - 1, color: subTextColor),
+                textAlign: TextAlign.left),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: profitW,
+              child: Text(
+                '${h.profit >= 0 ? '+' : ''}¥${h.profit.toStringAsFixed(0)}',
+                style: TextStyle(fontSize: fs - 1, fontWeight: FontWeight.w600, color: profitColor),
+                textAlign: TextAlign.right, maxLines: 1,
+              ),
+            ),
           ]),
         ),
       ));
     }
 
+    final totalColor = _getProfitColor(totalProfit);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('投资金额分布', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
-        Text('合计 ¥${total.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
+      // Header
+      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('投资金额分布', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor)),
+            const SizedBox(height: 2),
+            Text('合计 ¥${total.toStringAsFixed(0)}',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
+          ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('总盈亏', style: TextStyle(fontSize: 11, color: subTextColor)),
+          Text('${totalProfit >= 0 ? '+' : ''}¥${totalProfit.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: totalColor)),
+        ]),
       ]),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
+      // Donut + legend
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 100, height: 100,
+        SizedBox(width: 90, height: 90,
           child: Stack(alignment: Alignment.center, children: [
             PieChart(PieChartData(
-              sections: sections, centerSpaceRadius: 22, sectionsSpace: 2,
+              sections: sections, centerSpaceRadius: 20, sectionsSpace: 2,
               borderData: FlBorderData(show: false),
               pieTouchData: PieTouchData(
                 touchCallback: (FlTouchEvent event, PieTouchResponse? response) {
-                  setState(() {
-                    if (!event.isInterestedForInteractions || response == null || response.touchedSection == null) {
-                      _touchedPieIndex = -1;
-                      return;
+                  if (!event.isInterestedForInteractions ||
+                      response == null ||
+                      response.touchedSection == null) {
+                    if (_touchedPieIndex != -1) {
+                      setState(() => _touchedPieIndex = -1);
                     }
-                    _touchedPieIndex = response.touchedSection!.touchedSectionIndex;
-                  });
+                    return;
+                  }
+                  final newIndex = response.touchedSection!.touchedSectionIndex;
+                  if (newIndex != _touchedPieIndex) {
+                    setState(() => _touchedPieIndex = newIndex);
+                  }
                 },
               ),
             )),
-            // Fill the donut-hole with the card colour so it never shows white.
-            // centerSpaceRadius=22 → hole diameter=44; use 46 to slightly overlap.
             IgnorePointer(
               child: Container(
-                width: 46, height: 46,
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  shape: BoxShape.circle,
-                ),
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: cardColor, shape: BoxShape.circle),
               ),
             ),
           ]),
         ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(children: legendItems)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(children: legendRows)),
       ]),
-    ]);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Module 2: Profit/Loss diverging horizontal bar chart
-  // ---------------------------------------------------------------------------
-
-  /// Maximum number of individual fund bars before collapsing the rest into
-  /// an "其他基金合计" row.  Prevents the chart from becoming too tall.
-  static const int _maxProfitBarRows = 6;
-
-  /// Minimum visible bar fraction so that small holdings don't collapse to a
-  /// pixel-wide sliver when a single extreme-value fund dominates the scale.
-  static const double _minBarFraction = 0.05;
-
-  Widget _buildProfitBarChart(bool isDark, Color textColor, Color subTextColor) {
-    final funds = widget.holdings;
-    final maxAbs = _maxAbsProfit;
-    final totalProfit = _totalProfit;
-    final totalAbs = _totalAbsProfit;
-
-    if (totalAbs < 0.01) {
-      return _emptySub(title: '盈亏分布', textColor: textColor, subTextColor: subTextColor);
-    }
-
-    // Sort by absolute profit descending so the most impactful funds are shown.
-    final sorted = List<FundHolding>.from(funds)
-      ..sort((a, b) => b.profit.abs().compareTo(a.profit.abs()));
-
-    final hasOverflow = sorted.length > _maxProfitBarRows;
-    final visible = _profitBarExpanded ? sorted : sorted.take(_maxProfitBarRows).toList();
-    final overflowFunds = hasOverflow ? sorted.skip(_maxProfitBarRows).toList() : <FundHolding>[];
-
-    // Aggregate overflow funds when collapsed.
-    double overflowProfit = 0;
-    double overflowAbs = 0;
-    if (hasOverflow && !_profitBarExpanded) {
-      for (final f in overflowFunds) {
-        overflowProfit += f.profit;
-        overflowAbs += f.profit.abs();
-      }
-    }
-
-    Widget buildBarRow(FundHolding h, {double? overrideAbs}) {
-      final absProfit = overrideAbs ?? h.profit.abs();
-      final profit = overrideAbs != null ? overflowProfit : h.profit;
-      final pct = totalAbs > 0 ? absProfit / totalAbs * 100 : 0.0;
-      final barFraction = maxAbs > 0 ? (absProfit / maxAbs).clamp(_minBarFraction, 1.0) : _minBarFraction;
-      final isProfit = profit > 0;
-      final isLoss = profit < 0;
-      final barColor = isProfit ? CupertinoColors.systemRed : (isLoss ? CupertinoColors.systemGreen : CupertinoColors.systemGrey);
-      final displayName = overrideAbs != null ? '其他基金合计' : h.fundName;
-
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(children: [
-          SizedBox(
-            width: 64,
-            child: Text(displayName, style: TextStyle(fontSize: 11, color: textColor),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          const SizedBox(width: 2),
-          SizedBox(
-            width: 52,
-            child: Text('${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(0)}',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _getProfitColor(profit)),
-              textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          const SizedBox(width: 2),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LayoutBuilder(builder: (context, constraints) {
-                  final maxW = constraints.maxWidth - 2; // 2px breathing room
-                  if (maxW <= 0) return const SizedBox.shrink();
-                  final barWidth = (maxW * barFraction).clamp(0.0, maxW);
-                  final displayWidth = barWidth.clamp(0.0, maxW);
-                  return Row(children: [
-                    if (isLoss) ...[
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Container(height: 12, width: displayWidth,
-                            decoration: BoxDecoration(
-                              color: barColor.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ] else if (isProfit) ...[
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(height: 12, width: displayWidth,
-                          decoration: BoxDecoration(
-                            color: barColor.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (isLoss)
-                      Container(width: 1, color: subTextColor.withValues(alpha: 0.3))
-                    else
-                      Expanded(child: const SizedBox()),
-                    if (isProfit)
-                      Container(width: 1, color: subTextColor.withValues(alpha: 0.3)),
-                  ]);
-                }),
-              ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          SizedBox(
-            width: 36,
-            child: Text('${pct.toStringAsFixed(1)}%',
-              style: TextStyle(fontSize: 10, color: subTextColor),
-              textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        ]),
-      );
-    }
-
-    final totalColor = _getProfitColor(totalProfit);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('盈亏分布', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
-        Text('${totalProfit >= 0 ? '+' : ''}¥${totalProfit.toStringAsFixed(0)}',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: totalColor)),
-      ]),
-      const SizedBox(height: 12),
-      ...visible.map((h) => buildBarRow(h)),
-      // Collapsed "其他" row
-      if (hasOverflow && !_profitBarExpanded && overflowAbs > 0)
-        buildBarRow(sorted.first, overrideAbs: overflowAbs),
-      // Expand / collapse toggle
-      if (hasOverflow) ...[
-        const SizedBox(height: 4),
-        GestureDetector(
-          onTap: () => setState(() => _profitBarExpanded = !_profitBarExpanded),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(_profitBarExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
-              size: 14, color: CupertinoColors.systemBlue),
-            const SizedBox(width: 4),
-            Text(_profitBarExpanded ? '收起' : '展开更多（共${sorted.length}支基金）',
-              style: TextStyle(fontSize: 12, color: CupertinoColors.systemBlue)),
-          ]),
-        ),
-      ],
     ]);
   }
 
@@ -1204,7 +785,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Module 3: Weighted holdings table (top 10, compact)
+  // Module 3: Weighted holdings table
   // ---------------------------------------------------------------------------
 
   Widget _buildWeightedHoldingsTable(bool isDark, Color textColor, Color subTextColor) {
@@ -1212,31 +793,44 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     if (top.isEmpty) return Text('暂无重仓股数据', style: TextStyle(fontSize: 13, color: subTextColor));
 
     final screenWidth = MediaQuery.of(context).size.width;
-    // Use two columns only when the card area is wide enough (approx > 440dp).
     final useTwoCols = screenWidth > 440;
     final left = top.take(5).toList();
     final right = top.skip(5).take(5).toList();
 
-    Widget buildRow(int idx, _WeightedHolding wh) {
+    Widget buildRow(int idx, WeightedHolding wh) {
       final fullCode = _quoteService.toFullCode(wh.stockCode);
       final q = _stockQuotes[fullCode];
       final marketLabel = q?.marketLabel ?? _marketLabelFromCode(wh.stockCode);
+      final isTop3 = idx < 3;
+      final rankColor = isTop3 ? _chartColor(idx) : subTextColor;
 
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          SizedBox(width: 18, child: Text('${idx + 1}', style: TextStyle(fontSize: 10, color: subTextColor))),
+          SizedBox(
+            width: 18,
+            child: Text('${idx + 1}',
+              style: TextStyle(
+                fontSize: isTop3 ? 11 : 10,
+                fontWeight: isTop3 ? FontWeight.w700 : FontWeight.w400,
+                color: rankColor,
+              )),
+          ),
           const SizedBox(width: 2),
           Expanded(
             child: Text('${wh.stockName} ${wh.stockCode}',
-              style: TextStyle(fontSize: 10, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              style: TextStyle(fontSize: 10, color: textColor),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (marketLabel.isNotEmpty) ...[
             const SizedBox(width: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
               decoration: BoxDecoration(
-                color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.15) : CupertinoColors.systemBlue.withValues(alpha: 0.12),
+                color: marketLabel == 'HK'
+                    ? CupertinoColors.systemOrange.withValues(alpha: 0.15)
+                    : CupertinoColors.systemBlue.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(2),
               ),
               child: Text(marketLabel, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
@@ -1245,16 +839,20 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
           ],
           const SizedBox(width: 4),
           SizedBox(width: 42, child: Text('${wh.weightedRatio.toStringAsFixed(2)}%',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _ratioColor(wh.weightedRatio)),
-            textAlign: TextAlign.right)),
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+              color: _ratioColor(wh.weightedRatio)),
+            textAlign: TextAlign.right,
+          )),
           const SizedBox(width: 2),
           SizedBox(width: 24, child: Text('${wh.fundCodes.length}支',
-            style: TextStyle(fontSize: 9, color: subTextColor), textAlign: TextAlign.right)),
+            style: TextStyle(fontSize: 9, color: subTextColor),
+            textAlign: TextAlign.right,
+          )),
         ]),
       );
     }
 
-    Widget buildColumn(List<_WeightedHolding> items, int startIdx) {
+    Widget buildColumn(List<WeightedHolding> items, int startIdx) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
@@ -1279,7 +877,10 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         child: Row(children: [
           SizedBox(width: 20, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
           const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
-          SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
+          SizedBox(width: 44, child: Text('权重/基金',
+            style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey),
+            textAlign: TextAlign.right,
+          )),
         ]),
       ),
       Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
@@ -1304,7 +905,8 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   // Module 4: Investment direction analysis
   // ---------------------------------------------------------------------------
 
-  Widget _buildInvestmentDirectionAnalysis(bool isDark, Color textColor, Color subTextColor) {
+  Widget _buildInvestmentDirectionAnalysis(bool isDark, Color textColor,
+      Color subTextColor, Color surfaceColor, bool isWide) {
     final dist = _calculateStyleDistribution();
     final smartSummary = _generateSmartSummary();
     final overlapCount = _getOverlapStockCount();
@@ -1313,126 +915,264 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       return Text('暂无重仓股数据可供分析', style: TextStyle(fontSize: 13, color: subTextColor));
     }
 
+    // Shared font sizes
+    final sectionFs = isWide ? 13.0 : 12.0;
+    final bodyFs = isWide ? 12.0 : 11.0;
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Style distribution bars
+      // Style distribution — compact segmented bar
       if (dist.isNotEmpty) ...[
-        Text('风格分布', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+        Text('风格分布', style: TextStyle(fontSize: sectionFs, fontWeight: FontWeight.w600, color: textColor)),
         const SizedBox(height: 8),
-        _buildStyleBar('大盘', dist['大盘占比'] ?? 0, CupertinoColors.systemBlue, textColor, subTextColor),
-        _buildStyleBar('中盘', dist['中盘占比'] ?? 0, CupertinoColors.systemOrange, textColor, subTextColor),
-        _buildStyleBar('小盘', dist['小盘占比'] ?? 0, CupertinoColors.systemGreen, textColor, subTextColor),
+        _buildCompactStyleBar(
+          label: '市值',
+          segments: [
+            _StyleSegment('大盘', dist['大盘占比'] ?? 0, CupertinoColors.systemBlue),
+            _StyleSegment('中盘', dist['中盘占比'] ?? 0, CupertinoColors.systemOrange),
+            _StyleSegment('小盘', dist['小盘占比'] ?? 0, CupertinoColors.systemGreen),
+          ],
+          isDark: isDark, textColor: textColor, subTextColor: subTextColor, fs: bodyFs,
+        ),
         const SizedBox(height: 6),
-        _buildStyleBar('价值', dist['价值占比'] ?? 0, const Color(0xFF50C878), textColor, subTextColor),
-        _buildStyleBar('成长', dist['成长占比'] ?? 0, CupertinoColors.systemRed, textColor, subTextColor),
-        _buildStyleBar('均衡', dist['均衡占比'] ?? 0, const Color(0xFFFFB347), textColor, subTextColor),
-        const SizedBox(height: 16),
+        _buildCompactStyleBar(
+          label: '风格',
+          segments: [
+            _StyleSegment('价值', dist['价值占比'] ?? 0, const Color(0xFF50C878)),
+            _StyleSegment('成长', dist['成长占比'] ?? 0, CupertinoColors.systemRed),
+            _StyleSegment('均衡', dist['均衡占比'] ?? 0, const Color(0xFFFFB347)),
+          ],
+          isDark: isDark, textColor: textColor, subTextColor: subTextColor, fs: bodyFs,
+        ),
+        const SizedBox(height: 14),
       ],
 
-      // Industry distribution
+      // Industry distribution — compact inline with top3 highlighted
       if (_weightedHoldings.isNotEmpty) ...[
-        Text('行业分布', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
+        Text('行业分布', style: TextStyle(fontSize: sectionFs, fontWeight: FontWeight.w600, color: textColor)),
         const SizedBox(height: 8),
-        _buildIndustryDistributionTable(isDark, textColor, subTextColor),
-        const SizedBox(height: 16),
+        _buildCompactIndustryDistribution(isDark, textColor, subTextColor, surfaceColor, bodyFs),
+        const SizedBox(height: 14),
       ],
 
       // Overlapping stocks
       if (overlapCount > 0) ...[
-        Text('重叠重仓股（被多支基金持有）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
-        const SizedBox(height: 8),
-        ..._weightedHoldings.where((w) => w.fundCodes.length > 1).take(6).map((w) => _buildOverlapItem(w, isDark, textColor, subTextColor)),
-        const SizedBox(height: 16),
+        Text('重叠重仓股（被多支基金持有）',
+          style: TextStyle(fontSize: sectionFs, fontWeight: FontWeight.w600, color: textColor)),
+        const SizedBox(height: 6),
+        ..._weightedHoldings
+            .where((w) => w.fundCodes.length > 1)
+            .take(6)
+            .map((w) => _buildOverlapItem(w, isDark, textColor, subTextColor)),
+        const SizedBox(height: 14),
       ],
 
-      // Smart summary
-      Text('投资方向总结', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor)),
-      const SizedBox(height: 8),
+      // Summary
+      Text('总结', style: TextStyle(fontSize: sectionFs, fontWeight: FontWeight.w600, color: textColor)),
+      const SizedBox(height: 6),
       Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(8)),
-        child: Text(smartSummary, style: TextStyle(fontSize: 13, color: textColor, height: 1.6)),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(_cardInnerRadius),
+        ),
+        child: Text(smartSummary,
+          style: TextStyle(fontSize: bodyFs, color: textColor, height: 1.5)),
       ),
     ]);
   }
 
-  Widget _buildIndustryDistributionTable(bool isDark, Color textColor, Color subTextColor) {
-    final industries = _getTopIndustries(count: 8);
-    if (industries.isEmpty) return const SizedBox.shrink();
+  // ---------------------------------------------------------------------------
+  // Compact style bar — label + segments with inline text (connected)
+  // ---------------------------------------------------------------------------
 
-    return Wrap(spacing: 8, runSpacing: 4, children: industries.map((e) {
-      final pct = e.value;
-      final totalWeight = _weightedHoldings.fold(0.0, (sum, w) => sum + w.weightedRatio);
-      final displayPct = totalWeight > 0 ? (pct / totalWeight * 100) : 0.0;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.circular(6),
+  Widget _buildCompactStyleBar({
+    required String label,
+    required List<_StyleSegment> segments,
+    required bool isDark,
+    required Color textColor,
+    required Color subTextColor,
+    required double fs,
+  }) {
+    final total = segments.fold(0.0, (s, seg) => s + seg.value);
+    final active = segments.where((s) => s.value > 0.001).toList();
+    if (active.isEmpty) return const SizedBox.shrink();
+
+    return Row(children: [
+      SizedBox(
+        width: 32,
+        child: Text(label, style: TextStyle(fontSize: fs - 1, color: subTextColor)),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            height: 22,
+            child: Row(children: active.map((seg) {
+              final fraction = total > 0 ? seg.value / total : 0;
+              final flex = (fraction * 1000).round().clamp(1, 1000);
+              final pct = (seg.value * 100).round();
+              return Expanded(
+                flex: flex,
+                child: Container(
+                  color: seg.color.withValues(alpha: 0.75),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${seg.label} $pct%',
+                    style: TextStyle(
+                      fontSize: fs - 2,
+                      fontWeight: FontWeight.w600,
+                      color: _contrastTextColor(seg.color),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              );
+            }).toList()),
+          ),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(e.key, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textColor)),
-          const SizedBox(width: 4),
-          Text('${displayPct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, color: subTextColor)),
-        ]),
-      );
-    }).toList());
+      ),
+    ]);
   }
 
-  Widget _buildStyleBar(String label, double ratio, Color color, Color textColor, Color subTextColor) {
-    final pct = (ratio * 100).round();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [
-        SizedBox(width: 32, child: Text(label, style: TextStyle(fontSize: 12, color: subTextColor))),
-        Expanded(child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: Container(height: 10, color: CupertinoColors.systemGrey.withValues(alpha: 0.15),
-            child: FractionallySizedBox(alignment: Alignment.centerLeft, widthFactor: ratio.clamp(0.0, 1.0),
-              child: Container(decoration: BoxDecoration(color: color.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(3))),
-            ),
+  /// Return white or black depending on perceived brightness of [color].
+  Color _contrastTextColor(Color color) {
+    final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
+    return luminance > 0.55 ? CupertinoColors.black : CupertinoColors.white;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Compact industry distribution — top 3 inline highlighted, rest chips
+  // ---------------------------------------------------------------------------
+
+  Widget _buildCompactIndustryDistribution(bool isDark, Color textColor,
+      Color subTextColor, Color surfaceColor, double fs) {
+    final industryMap = <String, double>{};
+    for (final wh in _weightedHoldings) {
+      final label = _classifier.classify(wh.stockName, code: wh.stockCode);
+      industryMap[label] = (industryMap[label] ?? 0) + wh.weightedRatio;
+    }
+    if (industryMap.isEmpty) return const SizedBox.shrink();
+
+    final sorted = industryMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top3 = sorted.take(_topIndustriesCount).toList();
+    final rest = sorted.skip(_topIndustriesCount).take(_maxIndustriesVisible - _topIndustriesCount).toList();
+    final totalWeight = _weightedHoldings.fold(0.0, (sum, w) => sum + w.weightedRatio);
+
+    // Merge top3 + rest into a single wrapping flow
+    final allItems = <MapEntry<String, double>>[...top3, ...rest];
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: List.generate(allItems.length, (i) {
+        final e = allItems[i];
+        final pct = totalWeight > 0 ? (e.value / totalWeight * 100) : 0.0;
+        final isTop3 = i < _topIndustriesCount;
+        const rankMarks = ['❶', '❷', '❸'];
+
+        return Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isTop3 ? 7 : 6,
+            vertical: isTop3 ? 4 : 2,
           ),
-        )),
-        const SizedBox(width: 8),
-        SizedBox(width: 36, child: Text('$pct%', style: TextStyle(fontSize: 12, color: textColor), textAlign: TextAlign.right)),
-      ]),
+          decoration: BoxDecoration(
+            color: isTop3 ? surfaceColor : null,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (isTop3) ...[
+              Text(rankMarks[i], style: const TextStyle(fontSize: 10)),
+              const SizedBox(width: 3),
+            ],
+            Text(e.key,
+              style: TextStyle(
+                fontSize: isTop3 ? fs - 1 : fs - 2,
+                fontWeight: isTop3 ? FontWeight.w600 : FontWeight.w400,
+                color: isTop3 ? textColor : subTextColor,
+              )),
+            const SizedBox(width: 3),
+            Text('${pct.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: isTop3 ? fs - 1 : fs - 2,
+                fontWeight: isTop3 ? FontWeight.w600 : FontWeight.w400,
+                color: isTop3 ? _chartColor(i) : subTextColor.withValues(alpha: 0.7),
+              )),
+          ]),
+        );
+      }),
     );
   }
 
-  Widget _buildOverlapItem(_WeightedHolding item, bool isDark, Color textColor, Color subTextColor) {
+  Widget _buildOverlapItem(WeightedHolding item, bool isDark, Color textColor, Color subTextColor) {
     final fullCode = _quoteService.toFullCode(item.stockCode);
     final q = _stockQuotes[fullCode];
     final marketLabel = q?.marketLabel ?? _marketLabelFromCode(item.stockCode);
+    final surfaceColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(_cardInnerRadius),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Row(children: [
             Flexible(child: Text('${item.stockName} (${item.stockCode})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+            )),
             if (marketLabel.isNotEmpty) ...[
               const SizedBox(width: 4),
-              Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: BoxDecoration(
-                  color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.2) : CupertinoColors.systemBlue.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(3)),
+                  color: marketLabel == 'HK'
+                      ? CupertinoColors.systemOrange.withValues(alpha: 0.2)
+                      : CupertinoColors.systemBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(3),
+                ),
                 child: Text(marketLabel, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
                   color: marketLabel == 'HK' ? CupertinoColors.systemOrange : CupertinoColors.systemBlue)),
               ),
             ],
           ])),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(color: CupertinoColors.systemOrange.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-            child: Text('${item.fundCodes.length}支基金持有', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: CupertinoColors.systemOrange)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemOrange.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('持有基金: ${item.fundCodes.length}支',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500,
+                color: CupertinoColors.systemOrange)),
           ),
         ]),
         const SizedBox(height: 3),
-        Text('覆盖基金: ${item.fundNames.join('、')}', style: TextStyle(fontSize: 11, color: subTextColor), maxLines: 2, overflow: TextOverflow.ellipsis),
+        // Fund names colored the same accent as the holding analysis style
+        Text.rich(
+          TextSpan(
+            text: '覆盖基金: ',
+            style: TextStyle(fontSize: 11, color: subTextColor),
+            children: [
+              TextSpan(
+                text: item.fundNames.join('、'),
+                style: TextStyle(fontSize: 11, color: textColor, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+        ),
         if (q != null) ...[
           const SizedBox(height: 3),
-          Text('最新价: ¥${q.price.toStringAsFixed(2)}  PE: ${q.pe?.toStringAsFixed(2) ?? '-'}  PB: ${q.pb?.toStringAsFixed(2) ?? '-'}  市值: ${q.totalMv?.toStringAsFixed(0) ?? '-'}亿',
+          Text('最新价: ${q.price.toStringAsFixed(2)}  '
+              'PE: ${q.pe?.toStringAsFixed(2) ?? '-'}  '
+              'PB: ${q.pb?.toStringAsFixed(2) ?? '-'}  '
+              '市值: ${q.totalMv?.toStringAsFixed(0) ?? '-'}亿',
             style: TextStyle(fontSize: 10, color: subTextColor)),
         ],
       ]),
@@ -1444,23 +1184,38 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   // ---------------------------------------------------------------------------
 
   Widget _buildSectionCard({
-    required String title, required IconData icon,
-    required bool isDark, required Color cardColor,
-    required Color textColor, required Color subTextColor,
+    required String title,
+    required IconData icon,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
+    required Color subTextColor,
+    required double pad,
     required List<Widget> children,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: CupertinoColors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
+      padding: EdgeInsets.all(pad),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(_cardBorderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? CupertinoColors.black.withValues(alpha: 0.2)
+                : CupertinoColors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(icon, size: 20, color: CupertinoColors.systemBlue),
-          const SizedBox(width: 8),
-          Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textColor)),
+          Icon(icon, size: 18, color: CupertinoColors.systemBlue),
+          const SizedBox(width: 6),
+          Text(title,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor)),
         ]),
-        const SizedBox(height: 16),
+        SizedBox(height: pad < 14 ? 10 : 14),
         ...children,
       ]),
     );
@@ -1468,28 +1223,12 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 }
 
 // =============================================================================
-// Weighted holding helper
+// Helpers
 // =============================================================================
 
-class _WeightedHolding {
-  final String stockCode;
-  final String stockName;
-  final double weightedRatio;
-  final double totalRatio;
-  final Set<String> fundCodes;
-  final Set<String> fundNames;
-
-  _WeightedHolding({
-    required this.stockCode, required this.stockName,
-    required this.weightedRatio, required this.totalRatio,
-    required this.fundCodes, required this.fundNames,
-  });
-
-  _WeightedHolding add(double wr, double rawRatio, String fundCode, String fundName) {
-    final newCodes = Set<String>.from(fundCodes)..add(fundCode);
-    final newNames = Set<String>.from(fundNames)..add(fundName);
-    return _WeightedHolding(stockCode: stockCode, stockName: stockName,
-      weightedRatio: weightedRatio + wr, totalRatio: totalRatio + rawRatio,
-      fundCodes: newCodes, fundNames: newNames);
-  }
+class _StyleSegment {
+  final String label;
+  final double value;
+  final Color color;
+  const _StyleSegment(this.label, this.value, this.color);
 }
