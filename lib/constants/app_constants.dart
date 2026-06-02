@@ -47,6 +47,11 @@ class AppConstants {
   static const String apiEastmoneyPingzhongdata = 'https://fund.eastmoney.com/pingzhongdata/{code}.js';
   static const String apiEastmoneyFundArchives = 'https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=10';
   static const String apiGtimgStockQuote = 'https://qt.gtimg.cn/q={codes}';
+
+  // Backend fund analysis API (akshare-powered)
+  static String get apiFundHoldings => '$nasBackendUrl/api/fund/holdings';
+  static String get apiStockAnalysis => '$nasBackendUrl/api/stock/analysis';
+  static String get apiPortfolioAnalysis => '$nasBackendUrl/api/portfolio/analysis';
   
   static const List<String> apiValuationSources = [
     'https://fundgz.1234567.com.cn/js/{code}.js?rt={timestamp}',

@@ -603,6 +603,109 @@ class FundService {
     return holdings.take(10).toList();
   }
 
+  // ── Backend API methods (akshare-powered) ──
+
+  /// Fetch top-10 holdings for multiple funds from the backend in one call.
+  /// Returns {code: {fundName, holdings: [TopHolding]}}.
+  /// Falls back to empty map on any error (caller should use HTML scraping).
+  Future<Map<String, Map<String, dynamic>>> fetchTopHoldingsFromApi(
+      List<String> codes) async {
+    if (codes.isEmpty) return {};
+    try {
+      final url = Uri.parse(AppConstants.apiFundHoldings);
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'codes': codes}))
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode != 200) return {};
+
+      final body = jsonDecode(response.body);
+      final data = body['data'] as Map<String, dynamic>?;
+      if (data == null) return {};
+
+      final result = <String, Map<String, dynamic>>{};
+      for (final entry in data.entries) {
+        final fundData = entry.value as Map<String, dynamic>?;
+        if (fundData == null) continue;
+        final rawHoldings = fundData['holdings'] as List<dynamic>? ?? [];
+        final holdings = rawHoldings.map((h) => TopHolding(
+              stockCode: h['stockCode']?.toString() ?? '',
+              stockName: h['stockName']?.toString() ?? '',
+              ratio: (h['ratio'] as num?)?.toDouble() ?? 0.0,
+            )).toList();
+        result[entry.key] = {
+          'fundName': fundData['fundName']?.toString() ?? '',
+          'holdings': holdings,
+        };
+      }
+      return result;
+    } catch (e) {
+      _dataManager?.addLog('后端基金持仓查询失败: $e', type: LogType.warning);
+      return {};
+    }
+  }
+
+  /// Fetch fundamental analysis for stocks from the backend.
+  /// Returns {code: {stockName, pe, pb, totalMv, industry, marketCapStyle, valueStyle, ...}}
+  Future<Map<String, Map<String, dynamic>>> fetchStockAnalysisFromApi(
+      List<String> codes) async {
+    if (codes.isEmpty) return {};
+    try {
+      final url = Uri.parse(AppConstants.apiStockAnalysis);
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'codes': codes}))
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode != 200) return {};
+
+      final body = jsonDecode(response.body);
+      final data = body['data'] as Map<String, dynamic>?;
+      if (data == null) return {};
+
+      return data.map((k, v) => MapEntry(k, v as Map<String, dynamic>));
+    } catch (e) {
+      _dataManager?.addLog('后端股票分析查询失败: $e', type: LogType.warning);
+      return {};
+    }
+  }
+
+  /// Comprehensive portfolio analysis — fetches holdings, stock data,
+  /// computes weighted top-10, style distribution, industry distribution,
+  /// overlap detection, and smart summary — all from the backend.
+  Future<Map<String, dynamic>?> fetchPortfolioAnalysis(
+      List<Map<String, dynamic>> funds) async {
+    if (funds.isEmpty) return null;
+    try {
+      final url = Uri.parse(AppConstants.apiPortfolioAnalysis);
+      print('[FundService] POST $url (${funds.length} funds)');
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'funds': funds}))
+          .timeout(const Duration(seconds: 60));
+
+      print('[FundService] 后端响应 HTTP ${response.statusCode}');
+      if (response.statusCode != 200) {
+        final snippet = response.body.length > 200
+            ? '${response.body.substring(0, 200)}...'
+            : response.body;
+        print('[FundService] 后端返回非200: $snippet');
+        return null;
+      }
+
+      final body = jsonDecode(response.body);
+      return body['data'] as Map<String, dynamic>?;
+    } catch (e) {
+      print('[FundService] 后端组合分析失败: $e');
+      _dataManager?.addLog('后端组合分析失败: $e', type: LogType.warning);
+      return null;
+    }
+  }
+
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
     if (stockCodes.isEmpty) return {};
     

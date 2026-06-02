@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
@@ -1585,7 +1586,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   Future<void> _pickFile() async {
     // 存储权限：现代系统文件选择器通常自动处理权限，
     // 但旧版 Android 需要存储权限才能读取外部文件
-    if (Platform.isAndroid) {
+    // NOTE: Platform.isAndroid from dart:io is NOT available on web — guard with kIsWeb.
+    if (!kIsWeb && Platform.isAndroid) {
       final ok = await checkPermission(
         context: context,
         permission: Permission.storage,
@@ -1594,36 +1596,93 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       if (!ok) return;
     }
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv', 'xlsx', 'xls'],
-      withData: true,
-    );
-    if (result != null) {
-      final file = result.files.single;
-      final fileSize = file.size;
-      const int maxFileSize = 5 * 1024 * 1024;
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'xlsx', 'xls'],
+        withData: true,
+      );
+      if (result != null) {
+        final file = result.files.single;
+        final fileSize = file.size;
+        const int maxFileSize = 5 * 1024 * 1024;
 
-      if (fileSize > maxFileSize) {
-        if (mounted) {
-          context.showToast('文件大小超过限制(最大5MB)');
+        if (fileSize > maxFileSize) {
+          if (mounted) {
+            context.showToast('文件大小超过限制(最大5MB)');
+          }
+          return;
         }
-        return;
-      }
 
-      final bytes = file.bytes;
-      if (bytes == null) {
-        if (mounted) context.showToast('无法读取文件内容');
-        return;
-      }
+        Uint8List? bytes = file.bytes;
 
+        // On web, FilePicker may not provide bytes directly — read from the
+        // platform file bytes or use the HTML File API to read them.
+        if (bytes == null && kIsWeb) {
+          try {
+            bytes = await _pickFileWebFallback();
+          } catch (_) {
+            if (mounted) context.showToast('无法读取文件内容');
+            return;
+          }
+        }
+
+        if (bytes == null) {
+          if (mounted) context.showToast('无法读取文件内容');
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            _fileName = file.name;
+          });
+        }
+        _processBytes(bytes, file.name);
+      }
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          _fileName = file.name;
-        });
+        context.showToast('文件选择失败: $e');
       }
-      _processBytes(bytes, file.name);
     }
+  }
+
+  /// Web fallback: use a hidden HTML file input when FilePicker doesn't
+  /// provide bytes on web.  Reads the first selected file as Uint8List.
+  Future<Uint8List?> _pickFileWebFallback() async {
+    final completer = Completer<Uint8List?>();
+    final input = html.document.createElement('input') as html.InputElement
+      ..type = 'file'
+      ..accept = '.csv,.xlsx,.xls'
+      ..style.display = 'none';
+
+    html.document.body?.append(input);
+
+    input.onChange.listen((event) {
+      final files = (input as html.FileUploadInputElement).files;
+      input.remove();
+      if (files == null || files.isEmpty) {
+        completer.complete(null);
+        return;
+      }
+      final reader = html.FileReader();
+      reader.onLoadEnd.listen((_) {
+        final result = reader.result;
+        if (result is Uint8List) {
+          completer.complete(result);
+        } else if (result is List<int>) {
+          completer.complete(Uint8List.fromList(result));
+        } else {
+          completer.complete(null);
+        }
+      });
+      reader.onError.listen((_) {
+        completer.complete(null);
+      });
+      reader.readAsArrayBuffer(files[0]);
+    });
+
+    input.click();
+    return completer.future;
   }
 
   String _getCellValue(dynamic cell) {

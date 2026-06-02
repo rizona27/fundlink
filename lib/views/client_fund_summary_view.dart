@@ -35,8 +35,11 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   bool _loadingQuotes = true;
   bool _profitBarExpanded = false;
   int _touchedPieIndex = -1;
+  bool _usingBackendData = false;
 
   Map<String, StockQuote> _stockQuotes = {};
+  Map<String, String> _stockIndustries = {};    // stockCode → industry (from backend)
+  Map<String, dynamic>? _backendAnalysis;       // cached portfolio analysis result
   List<_WeightedHolding> _weightedHoldings = [];
 
   // --- Chart colour palette ---
@@ -56,6 +59,29 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   }
 
   Future<void> _loadData() async {
+    // ── Try backend portfolio analysis first (akshare-powered) ──
+    try {
+      final funds = widget.holdings.map((h) => {
+        'code': h.fundCode,
+        'name': h.fundName,
+        'cost': h.totalCost,
+      }).toList();
+
+      debugPrint('[FundSummary] 尝试后端组合分析... 基金数量: ${funds.length}');
+      final analysis = await widget.fundService.fetchPortfolioAnalysis(funds);
+      if (analysis != null && mounted) {
+        debugPrint('[FundSummary] 后端分析成功，加权持仓: ${analysis['weightedHoldings']?.length ?? 0}条');
+        _applyBackendAnalysis(analysis);
+        _usingBackendData = true;
+        setState(() { _loadingTopHoldings = false; _loadingQuotes = false; });
+        return;
+      }
+      debugPrint('[FundSummary] 后端返回null，降级到客户端抓取');
+    } catch (e) {
+      debugPrint('[FundSummary] 后端调用异常: $e，降级到客户端抓取');
+    }
+
+    // ── Fallback: client-side HTML scraping + Tencent quotes ──
     try {
       final results = await Future.wait(
         widget.holdings.map((h) => widget.fundService
@@ -78,6 +104,50 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         setState(() { _loadingTopHoldings = false; _loadingQuotes = false; });
       }
     }
+  }
+
+  /// Populate local state from the backend's portfolio analysis response.
+  void _applyBackendAnalysis(Map<String, dynamic> analysis) {
+    // 1. Weighted holdings — backend weightedRatio is already a percentage
+    //    (same as the client-side _computeWeightedHoldings produces), e.g.
+    //    5.2 means 5.2%.  Do NOT divide by 100.
+    final rawHoldings = analysis['weightedHoldings'] as List<dynamic>? ?? [];
+    _weightedHoldings = rawHoldings.map((h) {
+      final rawPct = (h['weightedRatio'] as num?)?.toDouble() ?? 0;
+      return _WeightedHolding(
+        stockCode: h['stockCode']?.toString() ?? '',
+        stockName: h['stockName']?.toString() ?? '',
+        weightedRatio: rawPct,   // already percentage
+        totalRatio: rawPct,
+        fundCodes: (h['fundCodes'] as List<dynamic>?)
+            ?.map((e) => e.toString()).toSet() ?? {},
+        fundNames: (h['fundNames'] as List<dynamic>?)
+            ?.map((e) => e.toString()).toSet() ?? {},
+      );
+    }).toList();
+
+    // 2. Stock quotes (populate _stockQuotes for UI methods that read it)
+    _stockQuotes.clear();
+    _stockIndustries.clear();
+    for (final h in rawHoldings) {
+      final code = h['stockCode']?.toString() ?? '';
+      if (code.isEmpty) continue;
+      final fullCode = _quoteService.toFullCode(code);
+      _stockQuotes[fullCode] = StockQuote(
+        code: fullCode,
+        price: (h['price'] as num?)?.toDouble() ?? 0,
+        pe: (h['pe'] as num?)?.toDouble(),
+        pb: (h['pb'] as num?)?.toDouble(),
+        totalMv: (h['totalMv'] as num?)?.toDouble(),
+      );
+      final industry = h['industry']?.toString();
+      if (industry != null && industry.isNotEmpty && industry != 'None') {
+        _stockIndustries[code] = industry;
+      }
+    }
+
+    // 3. Cache the full backend response for style/summary use
+    _backendAnalysis = analysis;
   }
 
   // ---------------------------------------------------------------------------
@@ -392,12 +462,15 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     '600895': '产业园区', '600658': '产业园区',
   };
 
-  /// Industry classification via keyword matching on stock name, with a
-  /// hardcoded precision-map lookup first, and a dual feature fallback for
-  /// STAR-board / ChiNext stocks whose names suggest energy or electronics.
-  /// Covers the major A-share + HK sectors.
+  /// Industry classification: prefers backend (akshare) data when available,
+  /// falls back to hardcoded precision-map + keyword matching on the name.
   String _classifyIndustry(String n, {String code = ''}) {
-    // 0. Hardcoded precision map — checked first
+    // 0. Backend data (akshare) — most accurate, checked first
+    if (_usingBackendData && code.isNotEmpty && _stockIndustries.containsKey(code)) {
+      return _stockIndustries[code]!;
+    }
+
+    // 1. Hardcoded precision map — checked second
     if (code.isNotEmpty && _hardcodedIndustryMap.containsKey(code)) {
       return _hardcodedIndustryMap[code]!;
     }
@@ -797,6 +870,13 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // Debug: data source indicator (remove after verification)
+              if (!_usingBackendData && !_loadingTopHoldings && !_loadingQuotes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('⚠ 后端未连接，使用本地抓取数据', style: TextStyle(fontSize: 10, color: CupertinoColors.systemOrange)),
+                ),
+
               // ---- Module 1+2: Investment pie + Profit/Loss diverging bar ----
               _buildSectionCard(
                 title: '持仓分析',
@@ -1129,10 +1209,15 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
   Widget _buildWeightedHoldingsTable(bool isDark, Color textColor, Color subTextColor) {
     final top = _weightedHoldings.take(10).toList();
+    if (top.isEmpty) return Text('暂无重仓股数据', style: TextStyle(fontSize: 13, color: subTextColor));
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Use two columns only when the card area is wide enough (approx > 440dp).
+    final useTwoCols = screenWidth > 440;
     final left = top.take(5).toList();
     final right = top.skip(5).take(5).toList();
 
-    Widget buildItem(int idx, _WeightedHolding wh) {
+    Widget buildRow(int idx, _WeightedHolding wh) {
       final fullCode = _quoteService.toFullCode(wh.stockCode);
       final q = _stockQuotes[fullCode];
       final marketLabel = q?.marketLabel ?? _marketLabelFromCode(wh.stockCode);
@@ -1141,31 +1226,25 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
           SizedBox(width: 18, child: Text('${idx + 1}', style: TextStyle(fontSize: 10, color: subTextColor))),
+          const SizedBox(width: 2),
           Expanded(
-            child: Row(children: [
-              Flexible(
-                child: Text('${wh.stockName}', style: TextStyle(fontSize: 10, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 2),
-              Flexible(
-                child: Text('${wh.stockCode}', style: TextStyle(fontSize: 9, color: subTextColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
-              if (marketLabel.isNotEmpty) ...[
-                const SizedBox(width: 2),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.15) : CupertinoColors.systemBlue.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: Text(marketLabel, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
-                    color: marketLabel == 'HK' ? CupertinoColors.systemOrange : CupertinoColors.systemBlue)),
-                ),
-              ],
-            ]),
+            child: Text('${wh.stockName} ${wh.stockCode}',
+              style: TextStyle(fontSize: 10, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
+          if (marketLabel.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+              decoration: BoxDecoration(
+                color: marketLabel == 'HK' ? CupertinoColors.systemOrange.withValues(alpha: 0.15) : CupertinoColors.systemBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(marketLabel, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
+                color: marketLabel == 'HK' ? CupertinoColors.systemOrange : CupertinoColors.systemBlue)),
+            ),
+          ],
           const SizedBox(width: 4),
-          SizedBox(width: 40, child: Text('${wh.weightedRatio.toStringAsFixed(2)}%',
+          SizedBox(width: 42, child: Text('${wh.weightedRatio.toStringAsFixed(2)}%',
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _ratioColor(wh.weightedRatio)),
             textAlign: TextAlign.right)),
           const SizedBox(width: 2),
@@ -1175,36 +1254,36 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       );
     }
 
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(children: [
-              SizedBox(width: 18, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
-              const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
-              SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
-            ]),
-          ),
-          Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
-          ...left.asMap().entries.map((e) => buildItem(e.key, e.value)),
+    Widget buildColumn(List<_WeightedHolding> items, int startIdx) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey)),
+        ),
+        Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
+        ...items.asMap().entries.map((e) => buildRow(startIdx + e.key, e.value)),
+      ]);
+    }
+
+    if (useTwoCols) {
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: buildColumn(left, 0)),
+        const SizedBox(width: 12),
+        Expanded(child: buildColumn(right, 5)),
+      ]);
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(children: [
+          SizedBox(width: 20, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
+          const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
+          SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
         ]),
       ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(children: [
-              SizedBox(width: 18, child: Text('#', style: TextStyle(fontSize: 9, color: subTextColor))),
-              const Expanded(child: Text('股票', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey))),
-              SizedBox(width: 44, child: Text('权重/基金', style: TextStyle(fontSize: 9, color: CupertinoColors.systemGrey), textAlign: TextAlign.right)),
-            ]),
-          ),
-          Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
-          ...right.asMap().entries.map((e) => buildItem(e.key + 5, e.value)),
-        ]),
-      ),
+      Container(height: 1, color: CupertinoColors.systemGrey.withValues(alpha: 0.15)),
+      ...top.asMap().entries.map((e) => buildRow(e.key, e.value)),
     ]);
   }
 
