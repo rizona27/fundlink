@@ -1489,97 +1489,99 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         '交易类型(选填)', '交易金额(选填)', '交易份额(选填)', '交易日期(选填)'
       ];
       final sampleData = [
-        ['张三', 'C001', '000001', '10000.00', '8000.00', '2024-01-15', '', '', '', ''],
-        ['李四', 'C002', '110022', '20000.00', '15000.00', '2024-02-20', '加仓', '5000.00', '3500.00', '2024-03-15'],
-        ['王五', 'C003', '519674', '5000.00', '4500.00', '2024-03-10', '减仓', '2000.00', '1800.00', '2024-04-10'],
+        ['张三', '001289434001', '000001', '10000.00', '8000.00', '2024-01-15', '', '', '', ''],
+        ['李四', '001230109501', '110022', '20000.00', '15000.00', '2024-02-20', '加仓', '5000.00', '3500.00', '2024-03-15'],
+        ['王五', '001145237901', '519674', '5000.00', '4500.00', '2024-03-10', '减仓', '2000.00', '1800.00', '2024-04-10'],
       ];
 
-      final csvData = [headers, ...sampleData];
-      final csvString = const ListToCsvConverter().convert(csvData);
-      final bytes = Uint8List.fromList(utf8.encode(csvString));
+      final bytes = _generateTemplateExcelBytes(headers, sampleData);
+      await _saveTemplateFile(bytes, 'FundLink-持仓模板', 'xlsx');
 
-      if (kIsWeb) {
-        final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        html.AnchorElement(href: url)
-          ..setAttribute("download", "FundLink-持仓模板.csv")
-          ..click();
-        html.Url.revokeObjectUrl(url);
-        if (mounted) context.showToast('持仓模板已下载');
-      } else {
-        if (Platform.isAndroid) {
-          final ok = await checkPermission(
-            context: context,
-            permission: Permission.storage,
-            featureDescription: '存储空间',
-          );
-          if (!ok) return;
-        }
-        final savedPath = await FileSaver.instance.saveAs(
-          name: 'FundLink-持仓模板',
-          bytes: bytes,
-          fileExtension: 'csv',
-          mimeType: MimeType.other,
-        );
-        
-        if (savedPath != null && savedPath.isNotEmpty) {
-          if (mounted) context.showToast('持仓模板已保存');
-        } else {
-          if (mounted) context.showToast('已取消保存');
-        }
-      }
+      if (mounted) context.showToast('持仓模板已保存');
     } catch (e) {
       if (mounted) context.showToast('生成模板失败: $e');
     }
   }
-  
+
   Future<void> _downloadMappingTemplate() async {
     try {
       final headers = ['客户号', '客户姓名'];
       final sampleData = [
-        ['C001', '张三'],
-        ['C002', '李四'],
-        ['C003', '王五'],
-        ['10001', '赵六'],
-        ['10002', '孙七'],
+        ['001289434001', '张三'],
+        ['001230109501', '李四'],
+        ['001145237901', '王五'],
+        ['001325216901', '赵六'],
+        ['001220895601', '孙七'],
       ];
 
-      final csvData = [headers, ...sampleData];
-      final csvString = const ListToCsvConverter().convert(csvData);
-      final bytes = Uint8List.fromList(utf8.encode(csvString));
+      final bytes = _generateTemplateExcelBytes(headers, sampleData, sheetName: 'biao');
+      await _saveTemplateFile(bytes, 'FundLink-映射索引模板', 'xlsx');
 
-      if (kIsWeb) {
-        final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        html.AnchorElement(href: url)
-          ..setAttribute("download", "FundLink-映射索引模板.csv")
-          ..click();
-        html.Url.revokeObjectUrl(url);
-        if (mounted) context.showToast('映射模板已下载');
-      } else {
-        if (Platform.isAndroid) {
-          final ok = await checkPermission(
-            context: context,
-            permission: Permission.storage,
-            featureDescription: '存储空间',
-          );
-          if (!ok) return;
-        }
-        final savedPath = await FileSaver.instance.saveAs(
-          name: 'FundLink-映射索引模板',
-          bytes: bytes,
-          fileExtension: 'csv',
-          mimeType: MimeType.other,
-        );
-        
-        if (savedPath != null && savedPath.isNotEmpty) {
-          if (mounted) context.showToast('映射模板已保存');
-        } else {
-          if (mounted) context.showToast('已取消保存');
-        }
-      }
+      if (mounted) context.showToast('映射模板已保存');
     } catch (e) {
       if (mounted) context.showToast('生成模板失败: $e');
+    }
+  }
+
+  Uint8List _generateTemplateExcelBytes(
+    List<String> headers,
+    List<List<String>> sampleData, {
+    String sheetName = 'Sheet1',
+  }) {
+    final excelFile = excel.Excel.createExcel();
+    final sheet = excelFile[sheetName];
+
+    for (int i = 0; i < headers.length; i++) {
+      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
+      sheet.cell(cellIndex).value = excel.TextCellValue(headers[i]);
+    }
+
+    for (int r = 0; r < sampleData.length; r++) {
+      for (int c = 0; c < sampleData[r].length; c++) {
+        final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1);
+        sheet.cell(cellIndex).value = excel.TextCellValue(sampleData[r][c]);
+      }
+    }
+
+    final fileBytes = excelFile.encode();
+    if (fileBytes == null) {
+      throw Exception('生成 Excel 文件失败');
+    }
+    return Uint8List.fromList(fileBytes);
+  }
+
+  Future<void> _saveTemplateFile(Uint8List bytes, String name, String extension) async {
+    if (kIsWeb) {
+      final mimeType = extension == 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv;charset=utf-8';
+      final blob = html.Blob([bytes], mimeType);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', '$name.$extension')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      if (Platform.isAndroid) {
+        final ok = await checkPermission(
+          context: context,
+          permission: Permission.storage,
+          featureDescription: '存储空间',
+        );
+        if (!ok) return;
+      }
+      final savedPath = await FileSaver.instance.saveAs(
+        name: name,
+        bytes: bytes,
+        fileExtension: extension,
+        mimeType: MimeType.other,
+      );
+
+      if (savedPath != null && savedPath.isNotEmpty) {
+        // success - message handled by caller
+      } else {
+        if (mounted) context.showToast('已取消保存');
+      }
     }
   }
 
@@ -1772,7 +1774,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
       if (actualFormat == 'excel') {
         try {
-          final excelFile = excel.Excel.decodeBytes(bytes);
+          final excelFile = FileImportService.decodeExcelSafe(bytes);
           if (excelFile.tables.isEmpty) {
             throw Exception('Excel 文件没有工作表');
           }
@@ -1786,6 +1788,18 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
               .where((row) => row.any((cell) => cell.trim().isNotEmpty))
               .toList();
         } catch (e) {
+          // An xlsx file is a ZIP archive starting with PK. CSV fallback
+          // on binary data only produces garbage — skip it and fail early.
+          final isZip = bytes.length >= 4 &&
+              bytes[0] == 0x50 && bytes[1] == 0x4B;
+          if (isZip) {
+            throw Exception(
+              '无法解析此 Excel 文件，文件可能已损坏或格式不兼容。'
+              '请尝试用 Excel 或 WPS 重新保存文件后再次导入。'
+              '\n技术细节: $e',
+            );
+          }
+          // Extension says xlsx but it's not a ZIP — maybe a renamed CSV.
           try {
             final csvString = _decodeCsvBytes(bytes);
             final rows = const CsvToListConverter().convert(csvString);
@@ -1817,11 +1831,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
 
       if (_headers.isEmpty) {
-        throw Exception('文件没有表头');
+        throw Exception('文件没有表头行，请确保第一行包含列名（如：客户号、客户姓名等）');
       }
 
       if (_rawData.isEmpty) {
-        throw Exception('文件没有数据行');
+        throw Exception(
+          '文件没有数据行，已识别到${_headers.length}个表头列：${_headers.join('、')}，'
+          '但未找到有效数据。请检查：\n'
+          '1. 文件是否只有表头没有数据\n'
+          '2. 数据行是否全部为空\n'
+          '3. 如果是 Excel 文件，尝试另存为 .csv 格式再导入',
+        );
       }
 
       _detectedFileType = _detectFileType(_headers);

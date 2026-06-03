@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
 import 'package:fast_gbk/fast_gbk.dart';
@@ -56,7 +57,7 @@ class FileImportService {
       final ext = extension?.toLowerCase() ?? '';
 
       if (ext == 'xlsx' || ext == 'xls') {
-        final excelFile = excel.Excel.decodeBytes(bytes);
+        final excelFile = decodeExcelSafe(bytes);
         return excelFile.tables.containsKey('Holdings') &&
                excelFile.tables.containsKey('Transactions');
       }
@@ -70,7 +71,7 @@ class FileImportService {
       } catch (_) {}
 
       try {
-        final excelFile = excel.Excel.decodeBytes(bytes);
+        final excelFile = decodeExcelSafe(bytes);
         return excelFile.tables.containsKey('Holdings') &&
                excelFile.tables.containsKey('Transactions');
       } catch (_) {}
@@ -111,6 +112,50 @@ class FileImportService {
     }
     
     return 'csv';
+  }
+
+  /// Wraps [decodeExcelSafe] with automatic repair for xlsx files that
+  /// contain built-in numFmtIds in the custom numFmts section (a known issue
+  /// with files created by openpyxl and some other tools).
+  static excel.Excel decodeExcelSafe(Uint8List bytes) {
+    try {
+      return excel.Excel.decodeBytes(bytes);
+    } catch (e) {
+      // Only attempt repair if it's a ZIP-based xlsx file
+      final isZip = bytes.length >= 4 &&
+          bytes[0] == 0x50 && bytes[1] == 0x4B;
+      if (!isZip) rethrow;
+
+      try {
+        final archive = ZipDecoder().decodeBytes(bytes);
+        final stylesFile = archive.findFile('xl/styles.xml');
+        if (stylesFile == null) rethrow;
+
+        final content = utf8.decode(stylesFile.content as List<int>);
+        // Remove numFmt entries with built-in IDs (< 164) that trigger
+        // the excel package's overly strict validation.
+        final fixed = content.replaceAllMapped(
+          RegExp(r'<numFmt\s+numFmtId="(\d{1,3})"[^/]*/>'),
+          (m) {
+            final id = int.parse(m.group(1)!);
+            return id < 164 ? '' : m.group(0)!;
+          },
+        );
+        final fixedBytes = utf8.encode(fixed);
+        archive.removeFile(stylesFile);
+        archive.addFile(ArchiveFile(
+          stylesFile.name,
+          fixedBytes.length,
+          Uint8List.fromList(fixedBytes),
+        ));
+
+        final repaired = ZipEncoder().encode(archive);
+        if (repaired == null) rethrow;
+        return excel.Excel.decodeBytes(Uint8List.fromList(repaired));
+      } catch (_) {
+        rethrow;
+      }
+    }
   }
 
   static Future<({List<String> headers, List<List<dynamic>> rows})> _parseCsv(Uint8List bytes) async {
@@ -162,7 +207,7 @@ class FileImportService {
   }
 
   static Future<({List<String> headers, List<List<dynamic>> rows})> _parseExcel(Uint8List bytes) async {
-    final excelFile = excel.Excel.decodeBytes(bytes);
+    final excelFile = decodeExcelSafe(bytes);
     if (excelFile.tables.isEmpty) {
       throw Exception('Excel 文件没有工作表');
     }
@@ -461,7 +506,7 @@ class FileImportService {
     String version,
     DateTime? exportTime,
   })> _parseFullBackupExcel(Uint8List bytes) async {
-    final excelFile = excel.Excel.decodeBytes(bytes);
+    final excelFile = decodeExcelSafe(bytes);
     
     final holdings = <FundHolding>[];
     final transactions = <TransactionRecord>[];
