@@ -25,7 +25,7 @@ class SummaryView extends StatefulWidget {
   State<SummaryView> createState() => _SummaryViewState();
 }
 
-class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, ScrollToTopMixin {
+class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, ScrollToTopMixin, SingleTickerProviderStateMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
@@ -35,6 +35,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
+
+  // Gentle sort animation — position-swap for dimension change,
+  // staggered slide-up for order toggle
+  late final AnimationController _sortAnimCtrl;
+  Map<String, int>? _oldPositions;
+  bool _isOrderToggle = false;
 
   int _valuationRefreshIntervalSeconds = 180;
   Timer? _valuationTimer;
@@ -102,6 +108,13 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   @override
   void initState() {
     super.initState();
+    _sortAnimCtrl = AnimationController(
+      duration: const Duration(milliseconds: 450),
+      vsync: this,
+    );
+    _sortAnimCtrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed) _oldPositions = null;
+    });
     WidgetsBinding.instance.addObserver(this);
     _dataListener = () {
       if (mounted) {
@@ -167,6 +180,14 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     }
   }
   
+  void _captureOldPositions() {
+    _oldPositions = {};
+    final codes = _sortedFundCodes;
+    for (int i = 0; i < codes.length; i++) {
+      _oldPositions![codes[i]] = i;
+    }
+  }
+
   void _saveExpandedState() {
   }
 
@@ -191,6 +212,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
 
   @override
   void dispose() {
+    _sortAnimCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _cancelAllTimers();
     _scrollOffsetNotifier.dispose();
@@ -840,14 +862,24 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               sortCycleType: SortCycleType.fundReturns,
               onSortKeyChanged: enableButtons
                   ? (key) async {
-                if (mounted) setState(() => _sortKey = key);
+                if (mounted) {
+                  _isOrderToggle = false;
+                  _captureOldPositions();
+                  setState(() => _sortKey = key);
+                  _sortAnimCtrl.forward(from: 0);
+                }
                 await _saveSortState();
                 _showSortToast();
               }
                   : null,
               onSortOrderChanged: enableButtons
                   ? (order) async {
-                if (mounted) setState(() => _sortOrder = order);
+                if (mounted) {
+                  _isOrderToggle = true;
+                  _oldPositions = null;
+                  setState(() => _sortOrder = order);
+                  _sortAnimCtrl.forward(from: 0);
+                }
                 await _saveSortState();
                 _showSortToast();
               }
@@ -907,11 +939,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                 ),
               )
-                  : AnimatedSwitcher(
-                duration: AnimationConfig.durationMedium,
-                switchInCurve: AnimationConfig.curveEaseInOutCubic,
-                switchOutCurve: AnimationConfig.curveEaseInOutCubic,
-                child: NotificationListener<ScrollNotification>(
+                  : NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (notification is ScrollUpdateNotification) {
                       _onScrollUpdate(notification.metrics.pixels);
@@ -919,8 +947,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                     return false;
                   },
                   child: ListView.builder(
-                    controller: _scrollController, 
-                    key: ValueKey('list_${_sortKey}_${_sortOrder}_${_searchText}'),
+                    controller: _scrollController,
                     padding: EdgeInsets.only(
                       left: 12,
                       right: 12,
@@ -1069,34 +1096,67 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                         );
                       }
 
-                      return Column(
-                        key: ValueKey('fund_$fundCode'), 
-                        children: [
-                          GradientCard(
-                            title: first.fundName,
-                            clientId: fundCode,
-                            gradient: gradient,
-                            isExpanded: isExpanded,
-                            onTap: () => _toggleExpand(fundCode),
-                            isDarkMode: isDark,
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            trailing: finalTrailing, 
-                            maxTitleLength: 6,
-                          ),
-                          AnimationConfig.listExpandTransition(
-                            isExpanded: isExpanded,
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 16, top: 8), 
-                              child: _buildExpandedContent(first, holdings, isDark),
+                      // ── Sort animation (matches iOS withAnimation spring) ──
+                      final oldI = _oldPositions?[fundCode];
+                      final delta = oldI != null
+                          ? (oldI - index).toDouble()
+                          : 0.0;
+                      const kCardH = 56.0;
+
+                      return AnimatedBuilder(
+                        animation: _sortAnimCtrl,
+                        builder: (context, child) {
+                          final t = _sortAnimCtrl.value;
+                          final stagger = (index * 0.025).clamp(0.0, 0.35);
+                          final lt = ((t - stagger) / (1.0 - stagger)).clamp(0.0, 1.0);
+                          final c = Curves.easeOutCubic.transform(lt);
+
+                          if (_isOrderToggle) {
+                            // Order toggle: subtle staggered slide-up + fade
+                            return Opacity(
+                              opacity: lt,
+                              child: Transform.translate(
+                                offset: Offset(0, (1.0 - c) * 14.0),
+                                child: child,
+                              ),
+                            );
+                          }
+
+                          // Dimension change: position-swap from old→new index
+                          if (delta.abs() < 0.5) return child!;
+                          return Transform.translate(
+                            offset: Offset(0, delta * kCardH * (1.0 - c)),
+                            child: child,
+                          );
+                        },
+                        child: Column(
+                          key: ValueKey('fund_$fundCode'),
+                          children: [
+                            GradientCard(
+                              title: first.fundName,
+                              clientId: fundCode,
+                              gradient: gradient,
+                              isExpanded: isExpanded,
+                              onTap: () => _toggleExpand(fundCode),
+                              isDarkMode: isDark,
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                              trailing: finalTrailing,
+                              maxTitleLength: 6,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
+                            AnimationConfig.listExpandTransition(
+                              isExpanded: isExpanded,
+                              child: Container(
+                                margin: const EdgeInsets.only(left: 16, top: 8),
+                                child: _buildExpandedContent(first, holdings, isDark),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
                       );
                     },
                   ),
                 ),
-              ),
             ),
           ],
         ),
