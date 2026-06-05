@@ -1325,16 +1325,16 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress) async {
+  Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress, {bool forceRefresh = false}) async {
     final total = _holdings.length;
-    
-    const batchSize = 5; 
+
+    const batchSize = 5;
     for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
       final batchEnd = (batchStart + batchSize < total) ? batchStart + batchSize : total;
-      
+
       for (int i = batchStart; i < batchEnd; i++) {
         final holding = _holdings[i];
-        final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: true);
+        final fetched = await fundService.fetchFundInfo(holding.fundCode, forceRefresh: forceRefresh);
         if (fetched['isValid'] == true) {
           final index = _holdings.indexWhere((h) => h.id == holding.id);
           if (index != -1) {
@@ -1372,9 +1372,8 @@ class DataManager extends ChangeNotifier {
     await refreshAllHoldings(fundService, onProgress);
   }
   
-  @Deprecated('Use refreshAllHoldings instead')
   Future<void> refreshAllHoldingsForce(FundService fundService, Function(int current, int total)? onProgress) async {
-    await refreshAllHoldings(fundService, onProgress);
+    await refreshAllHoldings(fundService, onProgress, forceRefresh: true);
   }
 
   Future<void> togglePinStatus(String holdingId) async {

@@ -59,6 +59,7 @@ class AppConstants {
 
   static const int valuationCacheValidSeconds = 3600;
   static const int fundInfoCacheValidDays = 36500;
+  static const int fundInfoCacheValidHours = 4;
   static const int fundReturnCacheValidDays = 1;
   static const int versionInfoCacheValidHours = 24;
   static const int maxCacheSize = 500;

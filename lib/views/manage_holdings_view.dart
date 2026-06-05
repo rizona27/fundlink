@@ -358,6 +358,7 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
                   builder: (context, offset, child) {
                     return AdaptiveTopBar(
                   scrollOffset: offset,
+                  scrollController: _scrollController,
                   showBack: true,
                   onBack: () => Navigator.of(context).pop(),
                   showRefresh: false,

@@ -460,7 +460,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Future<void> _onFundRefresh() async {
     if (!mounted) return;
     try {
-      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+      await _dataManager.refreshAllHoldings(_fundService, null);
       if (mounted) {
         setState(() {});
         context.showToast('基金数据刷新完成');
@@ -477,7 +477,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Future<void> _onFundLongPressRefresh() async {
     if (!mounted) return;
     try {
-      await _dataManager.refreshAllHoldingsForce(_fundService, null);
+      await _dataManager.refreshAllHoldings(_fundService, null, forceRefresh: true);
       if (mounted) {
         setState(() {});
         context.showToast('强制刷新完成');
@@ -848,6 +848,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
               builder: (context, offset, child) {
                 return AdaptiveTopBar(
               scrollOffset: offset,
+              scrollController: _scrollController,
               showBack: false,
               showRefresh: true,
               showExpandCollapse: true,

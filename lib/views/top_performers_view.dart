@@ -22,13 +22,18 @@ class TopPerformersView extends StatefulWidget {
   State<TopPerformersView> createState() => _TopPerformersViewState();
 }
 
-class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin, ScrollToTopMixin {
+class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKeepAliveClientMixin, ScrollToTopMixin, TickerProviderStateMixin {
   late DataManager _dataManager;
   late FundService _fundService;
   late VoidCallback _dataListener;
 
   SortKey _sortKey = SortKey.none;
   SortOrder _sortOrder = SortOrder.descending;
+
+  // Elastic sort animation — mirrors SummaryView
+  late final AnimationController _sortAnimCtrl;
+  Map<String, int>? _oldPositions;
+  bool _isOrderToggle = false;
 
   final TextEditingController _minAmountController = TextEditingController();
   final TextEditingController _maxAmountController = TextEditingController();
@@ -87,7 +92,14 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   @override
   void initState() {
     super.initState();
-    _loadState(); 
+    _sortAnimCtrl = AnimationController(
+      duration: const Duration(milliseconds: 450),
+      vsync: this,
+    );
+    _sortAnimCtrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed) _oldPositions = null;
+    });
+    _loadState();
     _dataListener = () {
       if (mounted) {
         _updateCachedItems();
@@ -103,7 +115,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   Future<void> _loadState() async {
     try {
       final uiState = UIStateService();
-      
+
       final sortKeyStr = await uiState.getString(_keySortKey);
       if (sortKeyStr != null) {
         _sortKey = SortKey.values.firstWhere(
@@ -111,7 +123,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           orElse: () => SortKey.none,
         );
       }
-      
+
       final sortOrderStr = await uiState.getString(_keySortOrder);
       if (sortOrderStr != null) {
         _sortOrder = SortOrder.values.firstWhere(
@@ -119,6 +131,9 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           orElse: () => SortOrder.descending,
         );
       }
+
+      // Re-sort now that the saved sort key/order are loaded
+      if (mounted) _updateCachedItems();
     } catch (e) {
     }
   }
@@ -171,6 +186,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   @override
   void dispose() {
+    _sortAnimCtrl.dispose();
     _scrollOffsetNotifier.dispose();
     _filterDebounceTimer?.cancel();
     _filterAutoCollapseTimer?.cancel();
@@ -390,35 +406,53 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     context.showToast('筛选条件已重置');
   }
 
+  void _captureOldPositions() {
+    _oldPositions = {};
+    for (int i = 0; i < _cachedItems.length; i++) {
+      _oldPositions![_cachedItems[i].holding.id] = i;
+    }
+  }
+
   void _onSortKeyChanged(SortKey key) async {
     if (mounted) {
+      final sameKey = _sortKey == key;
+      _isOrderToggle = sameKey;
+      if (!sameKey) {
+        _captureOldPositions();
+      } else {
+        _oldPositions = null;
+      }
       setState(() {
-        if (_sortKey == key) {
+        if (sameKey) {
           _sortOrder = _sortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
         } else {
           _sortKey = key;
           _sortOrder = SortOrder.descending;
         }
       });
+      _sortAnimCtrl.forward(from: 0);
     }
-    await _saveSortState(); 
+    await _saveSortState();
     _updateCachedItems();
     String sortType = key.displayName;
     String orderText = _sortOrder == SortOrder.ascending ? '升序' : '降序';
-    context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
+    if (mounted) context.showToast('${sortType}${key == SortKey.none ? '' : ' $orderText'}');
   }
 
   void _onSortOrderChanged(SortOrder order) async {
     if (mounted) {
+      _isOrderToggle = true;
+      _oldPositions = null;
       setState(() {
         _sortOrder = order;
       });
+      _sortAnimCtrl.forward(from: 0);
     }
-    await _saveSortState(); 
+    await _saveSortState();
     _updateCachedItems();
     String sortType = _sortKey.displayName;
     String orderText = order == SortOrder.ascending ? '升序' : '降序';
-    context.showToast('${sortType} $orderText');
+    if (mounted) context.showToast('${sortType} $orderText');
   }
 
   void _toggleFilter() {
@@ -539,6 +573,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                     builder: (context, offset, child) {
                       return AdaptiveTopBar(
                 scrollOffset: offset,
+                scrollController: _scrollController,
                 showRefresh: false,
                 showExpandCollapse: false,
                 showSearch: false,
@@ -626,7 +661,47 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                                 padding: EdgeInsets.only(bottom: totalBottomPadding),
                                 itemCount: items.length,
                                 itemBuilder: (context, index) {
-                                  return _buildHoldingRow(items[index], index, isDarkMode);
+                                  final item = items[index];
+                                  final id = item.holding.id;
+
+                                  // Elastic sort animation
+                                  final oldI = _oldPositions?[id];
+                                  final delta = oldI != null
+                                      ? (oldI - index).toDouble()
+                                      : 0.0;
+                                  const kRowH = 68.0;
+
+                                  return AnimatedBuilder(
+                                    animation: _sortAnimCtrl,
+                                    builder: (context, child) {
+                                      final t = _sortAnimCtrl.value;
+                                      final stagger = (index * 0.025).clamp(0.0, 0.35);
+                                      final lt = ((t - stagger) / (1.0 - stagger)).clamp(0.0, 1.0);
+                                      final c = Curves.easeOutCubic.transform(lt);
+
+                                      if (_isOrderToggle) {
+                                        return Opacity(
+                                          opacity: lt,
+                                          child: Transform.translate(
+                                            offset: Offset(0, (1.0 - c) * 14.0),
+                                            child: child,
+                                          ),
+                                        );
+                                      }
+
+                                      if (delta.abs() < 0.5) return child!;
+                                      return Transform.translate(
+                                        offset: Offset(0, delta * kRowH * (1.0 - c)),
+                                        child: child,
+                                      );
+                                    },
+                                    child: Column(
+                                      key: ValueKey('rank_$id'),
+                                      children: [
+                                        _buildHoldingRow(item, index, isDarkMode),
+                                      ],
+                                    ),
+                                  );
                                 },
                               ),
                             ),

@@ -14,6 +14,7 @@ import '../constants/app_constants.dart';
 String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
+  'v1.3.8 - 排序切换及顶部菜单栏优化',
   'v1.3.7 - 重构客户组合分析页面：整合持仓盈亏图表、优化风格/行业分布展示',
   'v1.3.6 - 优化加减仓逻辑，DB schema升级持久化完整交易状态',
   'v1.3.5 - 新增业绩走势图片导出及自定义区间测算',

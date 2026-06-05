@@ -192,6 +192,7 @@ extension SortOrderExtension on SortOrder {
 
 class AdaptiveTopBar extends StatefulWidget {
   final double scrollOffset;
+  final ScrollController? scrollController;
 
   final bool showBack;
   final bool showRefresh;
@@ -249,6 +250,7 @@ class AdaptiveTopBar extends StatefulWidget {
   const AdaptiveTopBar({
     super.key,
     required this.scrollOffset,
+    this.scrollController,
     this.showBack = false,
     this.showRefresh = true,
     this.showExpandCollapse = true,
@@ -476,29 +478,36 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Future<void> _onRefresh() async {
-    if (widget.onRefresh != null) {
-      widget.onRefresh!();
-      return;
-    }
-    
     if (_isRefreshing) return;
+
     if (widget.dataManager == null || widget.fundService == null) return;
 
     final holdings = widget.dataManager!.holdings;
-    final needRefresh = holdings.any((h) => h.currentNav <= 0);
-    if (!needRefresh) {
-      context.showToast('数据已是最新，跳过刷新', duration: const Duration(seconds: 1));
+    if (holdings.isEmpty) {
+      if (mounted) {
+        context.showToast('暂无基金数据，请先添加基金', duration: const Duration(seconds: 1));
+      }
       return;
     }
 
-    if (mounted) setState(() => _isRefreshing = true);
-    context.showToast('正在刷新基金数据...', duration: const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = true);
+      context.showToast('正在刷新净值...', duration: const Duration(seconds: 1));
+    }
 
     try {
-      await widget.dataManager!.refreshAllHoldingsForce(widget.fundService!, null);
-      if (mounted) {
-        context.showToast('刷新完成');
-        widget.dataManager?.addLog('手动刷新基金数据完成', type: LogType.success);
+      // Per-fund cache freshness is checked inside fetchFundInfo (FundService).
+      // Funds whose cached NAV already matches the latest trading day hit the
+      // cache and skip the API; only truly stale funds reach the network.
+      if (widget.onRefresh != null) {
+        // External callback manages its own completion toast.
+        widget.onRefresh!();
+      } else {
+        await widget.dataManager!.refreshAllHoldings(widget.fundService!, null);
+        if (mounted) {
+          context.showToast('刷新完成');
+          widget.dataManager?.addLog('手动刷新基金数据完成', type: LogType.success);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -708,6 +717,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
           color: widget.iconColor,
         ),
         disabled: false,
+        scrollController: widget.scrollController,
       ));
     }
 
@@ -1020,37 +1030,27 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         _MenuItem(
           icon: SortKey.none.icon,
           label: SortKey.none.displayName,
-          onTap: () {
-            widget.onSortKeyChanged?.call(SortKey.none);
-          },
+          onTap: () => widget.onSortKeyChanged?.call(SortKey.none),
         ),
         _MenuItem(
           icon: SortKey.amount.icon,
           label: SortKey.amount.displayName,
-          onTap: () {
-            widget.onSortKeyChanged?.call(SortKey.amount);
-          },
-        ),
-        _MenuItem(
-          icon: SortKey.profit.icon,
-          label: SortKey.profit.displayName,
-          onTap: () {
-            widget.onSortKeyChanged?.call(SortKey.profit);
-          },
-        ),
-        _MenuItem(
-          icon: SortKey.profitRate.icon,
-          label: SortKey.profitRate.displayName,
-          onTap: () {
-            widget.onSortKeyChanged?.call(SortKey.profitRate);
-          },
+          onTap: () => widget.onSortKeyChanged?.call(SortKey.amount),
         ),
         _MenuItem(
           icon: SortKey.days.icon,
           label: SortKey.days.displayName,
-          onTap: () {
-            widget.onSortKeyChanged?.call(SortKey.days);
-          },
+          onTap: () => widget.onSortKeyChanged?.call(SortKey.days),
+        ),
+        _MenuItem(
+          icon: SortKey.profitRate.icon,
+          label: SortKey.profitRate.displayName,
+          onTap: () => widget.onSortKeyChanged?.call(SortKey.profitRate),
+        ),
+        _MenuItem(
+          icon: SortKey.profit.icon,
+          label: SortKey.profit.displayName,
+          onTap: () => widget.onSortKeyChanged?.call(SortKey.profit),
         ),
       ]);
     }
@@ -1114,56 +1114,70 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   void _showSortMenu(List<_MenuItem> items, bool isDarkMode, Color textColor) {
     final RenderBox? renderBox = _sortButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
-    
+
     final Offset offset = renderBox.localToGlobal(Offset.zero);
     final Size size = renderBox.size;
-    
+
     final overlay = Overlay.of(_sortButtonKey.currentContext!);
     OverlayEntry? overlayEntry;
     GlobalKey<_AnimatedButtonGroupState>? menuKey;
     Timer? autoCloseTimer;
-    
+
     menuKey = GlobalKey<_AnimatedButtonGroupState>();
-    bool isClosed = false; 
-    
+    bool isClosed = false;
+    VoidCallback? scrollListener;
+
     void _closeMenuWithAnimation() {
       if (isClosed) return;
       isClosed = true;
+      scrollListener?.call();
       if (menuKey?.currentState != null) {
-        menuKey!.currentState!._close();
+        menuKey!.currentState!.close();
       } else {
         try {
           overlayEntry?.remove();
-        } catch (e) {
-        }
+        } catch (_) {}
       }
     }
-    
+
     void _closeMenuImmediately() {
       if (isClosed) return;
       isClosed = true;
+      scrollListener?.call();
       try {
         overlayEntry?.remove();
-      } catch (e) {
-      }
+      } catch (_) {}
     }
-    
+
     void startAutoCloseTimer() {
       autoCloseTimer?.cancel();
       autoCloseTimer = Timer(const Duration(seconds: 5), () {
-        try {
-          if (!isClosed) {
-            _closeMenuWithAnimation();
-          }
-        } catch (e) {
-        }
+        if (!isClosed) _closeMenuWithAnimation();
       });
     }
-    
+
     void cancelAutoCloseTimer() {
       autoCloseTimer?.cancel();
     }
-    
+
+    // Close menu when user scrolls
+    if (widget.scrollController != null) {
+      final initialOffset = widget.scrollController!.offset;
+      scrollListener = () {
+        widget.scrollController?.removeListener(scrollListener!);
+      };
+      void onScroll() {
+        if (!isClosed && (widget.scrollController!.offset - initialOffset).abs() > 4.0) {
+          scrollListener?.call();
+          _closeMenuWithAnimation();
+        }
+      }
+      widget.scrollController!.addListener(onScroll);
+      scrollListener = () {
+        widget.scrollController?.removeListener(onScroll);
+      };
+    }
+
     overlayEntry = OverlayEntry(
       builder: (context) => Stack(
         children: [
@@ -1177,8 +1191,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             ),
           ),
           Positioned(
-            top: offset.dy + size.height + 8, 
-            left: offset.dx, 
+            top: offset.dy + size.height + 8,
+            left: offset.dx,
             child: Material(
               color: Colors.transparent,
               child: MouseRegion(
@@ -1187,7 +1201,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                 child: _AnimatedButtonGroup(
                   key: menuKey,
                   items: items.map((item) => _MenuItem(
-                    icon: item.icon, 
+                    icon: item.icon,
                     label: item.label,
                     onTap: () {
                       cancelAutoCloseTimer();
@@ -1196,13 +1210,12 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
                     },
                   )).toList(),
                   onHide: () {
-                    if (!isClosed) {
-                      isClosed = true;
-                    }
+                    if (!isClosed) isClosed = true;
+                    scrollListener?.call();
                     overlayEntry?.remove();
                   },
-                  showAbove: false,
-                  textOnly: true, 
+                  columns: 2,
+                  isGlassStyle: true,
                 ),
               ),
             ),
@@ -1210,7 +1223,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
         ],
       ),
     );
-    
+
     overlay.insert(overlayEntry);
     startAutoCloseTimer();
   }
@@ -1324,7 +1337,13 @@ class _GlassPopupMenuButton extends StatefulWidget {
   final List<_MenuItem> items;
   final Widget icon;
   final bool disabled;
-  const _GlassPopupMenuButton({required this.items, required this.icon, this.disabled = false});
+  final ScrollController? scrollController;
+  const _GlassPopupMenuButton({
+    required this.items,
+    required this.icon,
+    this.disabled = false,
+    this.scrollController,
+  });
 
   @override
   State<_GlassPopupMenuButton> createState() => _GlassPopupMenuButtonState();
@@ -1336,6 +1355,7 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
   OverlayEntry? _overlayEntry;
   bool _isShowing = false;
   Timer? _autoCloseTimer;
+  VoidCallback? _scrollListener;
 
   void _startAutoCloseTimer() {
     _autoCloseTimer?.cancel();
@@ -1357,14 +1377,34 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
     final Offset offset = renderBox.localToGlobal(Offset.zero);
     final Size size = renderBox.size;
 
+    // Register scroll-to-close. Remove the overlay directly rather than
+    // delegating through _menuKey.currentState which may be null if the
+    // widget tree hasn't settled (race on first frame after overlay insert).
+    _scrollListener?.call();
+    _scrollListener = null;
+    if (widget.scrollController != null) {
+      final sc = widget.scrollController!;
+      final initialOffset = sc.offset;
+      void onScroll() {
+        if (!_isShowing) return;
+        if ((sc.offset - initialOffset).abs() <= 4.0) return;
+        _cancelAutoCloseTimer();
+        _isShowing = false;
+        _scrollListener?.call();
+        _scrollListener = null;
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      }
+      sc.addListener(onScroll);
+      _scrollListener = () => sc.removeListener(onScroll);
+    }
+
     _overlayEntry = OverlayEntry(
       builder: (context) => Stack(
         children: [
           Positioned.fill(
             child: GestureDetector(
-              onTap: () {
-                _hideMenuWithAnimation();
-              },
+              onTap: _hideMenuWithAnimation,
               behavior: HitTestBehavior.translucent,
             ),
           ),
@@ -1379,8 +1419,8 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
                 child: _AnimatedButtonGroup(
                   key: _menuKey,
                   items: widget.items,
-                  onHide: _removeOverlay, 
-                  showAbove: false,
+                  onHide: _removeOverlay,
+                  isGlassStyle: true,
                 ),
               ),
             ),
@@ -1397,10 +1437,12 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
     _cancelAutoCloseTimer();
     _isShowing = false;
     
-    _menuKey.currentState?._close();
+    _menuKey.currentState?.close();
   }
 
   void _removeOverlay() {
+    _scrollListener?.call();
+    _scrollListener = null;
     _overlayEntry?.remove();
     _overlayEntry = null;
     _isShowing = false;
@@ -1465,7 +1507,7 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
             child: _AnimatedButtonGroup(
               items: widget.items,
               onHide: _hideMenu,
-              showAbove: showAbove,
+              isGlassStyle: true,
             ),
           ),
         ],
@@ -1499,20 +1541,62 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
   }
 }
 
+/// Builds a frosted-glass container. On web (HTML renderer) skips the
+/// BackdropFilter which is unsupported and causes framework rebuild errors.
+Widget _buildGlassBackground({
+  required bool isDark,
+  required Color bgColor,
+  required BorderRadiusGeometry br,
+  required bool isGlassStyle,
+  required Widget child,
+}) {
+  final container = Container(
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: br,
+      border: isGlassStyle
+          ? Border.all(
+              color: isDark
+                  ? CupertinoColors.white.withOpacity(0.06)
+                  : CupertinoColors.black.withOpacity(0.04),
+            )
+          : null,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+          blurRadius: 20,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
+  if (kIsWeb || !isGlassStyle) return container;
+  return BackdropFilter(
+    filter: ImageFilter.blur(
+      sigmaX: AnimationConfig.menuBlurSigma,
+      sigmaY: AnimationConfig.menuBlurSigma,
+    ),
+    child: container,
+  );
+}
+
 class _AnimatedButtonGroup extends StatefulWidget {
   final List<_MenuItem> items;
   final VoidCallback onHide;
   final bool showAbove;
-  final VoidCallback? onAnimationComplete; 
-  final bool textOnly; 
-  
+  final VoidCallback? onAnimationComplete;
+  final int columns;
+  final bool isGlassStyle;
+
   const _AnimatedButtonGroup({
     super.key,
     required this.items,
     required this.onHide,
     this.showAbove = false,
     this.onAnimationComplete,
-    this.textOnly = false,
+    this.columns = 1,
+    this.isGlassStyle = false,
   });
 
   @override
@@ -1521,395 +1605,241 @@ class _AnimatedButtonGroup extends StatefulWidget {
 
 class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerProviderStateMixin {
   late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
-  late Animation<Offset> _slideAnimation;
   List<AnimationController> _itemControllers = [];
   List<Animation<double>> _itemAnimations = [];
+  bool _isClosing = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: AnimationConfig.menuExpandDuration,
       vsync: this,
     );
-    _opacityAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    
-    Offset slideOffset;
-    if (widget.showAbove) {
-      slideOffset = const Offset(0, 0.1);
-    } else {
-      slideOffset = const Offset(0, -0.1);
-    }
-    
-    _slideAnimation = Tween<Offset>(begin: slideOffset, end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic)
+    _opacityAnimation = CurvedAnimation(parent: _controller, curve: AnimationConfig.curveEaseOutCubic);
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: AnimationConfig.menuExpandCurve),
     );
-    
+
     for (int i = 0; i < widget.items.length; i++) {
       final itemController = AnimationController(
-        duration: const Duration(milliseconds: 250),
+        duration: AnimationConfig.menuItemPopDuration,
         vsync: this,
       );
       final itemAnimation = CurvedAnimation(
         parent: itemController,
-        curve: Curves.easeOutCubic,
+        curve: const Interval(0.0, 0.65, curve: AnimationConfig.menuItemPopCurve),
       );
       _itemControllers.add(itemController);
       _itemAnimations.add(itemAnimation);
-      
-      Future.delayed(Duration(milliseconds: 50 + i * 100), () {
-        if (mounted) {
+
+      Future.delayed(Duration(milliseconds: 40 + i * 60), () {
+        if (mounted && !_isClosing) {
           itemController.forward();
         }
       });
     }
-    
+
     _controller.forward();
   }
 
   @override
   void dispose() {
-    for (var controller in _itemControllers) {
-      controller.dispose();
+    for (var c in _itemControllers) {
+      c.dispose();
     }
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> close() async {
+    if (_isClosing) return;
+    _isClosing = true;
+
+    // Reverse items quickly (reverse order)
     for (int i = _itemControllers.length - 1; i >= 0; i--) {
       try {
         _itemControllers[i].reverse();
-        if (i > 0) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-      } catch (e) {
+        if (i > 0) await Future.delayed(const Duration(milliseconds: 50));
+      } catch (_) {
         break;
       }
     }
-    
-    await Future.delayed(const Duration(milliseconds: 250));
-    
+
+    await Future.delayed(const Duration(milliseconds: 200));
+
     try {
       if (!_controller.isAnimating && _controller.status != AnimationStatus.dismissed) {
         await _controller.reverse();
       }
-    } catch (e) {
-    }
-    if (mounted) {
-      widget.onHide();
-    }
-  }
+    } catch (_) {}
 
-  Future<void> _close() async {
-    await close();
+    if (mounted) widget.onHide();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacityAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: widget.textOnly ? CrossAxisAlignment.center : CrossAxisAlignment.end, 
-              children: widget.items.asMap().entries.map((entry) {
-                final index = entry.key;
-                final item = entry.value;
-                final isLast = index == widget.items.length - 1;
-                return AnimatedBuilder(
-                  animation: _itemAnimations[index],
-                  builder: (context, child) {
-                    return Opacity(
-                      opacity: _itemAnimations[index].value,
-                      child: child,
-                    );
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: widget.textOnly ? CrossAxisAlignment.center : CrossAxisAlignment.end, 
-                    children: [
-                      _buildMenuItemButton(item),
-                      if (!isLast) const SizedBox(height: 8),
-                    ],
-                  ),
-                );
-              }).toList(),
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final bgOpacity = isDark
+        ? AnimationConfig.menuBackgroundOpacityDark
+        : AnimationConfig.menuBackgroundOpacityLight;
+    final bgColor = widget.isGlassStyle
+        ? (isDark
+            ? const Color(0xFF1C1C1E).withOpacity(bgOpacity)
+            : CupertinoColors.white.withOpacity(bgOpacity))
+        : Colors.transparent;
+    final br = BorderRadius.circular(AnimationConfig.menuBorderRadius);
+
+    final items = widget.items;
+    final colCount = widget.columns.clamp(1, items.length);
+    final rows = (items.length / colCount).ceil();
+    // Row-major: iterate rows then columns so items fill left→right, top→bottom
+    final cols = <List<_MenuItem>>[];
+    for (int c = 0; c < colCount; c++) {
+      cols.add(<_MenuItem>[]);
+    }
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < colCount; c++) {
+        final idx = r * colCount + c;
+        if (idx < items.length) cols[c].add(items[idx]);
+      }
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final s = _scaleAnimation.value;
+        final o = _opacityAnimation.value;
+        return Opacity(
+          opacity: o,
+          child: Transform.scale(
+            scale: s,
+            alignment: Alignment.topLeft,
+            child: child!,
+          ),
+        );
+      },
+      child: IgnorePointer(
+        ignoring: _isClosing,
+        child: ClipRRect(
+          borderRadius: br,
+          child: _buildGlassBackground(
+            isDark: isDark,
+            bgColor: bgColor,
+            br: br,
+            isGlassStyle: widget.isGlassStyle,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: cols.asMap().entries.map((colEntry) {
+                  final isLastCol = colEntry.key == cols.length - 1;
+                  return Padding(
+                    padding: EdgeInsets.only(right: isLastCol ? 0 : 10),
+                    child: SizedBox(
+                      width: AnimationConfig.menuItemMinWidth,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: colEntry.value.asMap().entries.map((entry) {
+                          final idx = items.indexOf(entry.value);
+                          if (idx < 0 || idx >= _itemAnimations.length) {
+                            return const SizedBox.shrink();
+                          }
+                          final item = entry.value;
+                          final isLast = entry.key == colEntry.value.length - 1;
+                          return AnimatedBuilder(
+                            animation: _itemAnimations[idx],
+                            builder: (context, child) {
+                              final v = _itemAnimations[idx].value.clamp(0.0, 1.0);
+                              return Opacity(
+                                opacity: v,
+                                child: Transform.scale(
+                                  scale: (0.8 + 0.2 * v).clamp(0.0, 1.0),
+                                  alignment: Alignment.topLeft,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: isLast ? 0 : 6),
+                              child: _SortMenuItem(
+                                item: item,
+                                onClose: close,
+                                isGlassStyle: widget.isGlassStyle,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
           ),
         ),
       ),
     );
   }
-
-  Widget _buildMenuItemButton(_MenuItem item) {
-    if (widget.textOnly) {
-      return _TextOnlyMenuItem(
-        item: item,
-        onClose: _close,
-      );
-    }
-    return _HoverableMenuItem(
-      item: item,
-      onClose: _close,
-    );
-  }
 }
 
-class _TextOnlyMenuItem extends StatefulWidget {
+class _SortMenuItem extends StatelessWidget {
   final _MenuItem item;
   final Future<void> Function() onClose;
-  
-  const _TextOnlyMenuItem({
+  final bool isGlassStyle;
+
+  const _SortMenuItem({
     required this.item,
     required this.onClose,
+    this.isGlassStyle = false,
   });
 
   @override
-  State<_TextOnlyMenuItem> createState() => _TextOnlyMenuItemState();
-}
-
-class _TextOnlyMenuItemState extends State<_TextOnlyMenuItem> {
-  @override
   Widget build(BuildContext context) {
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final buttonColor = isDark 
-        ? const Color(0xFF2C2C2E).withOpacity(0.9)
-        : CupertinoColors.white.withOpacity(0.9);
+    final bgColor = isGlassStyle
+        ? (isDark
+            ? const Color(0xFF3A3A3C).withOpacity(0.45)
+            : const Color(0xFFF2F2F7).withOpacity(0.5))
+        : (isDark
+            ? const Color(0xFF2C2C2E).withOpacity(0.9)
+            : CupertinoColors.white.withOpacity(0.9));
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
-    
+
     return GestureDetector(
       onTap: () {
-        widget.item.onTap();
-        Future.delayed(const Duration(milliseconds: 50), () {
-          widget.onClose();
-        });
+        item.onTap();
+        Future.delayed(const Duration(milliseconds: 50), onClose);
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: buttonColor,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: isGlassStyle
+              ? Border.all(
+                  color: isDark
+                      ? CupertinoColors.white.withOpacity(0.06)
+                      : CupertinoColors.black.withOpacity(0.04),
+                )
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(item.icon, size: 14, color: textColor.withOpacity(0.65)),
+            const SizedBox(width: 8),
+            Text(
+              item.label,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor),
             ),
           ],
         ),
-        child: Text(
-          widget.item.label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: textColor,
-          ),
-        ),
       ),
     );
-  }
-}
-
-class _HoverableMenuItem extends StatefulWidget {
-  final _MenuItem item;
-  final Future<void> Function() onClose;
-  
-  const _HoverableMenuItem({
-    required this.item,
-    required this.onClose,
-  });
-
-  @override
-  State<_HoverableMenuItem> createState() => _HoverableMenuItemState();
-}
-
-class _HoverableMenuItemState extends State<_HoverableMenuItem> with SingleTickerProviderStateMixin {
-  bool _isHovered = false;
-  late AnimationController _animationController;
-  late Animation<double> _opacityAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _opacityAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final buttonColor = isDark 
-        ? const Color(0xFF2C2C2E).withOpacity(0.9)
-        : CupertinoColors.white.withOpacity(0.9);
-    final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
-    
-    Widget buttonChild;
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) {
-      buttonChild = Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Icon(
-            widget.item.icon,
-            size: 16,
-            color: textColor,
-          ),
-          AnimatedSwitcher(
-            duration: AnimationConfig.durationMedium,
-            switchInCurve: AnimationConfig.curveEaseInOutCubic,
-            switchOutCurve: AnimationConfig.curveEaseInOutCubic,
-            child: _isHovered
-                ? Padding(
-                    key: ValueKey('text_${widget.item.label}'),
-                    padding: const EdgeInsets.only(left: 4),
-                    child: FadeTransition(
-                      opacity: _opacityAnimation,
-                      child: Text(
-                        widget.item.label,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                  )
-                : SizedBox.shrink(key: ValueKey('empty_${widget.item.label}')),
-          ),
-        ],
-      );
-    } else {
-      buttonChild = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            widget.item.icon,
-            size: 16,
-            color: textColor,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            widget.item.label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-            ),
-          ),
-        ],
-      );
-    }
-    
-    Widget buttonWidget;
-    if (widget.item.onLongPress != null) {
-      buttonWidget = GestureDetector(
-        onLongPress: () {
-          widget.item.onLongPress!();
-          Future.delayed(const Duration(milliseconds: 50), () {
-            widget.onClose();
-          });
-        },
-        onTap: () {
-          widget.item.onTap();
-          Future.delayed(const Duration(milliseconds: 50), () {
-            widget.onClose();
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          padding: kIsWeb
-              ? EdgeInsets.symmetric(
-                  horizontal: _isHovered ? 16 : 12,
-                  vertical: 10,
-                )
-              : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: buttonColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: buttonChild,
-        ),
-      );
-    } else {
-      buttonWidget = GestureDetector(
-        onTap: () {
-          widget.item.onTap();
-          Future.delayed(const Duration(milliseconds: 50), () {
-            widget.onClose();
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          padding: kIsWeb
-              ? EdgeInsets.symmetric(
-                  horizontal: _isHovered ? 16 : 12,
-                  vertical: 10,
-                )
-              : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: buttonColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: buttonChild,
-        ),
-      );
-    }
-    
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) {
-      return MouseRegion(
-        onEnter: (_) {
-          setState(() {
-            _isHovered = true;
-          });
-          _animationController.forward();
-        },
-        onExit: (_) {
-          setState(() {
-            _isHovered = false;
-          });
-          _animationController.reverse();
-        },
-        child: buttonWidget,
-      );
-    }
-    
-    return buttonWidget;
   }
 }

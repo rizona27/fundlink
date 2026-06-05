@@ -7,6 +7,7 @@ import '../models/fund_info_cache.dart';
 import '../models/log_entry.dart';
 import '../models/net_worth_point.dart';
 import '../models/top_holding.dart';
+import '../services/china_trading_day_service.dart';
 import '../services/http_client_provider.dart';
 import '../services/data_manager.dart';
 
@@ -52,6 +53,16 @@ class FundService {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  /// Step backwards from [date] (exclusive) to find the most recent trading day.
+  DateTime _previousTradingDaySync(ChinaTradingDayService tds, DateTime date) {
+    var d = date.subtract(const Duration(days: 1));
+    for (int i = 0; i < 30; i++) {
+      if (tds.isTradingDaySync(d)) return d;
+      d = d.subtract(const Duration(days: 1));
+    }
+    return d; // fallback (should never happen with 30-day lookback)
+  }
+
   Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false}) async {
     if (forceRefresh) {
       clearCache(code);
@@ -60,34 +71,53 @@ class FundService {
     if (!forceRefresh && _dataManager != null) {
       final cachedInfo = _dataManager!.getFundInfoCache(code);
       if (cachedInfo != null) {
-        final cacheAge = DateTime.now().difference(cachedInfo.cacheTime).inHours;
+        final now = DateTime.now();
         final navDateStr = '${cachedInfo.navDate.year}-${cachedInfo.navDate.month.toString().padLeft(2, '0')}-${cachedInfo.navDate.day.toString().padLeft(2, '0')}';
-        final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null || 
+        final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null ||
                           cachedInfo.navReturn6m != null || cachedInfo.navReturn1y != null;
-        
-        final returnCacheAge = DateTime.now().difference(cachedInfo.cacheTime).inDays;
-        final returnsNeedRefresh = hasReturns && returnCacheAge >= AppConstants.fundReturnCacheValidDays;
-        
-        if (returnsNeedRefresh) {
-          _fetchAndUpdateReturnsInBackground(code, cachedInfo);
+
+        // Determine the latest trading day whose NAV should be published.
+        // After ~20:00 on a trading day the current day's NAV is available;
+        // before that the most-recent-past trading day's NAV is the latest.
+        final tds = ChinaTradingDayService();
+        final today = DateTime(now.year, now.month, now.day);
+        final isTodayTrading = tds.isTradingDaySync(today);
+        final navPublishedToday = isTodayTrading && now.hour >= 20;
+        final targetDate = navPublishedToday ? today : _previousTradingDaySync(tds, today);
+
+        // Fresh if the cached NAV date matches the latest available trading day.
+        final cachedDate = DateTime(cachedInfo.navDate.year, cachedInfo.navDate.month, cachedInfo.navDate.day);
+        final navIsFresh = cachedDate == targetDate;
+        if (navIsFresh) {
+          final returnCacheDays = now.difference(cachedInfo.cacheTime).inDays;
+          final returnsNeedRefresh = hasReturns && returnCacheDays >= AppConstants.fundReturnCacheValidDays;
+
+          if (returnsNeedRefresh) {
+            _fetchAndUpdateReturnsInBackground(code, cachedInfo);
+          }
+
+          _dataManager?.addLog(
+            '📦 [缓存命中-数据库] 基金 $code | ${cachedInfo.fundName} | '
+            '净值: ${cachedInfo.currentNav} ($navDateStr == 最新交易日$targetDate) | '
+            '收益率: ${hasReturns ? "有" : "无"}${returnsNeedRefresh ? "(需更新)" : ""}',
+            type: LogType.cache,
+          );
+          return {
+            'fundName': cachedInfo.fundName,
+            'currentNav': cachedInfo.currentNav,
+            'navDate': cachedInfo.navDate,
+            'navReturn1m': cachedInfo.navReturn1m,
+            'navReturn3m': cachedInfo.navReturn3m,
+            'navReturn6m': cachedInfo.navReturn6m,
+            'navReturn1y': cachedInfo.navReturn1y,
+            'isValid': true,
+          };
         }
-        
+        // Cache NAV is stale — log it then fall through to API
         _dataManager?.addLog(
-          '📦 [缓存命中-数据库] 基金 $code | ${cachedInfo.fundName} | '
-          '净值: ${cachedInfo.currentNav} ($navDateStr) | '
-          '收益率: ${hasReturns ? "有" : "无"}${returnsNeedRefresh ? "(需更新)" : ""}',
+          '⏰ [缓存过期] 基金 $code | 缓存净值日期$navDateStr ≠ 最新交易日$targetDate | 重新获取API',
           type: LogType.cache,
         );
-        return {
-          'fundName': cachedInfo.fundName,
-          'currentNav': cachedInfo.currentNav,
-          'navDate': cachedInfo.navDate,
-          'navReturn1m': cachedInfo.navReturn1m,
-          'navReturn3m': cachedInfo.navReturn3m,
-          'navReturn6m': cachedInfo.navReturn6m,
-          'navReturn1y': cachedInfo.navReturn1y,
-          'isValid': true,
-        };
       }
     }
 
@@ -112,15 +142,22 @@ class FundService {
       final result = await future;
       
       if (_dataManager != null && result['isValid'] == true) {
+        // Merge API result with existing cache — keep the union of all
+        // non-null fields so that partial API responses don't wipe out
+        // previously cached data (e.g. weekly-updating funds may return
+        // null returns while the DB already has valid return values).
+        final existing = _dataManager!.getFundInfoCache(code);
         final fundInfo = FundInfoCache(
           fundCode: code,
-          fundName: result['fundName'] as String,
-          currentNav: result['currentNav'] as double,
-          navDate: result['navDate'] as DateTime,
-          navReturn1m: result['navReturn1m'] as double?,
-          navReturn3m: result['navReturn3m'] as double?,
-          navReturn6m: result['navReturn6m'] as double?,
-          navReturn1y: result['navReturn1y'] as double?,
+          fundName: (result['fundName'] as String?)?.isNotEmpty == true
+              ? result['fundName'] as String
+              : existing?.fundName ?? '',
+          currentNav: (result['currentNav'] as double?) ?? existing?.currentNav ?? 0.0,
+          navDate: (result['navDate'] as DateTime?) ?? existing?.navDate ?? DateTime.now(),
+          navReturn1m: (result['navReturn1m'] as double?) ?? existing?.navReturn1m,
+          navReturn3m: (result['navReturn3m'] as double?) ?? existing?.navReturn3m,
+          navReturn6m: (result['navReturn6m'] as double?) ?? existing?.navReturn6m,
+          navReturn1y: (result['navReturn1y'] as double?) ?? existing?.navReturn1y,
           cacheTime: DateTime.now(),
         );
         _dataManager!.saveFundInfoCache(fundInfo);
@@ -152,10 +189,10 @@ class FundService {
           fundName: result['fundName'] as String? ?? cachedInfo.fundName,
           currentNav: result['currentNav'] as double? ?? cachedInfo.currentNav,
           navDate: result['navDate'] as DateTime? ?? cachedInfo.navDate,
-          navReturn1m: result['navReturn1m'] as double?,
-          navReturn3m: result['navReturn3m'] as double?,
-          navReturn6m: result['navReturn6m'] as double?,
-          navReturn1y: result['navReturn1y'] as double?,
+          navReturn1m: (result['navReturn1m'] as double?) ?? cachedInfo.navReturn1m,
+          navReturn3m: (result['navReturn3m'] as double?) ?? cachedInfo.navReturn3m,
+          navReturn6m: (result['navReturn6m'] as double?) ?? cachedInfo.navReturn6m,
+          navReturn1y: (result['navReturn1y'] as double?) ?? cachedInfo.navReturn1y,
           cacheTime: DateTime.now(),
         );
         _dataManager!.saveFundInfoCache(updatedInfo);

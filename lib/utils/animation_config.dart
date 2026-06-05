@@ -1,24 +1,35 @@
 import 'package:flutter/cupertino.dart';
 
 class AnimationConfig {
-  
+
   static const Duration durationFast = Duration(milliseconds: 150);
-  
+
   static const Duration durationStandard = Duration(milliseconds: 200);
-  
+
   static const Duration durationMedium = Duration(milliseconds: 300);
-  
+
   static const Duration durationSlow = Duration(milliseconds: 400);
-  
+
   static const Duration durationVerySlow = Duration(milliseconds: 500);
-  
+
   static const Curve curveEaseOutCubic = Curves.easeOutCubic;
-  
+
   static const Curve curveEaseInOutCubic = Curves.easeInOutCubic;
-  
+
   static const Curve curveEaseOutQuart = Curves.easeOutQuart;
-  
+
   static const Curve curveElasticOut = Curves.elasticOut;
+
+  // ── Dropdown menu ──
+  static const double menuBackgroundOpacityDark = 0.60;
+  static const double menuBackgroundOpacityLight = 0.65;
+  static const double menuBlurSigma = 14.0;
+  static const double menuBorderRadius = 16.0;
+  static const double menuItemMinWidth = 100.0;
+  static const Duration menuExpandDuration = Duration(milliseconds: 400);
+  static const Duration menuItemPopDuration = Duration(milliseconds: 350);
+  static const Curve menuExpandCurve = Curves.elasticOut;
+  static const Curve menuItemPopCurve = Curves.elasticOut;
   
   static const Duration durationExpand = durationSlow;
   static const Curve curveExpand = curveEaseOutCubic;

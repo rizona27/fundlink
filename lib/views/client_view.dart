@@ -446,6 +446,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   builder: (context, offset, child) {
                     return AdaptiveTopBar(
                   scrollOffset: offset,
+                  scrollController: _scrollController,
                   showBack: false,
                   showRefresh: true,
                   showExpandCollapse: true,
@@ -458,14 +459,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
                   dataManager: _dataManager,
                   fundService: _fundService,
                   onRefresh: () async {
-                    await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                    await _dataManager.refreshAllHoldings(_fundService, null);
                     if (mounted) {
                       setState(() {});
                       context.showToast('刷新完成');
                     }
                   },
                   onLongPressRefresh: () async {
-                    await _dataManager.refreshAllHoldingsForce(_fundService, null);
+                    await _dataManager.refreshAllHoldings(_fundService, null, forceRefresh: true);
                     if (mounted) {
                       setState(() {});
                       context.showToast('强制刷新完成');
