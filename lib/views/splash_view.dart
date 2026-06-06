@@ -9,193 +9,135 @@ class SplashView extends StatefulWidget {
 }
 
 class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
-  late AnimationController _glowController;
-  late AnimationController _contentController;
-  late Animation<double> _textOpacity;
-  late Animation<Offset> _textOffset;
+  late AnimationController _ctrl;
+  late Animation<double> _line1, _line2, _line3, _line4, _footer;
+
+  static const _enFont = 'FundLinkEN';
+  static const _zhFont = 'FundLinkZH';
+
+  // Golden-ratio vertical placement: visual centre at ~38.2% from top.
+  static double _goldenTop(double height) => height * 0.30;
+  // Horizontal breathing room proportional to screen width.
+  static double _sideMargin(double width) => width * 0.12;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800));
 
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    )..repeat();
+    _line1 = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0.00, 0.18, curve: Curves.easeOut)));
+    _line2 = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0.10, 0.30, curve: Curves.easeOut)));
+    _line3 = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0.30, 0.50, curve: Curves.easeOut)));
+    _line4 = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0.40, 0.60, curve: Curves.easeOut)));
+    _footer = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0.55, 0.75, curve: Curves.easeOut)));
 
-    _contentController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-
-    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.2, 0.8, curve: Curves.easeOut)),
-    );
-
-    _textOffset = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.2, 0.8, curve: Curves.easeOut)),
-    );
-
-    _contentController.forward();
+    _ctrl.forward();
 
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const MainTabView(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.94, end: 1.0).animate(
-                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                  ),
-                  child: child,
-                ),
-              );
-            },
-            transitionDuration: const Duration(milliseconds: 1200),
-          ),
-        );
+        Navigator.of(context).pushReplacement(PageRouteBuilder(
+          pageBuilder: (_, a, __) => const MainTabView(),
+          transitionsBuilder: (_, a, __, child) =>
+              FadeTransition(opacity: CurvedAnimation(parent: a, curve: Curves.easeOut), child: child),
+          transitionDuration: const Duration(milliseconds: 1000),
+        ));
       }
     });
   }
 
-  Route? get _currentRoute {
-    return ModalRoute.of(context);
-  }
-
   @override
   void dispose() {
-    _glowController.dispose();
-    _contentController.dispose();
+    _ctrl.dispose();
     super.dispose();
+  }
+
+  Widget _fadeUp(Animation<double> a, Widget child) {
+    return AnimatedBuilder(
+      animation: a,
+      builder: (_, c) {
+        final t = a.value;
+        return Opacity(opacity: t, child: Transform.translate(offset: Offset(0, 16 * (1 - t)), child: c));
+      },
+      child: child,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screen = MediaQuery.of(context).size;
+    final textColor = isDark ? const Color(0xFFE8E2D8) : const Color(0xFF2C2416);
+    final muted = isDark ? const Color(0xFF8A8074) : const Color(0xFF908578);
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDarkMode
-                    ? [const Color(0xFF1a1b3a), const Color(0xFF2d1b4e), const Color(0xFF1f2937)]
-                    : [const Color(0xFFFFF5E6), const Color(0xFFFFE8D6), const Color(0xFFFFF0F0)],
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [Color(0xFF11111C), Color(0xFF191928), Color(0xFF151522)]
+                : const [Color(0xFFFBF9F6), Color(0xFFF4EFE9), Color(0xFFEFE8E0)],
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // ── Main content — placed at golden-ratio vertical position ──
+              Positioned(
+                top: _goldenTop(screen.height),
+                left: _sideMargin(screen.width),
+                right: _sideMargin(screen.width),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _fadeUp(_line1, Text('FundLink',
+                        style: TextStyle(fontSize: 44, fontWeight: FontWeight.w400,
+                            fontFamily: _enFont, fontFamilyFallback: const ['Serif'],
+                            letterSpacing: 8.0, color: textColor))),
+                    const SizedBox(height: 6),
+                    _fadeUp(_line2, Text('一基暴富',
+                        style: TextStyle(fontSize: 30, fontWeight: FontWeight.w400,
+                            fontFamily: _zhFont, fontFamilyFallback: const ['Serif'],
+                            letterSpacing: 10.0, color: textColor.withOpacity(0.85)))),
+                    const SizedBox(height: 52),
+                    _fadeUp(_line3, Text('less is more',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300,
+                            letterSpacing: 5.0, color: muted))),
+                    const SizedBox(height: 6),
+                    _fadeUp(_line4, Text('Finding Abundance Through Subtraction',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w300,
+                            color: muted.withOpacity(0.7)))),
+                  ],
+                ),
               ),
-            ),
-          ),
-          AnimatedBuilder(
-            animation: _glowController,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  _buildSoftGlow(index: 0, opacity: 0.08),
-                  _buildSoftGlow(index: 1, opacity: 0.06, offsetX: 100, offsetY: 50),
-                  _buildSoftGlow(index: 2, opacity: 0.05, offsetX: -50, offsetY: 100),
-                ],
-              );
-            },
-          ),
-          SafeArea(
-            child: Center(
-              child: FadeTransition(
-                opacity: _textOpacity,
-                child: SlideTransition(
-                  position: _textOffset,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Spacer(),
-                      Text(
-                        "Less is",
-                        style: TextStyle(
-                          fontSize: 32, 
-                          fontWeight: FontWeight.w200, 
-                          fontFamily: 'Serif',
-                          color: isDarkMode ? const Color(0xFFE8E6F0) : const Color(0xFF5A4A42),
-                        ),
-                      ),
-                      Text(
-                        "More.",
-                        style: TextStyle(
-                          fontSize: 60, 
-                          fontWeight: FontWeight.w600, 
-                          fontFamily: 'Serif',
-                          color: isDarkMode ? const Color(0xFFF5F3FF) : const Color(0xFF3D2E28),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: Text(
-                          "Finding Abundance Through Subtraction",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16, 
-                            fontWeight: FontWeight.w300,
-                            color: isDarkMode ? const Color(0xFFC8C4D9).withOpacity(0.7) : const Color(0xFF8B7D72),
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        "专业 · 专注 · 价值",
-                        style: TextStyle(
-                          fontSize: 13, 
-                          color: isDarkMode ? const Color(0xFFA8A4B8).withOpacity(0.6) : const Color(0xFF9E8E82),
-                        ),
-                      ),
+              // ── Footer ──
+              Positioned(
+                bottom: 48,
+                left: 0,
+                right: 0,
+                child: AnimatedBuilder(
+                  animation: _footer,
+                  builder: (_, __) => Opacity(
+                    opacity: _footer.value,
+                    child: Column(children: [
+                      Text('专业 · 专注 · 价值',
+                          style: TextStyle(fontSize: 12, color: muted.withOpacity(0.45))),
                       const SizedBox(height: 4),
-                      Text(
-                        "Copyright © 2026 Rizona.",
-                        style: TextStyle(
-                          fontSize: 11, 
-                          color: isDarkMode ? const Color(0xFF8884A0).withOpacity(0.5) : const Color(0xFFB8A89A),
-                        ),
-                      ),
-                      const SizedBox(height: 50),
-                    ],
+                      Text('Copyright © 2026 Rizona.',
+                          style: TextStyle(fontSize: 10, color: muted.withOpacity(0.3))),
+                    ]),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSoftGlow({required int index, required double opacity, double offsetX = 0, double offsetY = 0}) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final glowColor = isDarkMode
-        ? const Color(0xFF9B8AFF)  
-        : const Color(0xFFFFB347); 
-
-    final sizes = [400.0, 300.0, 250.0];
-    final size = sizes[index];
-    
-    return Positioned(
-      top: MediaQuery.of(context).size.height * 0.3 + offsetY,
-      left: MediaQuery.of(context).size.width * 0.5 - size / 2 + offsetX,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              glowColor.withOpacity(opacity),
-              glowColor.withOpacity(opacity * 0.6),
-              glowColor.withOpacity(opacity * 0.3),
-              glowColor.withOpacity(opacity * 0.1),
-              Colors.transparent,
             ],
-            stops: const [0.0, 0.2, 0.4, 0.7, 1.0],
           ),
         ),
       ),

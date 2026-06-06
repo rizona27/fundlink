@@ -56,6 +56,19 @@ flutter:
   assets:
     - assets/icon/
     - assets/database/
+    - assets/fonts/
+
+  # 自定义字体
+  fonts:
+    - family: FundLinkEN
+      fonts:
+        - asset: assets/fonts/FundLinkEN-Regular.ttf
+    - family: FundLinkZH
+      fonts:
+        - asset: assets/fonts/FundLinkZH-Regular.ttf
+    - family: FundLinkSub
+      fonts:
+        - asset: assets/fonts/FundLinkSub-Regular.ttf
 
 # 图标配置
 flutter_launcher_icons:
