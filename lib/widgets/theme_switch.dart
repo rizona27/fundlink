@@ -1,0 +1,201 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:async';
+
+enum ThemeMode {
+  light,
+  dark,
+  system,
+}
+
+extension ThemeModeExtension on ThemeMode {
+  String get displayName {
+    switch (this) {
+      case ThemeMode.light:
+        return '浅色';
+      case ThemeMode.dark:
+        return '深色';
+      case ThemeMode.system:
+        return '跟随系统';
+    }
+  }
+}
+
+class ThemeSwitch extends StatefulWidget {
+  final ThemeMode initialMode;
+  final ValueChanged<ThemeMode> onChanged;
+
+  const ThemeSwitch({
+    super.key,
+    required this.initialMode,
+    required this.onChanged,
+  });
+
+  @override
+  State<ThemeSwitch> createState() => _ThemeSwitchState();
+}
+
+class _ThemeSwitchState extends State<ThemeSwitch> with TickerProviderStateMixin {
+  late ThemeMode _selectedMode;
+  late AnimationController _animationController;
+  late AnimationController _textFadeController;
+  Timer? _textFadeTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMode = widget.initialMode;
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _textFadeController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _updateAnimation();
+  }
+
+  void _updateAnimation() {
+    final targetValue = _getAnimationValue();
+    _animationController.animateTo(
+      targetValue,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  double _getAnimationValue() {
+    switch (_selectedMode) {
+      case ThemeMode.light:
+        return 0.0;
+      case ThemeMode.system:
+        return 0.5;
+      case ThemeMode.dark:
+        return 1.0;
+    }
+  }
+
+  void _selectMode(ThemeMode mode) {
+    if (_selectedMode != mode) {
+      setState(() {
+        _selectedMode = mode;
+      });
+      _updateAnimation();
+
+      _textFadeTimer?.cancel();
+      _textFadeTimer = Timer(const Duration(milliseconds: 400), () {
+        if (mounted) {
+          _textFadeController.forward(from: 0.0);
+        }
+      });
+
+      widget.onChanged(mode);
+    }
+  }
+
+  @override
+  void dispose() {
+    _textFadeTimer?.cancel();
+    _textFadeController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double containerWidth = constraints.maxWidth;
+        final bool isMobile = defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS;
+        if (!isMobile) {
+          containerWidth = containerWidth * 0.5;
+        }
+        final sliderWidth = containerWidth / 3;
+        const margin = 2.0;
+
+        final maxOffset = containerWidth - sliderWidth - (margin * 2);
+
+        return SizedBox(
+          width: containerWidth,
+          child: Container(
+            height: 36,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGrey5,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Stack(
+              children: [
+                AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    final slideValue = _animationController.value;
+                    final leftOffset = slideValue * maxOffset;
+                    return Transform.translate(
+                      offset: Offset(leftOffset, 0),
+                      child: Container(
+                        width: sliderWidth,
+                        height: 32,
+                        margin: const EdgeInsets.all(margin),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CupertinoColors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Row(
+                  children: [
+                    _buildOption(ThemeMode.light, '浅'),
+                    _buildOption(ThemeMode.system, '系统'),
+                    _buildOption(ThemeMode.dark, '深'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOption(ThemeMode mode, String label) {
+    final isSelected = _selectedMode == mode;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: GestureDetector(
+          onTap: () => _selectMode(mode),
+          child: AnimatedBuilder(
+            animation: _textFadeController,
+            builder: (context, child) {
+              return AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: isSelected ? 1.0 : 0.6,
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.label,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}

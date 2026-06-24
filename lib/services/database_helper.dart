@@ -1,0 +1,356 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+class DatabaseHelper {
+  static final DatabaseHelper instance = DatabaseHelper._init();
+  static Database? _database;
+
+  DatabaseHelper._init();
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    if (_database != null) return _database!;
+    
+    if (kIsWeb) {
+      throw UnsupportedError('Web platform uses SharedPreferences instead of SQLite');
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      _database = await _initDesktopDatabase();
+    } else {
+      _database = await _initMobileDatabase();
+    }
+    
+    return _database!;
+  }
+
+  Future<Database> _initMobileDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'fundlink.db');
+
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createSchema,
+      onUpgrade: _upgradeDatabase,
+      singleInstance: true,
+    );
+  }
+
+  Future<Database> _initDesktopDatabase() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+
+    final appDataDir = await getApplicationSupportDirectory();
+    final dbPath = join(appDataDir.path, 'fundlink.db');
+
+    final dbFile = File(dbPath);
+    if (!await dbFile.exists()) {
+      await _copyOrCreateDatabase(dbPath);
+    }
+
+    return await openDatabase(
+      dbPath,
+      version: 2,
+      onCreate: _createSchema,
+      onUpgrade: _upgradeDatabase,
+      singleInstance: true,
+    );
+  }
+
+  Future<void> _copyOrCreateDatabase(String targetPath) async {
+    try {
+      final byteData = await rootBundle.load('assets/database/fundlink_template.db');
+      final buffer = byteData.buffer.asUint8List();
+      
+      final file = File(targetPath);
+      await file.create(recursive: true);
+      await file.writeAsBytes(buffer);
+    } catch (e) {
+      final db = await openDatabase(targetPath);
+      await _createSchema(db, 1);
+      await db.close();
+    }
+  }
+
+  Future<void> _createSchema(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS holdings (
+        id TEXT PRIMARY KEY,
+        client_name TEXT NOT NULL,
+        client_id TEXT,
+        fund_code TEXT NOT NULL,
+        fund_name TEXT NOT NULL,
+        total_cost REAL NOT NULL DEFAULT 0,
+        total_shares REAL NOT NULL DEFAULT 0,
+        avg_cost REAL,
+        current_nav REAL,
+        nav_date TEXT,
+        nav_return_1m REAL,
+        nav_return_3m REAL,
+        nav_return_6m REAL,
+        nav_return_1y REAL,
+        remarks TEXT,
+        is_pinned INTEGER NOT NULL DEFAULT 0,
+        is_valid INTEGER NOT NULL DEFAULT 1,
+        pinned_timestamp TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS transactions (
+        id TEXT PRIMARY KEY,
+        holding_id TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        fund_code TEXT NOT NULL,
+        fund_name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        shares REAL,
+        nav REAL,
+        fee_rate REAL DEFAULT 0,
+        fee_amount REAL DEFAULT 0,
+        trade_date TEXT NOT NULL,
+        confirm_date TEXT,
+        is_after_1500 INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'submitted',
+        confirmed_nav REAL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        application_date TEXT,
+        frozen_shares REAL DEFAULT 0,
+        remarks TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (holding_id) REFERENCES holdings(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_client ON holdings(client_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_fund ON holdings(fund_code)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_holdings_pinned ON holdings(is_pinned)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_holding ON transactions(holding_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(trade_date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)');
+    
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_fund ON transactions(client_id, fund_code)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, trade_date DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)');
+  }
+
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE holdings ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1');
+      await db.execute('ALTER TABLE holdings ADD COLUMN pinned_timestamp TEXT');
+      await db.execute('ALTER TABLE transactions ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE transactions ADD COLUMN application_date TEXT');
+      await db.execute('ALTER TABLE transactions ADD COLUMN frozen_shares REAL DEFAULT 0');
+    }
+  }
+
+
+  Future<int> insertHolding(Map<String, dynamic> holding) async {
+    final db = await database;
+    return await db.insert('holdings', holding, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> queryAllHoldings({
+    int? limit,
+    int? offset,
+    String? sortBy,
+    bool ascending = false,
+  }) async {
+    final db = await database;
+    
+    final allowedColumns = {'created_at', 'updated_at', 'fund_code', 'total_cost', 'client_name'};
+    String orderBy = 'created_at DESC';
+    if (sortBy != null && allowedColumns.contains(sortBy)) {
+      final direction = ascending ? 'ASC' : 'DESC';
+      orderBy = '$sortBy $direction';
+    }
+    
+    return await db.query(
+      'holdings',
+      orderBy: orderBy,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> queryPinnedHoldings() async {
+    final db = await database;
+    return await db.query(
+      'holdings',
+      where: 'is_pinned = ?',
+      whereArgs: [1],
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  Future<int> updateHolding(String id, Map<String, dynamic> holding) async {
+    final db = await database;
+    return await db.update(
+      'holdings',
+      holding,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteHolding(String id) async {
+    final db = await database;
+    return await db.delete(
+      'holdings',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+
+  Future<int> insertTransaction(Map<String, dynamic> transaction) async {
+    final db = await database;
+    final result = await db.insert('transactions', transaction, conflictAlgorithm: ConflictAlgorithm.replace);
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> queryAllTransactions({
+    int? limit,
+    int? offset,
+  }) async {
+    final db = await database;
+    final result = await db.query(
+      'transactions',
+      orderBy: 'trade_date DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> queryTransactionsByHoldingId(String holdingId) async {
+    final db = await database;
+    return await db.query(
+      'transactions',
+      where: 'holding_id = ?',
+      whereArgs: [holdingId],
+      orderBy: 'trade_date DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> queryPendingTransactions() async {
+    final db = await database;
+    // Pending = not yet confirmed, not cancelled, not failed.
+    return await db.query(
+      'transactions',
+      where: 'status IN (?, ?, ?)',
+      whereArgs: ['pendingSubmit', 'submitted', 'pendingConfirm'],
+      orderBy: 'trade_date DESC',
+    );
+  }
+
+  Future<int> updateTransaction(String id, Map<String, dynamic> transaction) async {
+    final db = await database;
+    return await db.update(
+      'transactions',
+      transaction,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteTransaction(String id) async {
+    final db = await database;
+    return await db.delete(
+      'transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+
+  Future<int> insertLog(Map<String, dynamic> log) async {
+    final db = await database;
+    return await db.insert('logs', log);
+  }
+
+  Future<List<Map<String, dynamic>>> queryLogs({int limit = 100}) async {
+    final db = await database;
+    return await db.query(
+      'logs',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+  }
+
+  Future<int> clearOldLogs(int daysToKeep) async {
+    final db = await database;
+    final cutoffDate = DateTime.now().subtract(Duration(days: daysToKeep));
+    return await db.delete(
+      'logs',
+      where: 'timestamp < ?',
+      whereArgs: [cutoffDate.toIso8601String()],
+    );
+  }
+
+
+  Future<void> saveSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'settings',
+      {
+        'key': key,
+        'value': value,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final result = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    
+    if (result.isEmpty) return null;
+    return result.first['value'] as String?;
+  }
+
+  Future<void> close() async {
+    final db = await database;
+    await db.close();
+    _database = null;
+  }
+}

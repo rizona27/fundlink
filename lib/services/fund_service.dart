@@ -1,0 +1,1101 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' as html_parser;
+import '../constants/app_constants.dart';
+import '../models/fund_info_cache.dart';
+import '../models/log_entry.dart';
+import '../models/net_worth_point.dart';
+import '../models/top_holding.dart';
+import '../services/china_trading_day_service.dart';
+import '../services/http_client_provider.dart';
+import '../services/data_manager.dart';
+
+class FundService {
+  final DataManager? _dataManager;
+
+  final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
+  final Map<String, Map<String, dynamic>> _cache = {};
+
+  final Map<String, List<NetWorthPoint>> _navCache = {};
+
+  // Portfolio analysis cache — keyed by a hash of fund composition so that
+  // re-opening the same client's summary view is instant.
+  final Map<String, Map<String, dynamic>> _portfolioCache = {};
+  final Map<String, DateTime> _portfolioCacheTimestamps = {};
+  static const Duration _portfolioCacheTtl = Duration(minutes: 30);
+
+  FundService([this._dataManager]);
+
+  void clearCache([String? code]) {
+    if (code != null) {
+      _cache.remove(code);
+      _activeRequests.remove(code);
+    } else {
+      _cache.clear();
+      _activeRequests.clear();
+    }
+  }
+
+  /// Clear the in-memory portfolio analysis cache.
+  void clearPortfolioCache() {
+    _portfolioCache.clear();
+    _portfolioCacheTimestamps.clear();
+  }
+
+  /// Build a stable cache key from a list of fund maps.
+  String _portfolioCacheKey(List<Map<String, dynamic>> funds) {
+    final codes = funds.map((f) => '${f['code']}=${f['cost']}').toList()..sort();
+    return codes.join('|');
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Step backwards from [date] (exclusive) to find the most recent trading day.
+  DateTime _previousTradingDaySync(ChinaTradingDayService tds, DateTime date) {
+    var d = date.subtract(const Duration(days: 1));
+    for (int i = 0; i < 45; i++) {
+      if (tds.isTradingDaySync(d)) return d;
+      d = d.subtract(const Duration(days: 1));
+    }
+    return d; // fallback
+  }
+
+  /// Returns true if [cachedDate] is within [toleranceDays] trading days of [targetDate].
+  /// For example, a weekly-updating fund with cached date Friday will match
+  /// a target date of Tuesday with tolerance ≥ 2.
+  bool _isNavDateWithinTolerance(
+      ChinaTradingDayService tds,
+      DateTime cachedDate,
+      DateTime targetDate,
+      int toleranceDays,
+  ) {
+    // Exact match is always fresh
+    if (cachedDate == targetDate) return true;
+    // Walk backwards from targetDate, counting trading days
+    var d = targetDate;
+    for (int i = 0; i <= toleranceDays; i++) {
+      if (d == cachedDate) return true;
+      // Step back one trading day
+      d = _previousTradingDaySync(tds, d);
+      // Guard: if we wrapped past cachedDate without matching, stop
+      if (d.isBefore(cachedDate)) break;
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>> fetchFundInfo(String code, {bool forceRefresh = false, int navToleranceTradingDays = 2}) async {
+    if (forceRefresh) {
+      clearCache(code);
+    }
+
+    if (!forceRefresh && _dataManager != null) {
+      final cachedInfo = _dataManager!.getFundInfoCache(code);
+      if (cachedInfo != null) {
+        final now = DateTime.now();
+        final navDateStr = '${cachedInfo.navDate.year}-${cachedInfo.navDate.month.toString().padLeft(2, '0')}-${cachedInfo.navDate.day.toString().padLeft(2, '0')}';
+        final hasReturns = cachedInfo.navReturn1m != null || cachedInfo.navReturn3m != null ||
+                          cachedInfo.navReturn6m != null || cachedInfo.navReturn1y != null;
+
+        // Determine the latest trading day whose NAV should be published.
+        // After ~20:00 on a trading day the current day's NAV is available;
+        // before that the most-recent-past trading day's NAV is the latest.
+        final tds = ChinaTradingDayService();
+        final today = DateTime(now.year, now.month, now.day);
+        final isTodayTrading = tds.isTradingDaySync(today);
+        final navPublishedToday = isTodayTrading && now.hour >= 20;
+        final targetDate = navPublishedToday ? today : _previousTradingDaySync(tds, today);
+
+        // Accept cached NAV if its date is within `navToleranceTradingDays`
+        // trading days of the latest expected NAV date. This allows
+        // weekly-updating funds (navDate = last Friday) to still be
+        // considered fresh on Tuesday/Wednesday. Long-press (forceRefresh)
+        // bypasses this check entirely.
+        final cachedDate = DateTime(cachedInfo.navDate.year, cachedInfo.navDate.month, cachedInfo.navDate.day);
+        final navIsFresh = _isNavDateWithinTolerance(tds, cachedDate, targetDate, navToleranceTradingDays);
+        if (navIsFresh) {
+          final returnCacheDays = now.difference(cachedInfo.cacheTime).inDays;
+          final returnsNeedRefresh = hasReturns && returnCacheDays >= AppConstants.fundReturnCacheValidDays;
+
+          if (returnsNeedRefresh) {
+            _fetchAndUpdateReturnsInBackground(code, cachedInfo);
+          }
+
+          _dataManager?.addLog(
+            '📦 [缓存命中-数据库] 基金 $code | ${cachedInfo.fundName} | '
+            '净值: ${cachedInfo.currentNav} ($navDateStr ≈ 最新交易日$targetDate, 容差${navToleranceTradingDays}天) | '
+            '收益率: ${hasReturns ? "有" : "无"}${returnsNeedRefresh ? "(需更新)" : ""}',
+            type: LogType.cache,
+          );
+          return {
+            'fundName': cachedInfo.fundName,
+            'currentNav': cachedInfo.currentNav,
+            'navDate': cachedInfo.navDate,
+            'navReturn1m': cachedInfo.navReturn1m,
+            'navReturn3m': cachedInfo.navReturn3m,
+            'navReturn6m': cachedInfo.navReturn6m,
+            'navReturn1y': cachedInfo.navReturn1y,
+            'isValid': true,
+          };
+        }
+        // Cache NAV is stale — log it then fall through to API
+        _dataManager?.addLog(
+          '⏰ [缓存过期] 基金 $code | 缓存净值日期$navDateStr ≠ 最新交易日$targetDate(容差${navToleranceTradingDays}天) | 重新获取API',
+          type: LogType.cache,
+        );
+      }
+    }
+
+    if (!forceRefresh && _cache.containsKey(code)) {
+      final cached = _cache[code]!;
+      _dataManager?.addLog(
+        '⚡ [缓存命中-内存] 基金 $code',
+        type: LogType.cache,
+      );
+      return cached;
+    }
+
+    if (_activeRequests.containsKey(code)) {
+      return await _activeRequests[code]!;
+    }
+
+    _dataManager?.addLog('🌐 [API请求] 基金 $code', type: LogType.network);
+    final future = _fetchFromPingzhongdata(code);
+    _activeRequests[code] = future;
+
+    try {
+      final result = await future;
+      
+      if (_dataManager != null && result['isValid'] == true) {
+        // Merge API result with existing cache — keep the union of all
+        // non-null fields so that partial API responses don't wipe out
+        // previously cached data (e.g. weekly-updating funds may return
+        // null returns while the DB already has valid return values).
+        final existing = _dataManager!.getFundInfoCache(code);
+        final fundInfo = FundInfoCache(
+          fundCode: code,
+          fundName: (result['fundName'] as String?)?.isNotEmpty == true
+              ? result['fundName'] as String
+              : existing?.fundName ?? '',
+          currentNav: (result['currentNav'] as double?) ?? existing?.currentNav ?? 0.0,
+          navDate: (result['navDate'] as DateTime?) ?? existing?.navDate ?? DateTime.now(),
+          navReturn1m: (result['navReturn1m'] as double?) ?? existing?.navReturn1m,
+          navReturn3m: (result['navReturn3m'] as double?) ?? existing?.navReturn3m,
+          navReturn6m: (result['navReturn6m'] as double?) ?? existing?.navReturn6m,
+          navReturn1y: (result['navReturn1y'] as double?) ?? existing?.navReturn1y,
+          cacheTime: DateTime.now(),
+        );
+        _dataManager!.saveFundInfoCache(fundInfo);
+      }
+      
+      if (!forceRefresh) _cache[code] = result;
+      return result;
+    } catch (e) {
+      _dataManager?.addLog('❌ [API失败] 基金代码 $code: $e', type: LogType.error);
+      return {
+        'fundName': '加载失败',
+        'currentNav': 0.0,
+        'navDate': DateTime.now(),
+        'isValid': false,
+        'error': e.toString(),
+      };
+    } finally {
+      _activeRequests.remove(code);
+    }
+  }
+  
+  void _fetchAndUpdateReturnsInBackground(String code, FundInfoCache cachedInfo) async {
+    try {
+      final result = await _fetchFromPingzhongdata(code);
+      
+      if (result['isValid'] == true && _dataManager != null) {
+        final updatedInfo = FundInfoCache(
+          fundCode: code,
+          fundName: result['fundName'] as String? ?? cachedInfo.fundName,
+          currentNav: result['currentNav'] as double? ?? cachedInfo.currentNav,
+          navDate: result['navDate'] as DateTime? ?? cachedInfo.navDate,
+          navReturn1m: (result['navReturn1m'] as double?) ?? cachedInfo.navReturn1m,
+          navReturn3m: (result['navReturn3m'] as double?) ?? cachedInfo.navReturn3m,
+          navReturn6m: (result['navReturn6m'] as double?) ?? cachedInfo.navReturn6m,
+          navReturn1y: (result['navReturn1y'] as double?) ?? cachedInfo.navReturn1y,
+          cacheTime: DateTime.now(),
+        );
+        _dataManager!.saveFundInfoCache(updatedInfo);
+      }
+    } catch (e) {
+      _dataManager?.addLog('后台更新基金 $code 收益率数据失败: $e',
+          type: LogType.warning);
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchFromPingzhongdata(String code) async {
+    try {
+      final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
+
+      http.Response? response;
+      var retryCount = 0;
+      const maxRetries = 2; 
+      Exception? lastException;
+      
+      while (retryCount <= AppConstants.maxNetworkRetries) {
+        try {
+          response = await HttpClientProvider.client.get(
+            url,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': '*/*',
+            },
+          ).timeout(AppConstants.networkRequestTimeout);
+          
+          if (response.statusCode == 200) {
+            break;
+          }
+        } catch (e) {
+          lastException = e is Exception ? e : Exception(e.toString());
+          retryCount++;
+          
+          if (retryCount <= AppConstants.maxNetworkRetries) {
+            await Future.delayed(Duration(milliseconds: AppConstants.networkRetryDelayBase.inMilliseconds * retryCount));
+          }
+        }
+      }
+      
+      if (response == null) {
+        throw lastException ?? Exception('请求失败');
+      }
+      
+      final statusCode = response.statusCode;
+
+      if (statusCode != 200) {
+        _dataManager?.addLog('基金代码 $code: HTTP $statusCode', type: LogType.error);
+        return {
+          'fundName': '加载失败',
+          'currentNav': 0.0,
+          'navDate': DateTime.now(),
+          'isValid': false,
+          'error': 'HTTP $statusCode',
+        };
+      }
+
+      final jsString = utf8.decode(response.bodyBytes, allowMalformed: true);
+
+      String fundName = '未知基金';
+      final namePatterns = [
+        RegExp(r'fS_name\s*=\s*"([^"]+)"'),
+        RegExp(r"fS_name\s*=\s*'([^']+)'"),
+        RegExp(r'fS_name\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in namePatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          fundName = match.group(1)!.trim();
+          if (fundName.isNotEmpty && fundName != 'undefined' && fundName != 'null') {
+            break;
+          }
+        }
+      }
+
+      double currentNav = 0.0;
+      DateTime navDate = DateTime.now();
+      final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
+      final trendMatch = trendRegex.firstMatch(jsString);
+      if (trendMatch != null) {
+        final trendArrayStr = trendMatch.group(1)!;
+        try {
+          final List<dynamic> trendList = jsonDecode(trendArrayStr);
+          if (trendList.isNotEmpty) {
+            final latest = trendList.last;
+            currentNav = (latest['y'] as num).toDouble();
+            final timestamp = latest['x'] as int;
+            navDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          }
+        } catch (e) {
+          _dataManager?.addLog('基金 $code 解析净值趋势数据失败: $e', type: LogType.error);
+        }
+      } else {
+        _dataManager?.addLog('基金 $code 未找到净值趋势数据', type: LogType.error);
+      }
+
+      double? navReturn1m, navReturn3m, navReturn6m, navReturn1y;
+
+      final ret1mPatterns = [
+        RegExp(r'syl_1y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_1y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_1y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret1mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn1m = double.tryParse(val);
+            if (navReturn1m != null) break;
+          }
+        }
+      }
+
+      final ret3mPatterns = [
+        RegExp(r'syl_3y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_3y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_3y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret3mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn3m = double.tryParse(val);
+            if (navReturn3m != null) break;
+          }
+        }
+      }
+
+      final ret6mPatterns = [
+        RegExp(r'syl_6y\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_6y\s*=\s*'([^']*)'"),
+        RegExp(r'syl_6y\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret6mPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn6m = double.tryParse(val);
+            if (navReturn6m != null) break;
+          }
+        }
+      }
+
+      final ret1yPatterns = [
+        RegExp(r'syl_1n\s*=\s*"([^"]*)"'),
+        RegExp(r"syl_1n\s*=\s*'([^']*)'"),
+        RegExp(r'syl_1n\s*=\s*([^;]+)'),
+      ];
+      for (final pattern in ret1yPatterns) {
+        final match = pattern.firstMatch(jsString);
+        if (match != null) {
+          final val = match.group(1)!.trim();
+          if (val.isNotEmpty && val != 'undefined' && val != 'null') {
+            navReturn1y = double.tryParse(val);
+            if (navReturn1y != null) break;
+          }
+        }
+      }
+
+      final isValid = fundName != '未知基金' && currentNav > 0;
+
+      if (isValid) {
+        _dataManager?.addLog('基金代码 $code: 获取成功 - $fundName, 净值: $currentNav', type: LogType.success);
+      } else {
+        _dataManager?.addLog('基金代码 $code: 数据无效 - fundName: $fundName, currentNav: $currentNav', type: LogType.error);
+      }
+
+      return {
+        'fundName': fundName,
+        'currentNav': currentNav,
+        'navDate': navDate,
+        'isValid': isValid,
+        'navReturn1m': navReturn1m,
+        'navReturn3m': navReturn3m,
+        'navReturn6m': navReturn6m,
+        'navReturn1y': navReturn1y,
+      };
+
+    } on TimeoutException catch (e) {
+      _dataManager?.addLog('基金代码 $code: 请求超时 - $e', type: LogType.error);
+      return {
+        'fundName': '加载失败',
+        'currentNav': 0.0,
+        'navDate': DateTime.now(),
+        'isValid': false,
+        'error': 'Timeout: 请求超时15秒',
+      };
+    } catch (e) {
+      return {
+        'fundName': '加载失败',
+        'currentNav': 0.0,
+        'navDate': DateTime.now(),
+        'isValid': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+
+  Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
+    _dataManager?.addLog('获取基金 $code 净值趋势', type: LogType.network);
+    
+    final cachedPoints = await loadNavFromCache(code);
+    if (cachedPoints != null && cachedPoints.isNotEmpty) {
+      final firstDate = cachedPoints.first.date;
+      final lastDate = cachedPoints.last.date;
+      _dataManager?.addLog(
+        '基金 $code 使用净值缓存: ${cachedPoints.length}条 '
+        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        type: LogType.cache,
+      );
+      
+      _incrementalUpdateNav(code, cachedPoints);
+      
+      return cachedPoints;
+    }
+    
+    return await _fetchNetWorthFromAPI(code);
+  }
+  
+  Future<List<NetWorthPoint>> _fetchNetWorthFromAPI(String code) async {
+    final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
+    final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      _dataManager?.addLog('基金 $code HTTP错误: ${response.statusCode}', type: LogType.error);
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    final jsString = utf8.decode(response.bodyBytes);
+    final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
+    final match = trendRegex.firstMatch(jsString);
+    if (match == null) {
+      _dataManager?.addLog('基金 $code 未找到净值数据', type: LogType.error);
+      return [];
+    }
+    final trendArrayStr = match.group(1)!;
+    final List<dynamic> trendList = jsonDecode(trendArrayStr);
+    
+    final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
+    
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final cutoffDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
+    
+    final confirmedPoints = allPoints.where((point) {
+      return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
+    }).toList();
+    
+    final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
+    
+    if (result.isNotEmpty) {
+      await saveNavToCache(code, result);
+      final firstDate = result.first.date;
+      final lastDate = result.last.date;
+      _dataManager?.addLog(
+        '📦 [缓存保存] 基金 $code | 已保存 ${result.length} 条净值到本地缓存 '
+        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        type: LogType.cache,
+      );
+    }
+    
+    return result;
+  }
+  
+  Future<void> _incrementalUpdateNav(String code, List<NetWorthPoint> cachedPoints) async {
+    try {
+      final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
+      final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode != 200) {
+        _dataManager?.addLog('增量更新失败: HTTP ${response.statusCode}', type: LogType.error);
+        return;
+      }
+      
+      final jsString = utf8.decode(response.bodyBytes);
+      final trendRegex = RegExp(r'Data_netWorthTrend\s*=\s*(\[[\s\S]+?\])');
+      final match = trendRegex.firstMatch(jsString);
+      
+      if (match == null) return;
+      
+      final trendArrayStr = match.group(1)!;
+      final List<dynamic> trendList = jsonDecode(trendArrayStr);
+      final newPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
+      
+      final lastCachedDate = cachedPoints.last.date;
+      final newerPoints = newPoints.where((p) => p.date.isAfter(lastCachedDate)).toList();
+      
+      if (newerPoints.isNotEmpty) {
+        final mergedPoints = [...cachedPoints, ...newerPoints];
+        
+        await saveNavToCache(code, mergedPoints);
+        final newFirstDate = newerPoints.first.date;
+        final newLastDate = newerPoints.last.date;
+        _dataManager?.addLog(
+          '基金 $code 增量更新净值: +${newerPoints.length}条 '
+          '(${_formatDate(newFirstDate)} ~ ${_formatDate(newLastDate)})',
+          type: LogType.network,
+        );
+      }
+    } catch (e) {
+      _dataManager?.addLog('增量更新异常: $e', type: LogType.error);
+    }
+  }
+
+  Future<Map<String, List<NetWorthPoint>>> fetchBenchmarkData(String code) async {
+    final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
+    final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+    final jsString = utf8.decode(response.bodyBytes);
+
+    final grandTotalRegex = RegExp(r'Data_grandTotal\s*=\s*(\[[\s\S]*?\])\s*;', multiLine: true);
+    final match = grandTotalRegex.firstMatch(jsString);
+    if (match == null) return {'average': [], 'hs300': []};
+
+    final grandTotalStr = match.group(1)!;
+    List<dynamic> grandTotal;
+    try {
+      grandTotal = jsonDecode(grandTotalStr);
+    } catch (e) {
+      grandTotal = [];
+      final seriesRegex = RegExp(r'\{[^{}]*"name"\s*:\s*"([^"]+)"[^{}]*"data"\s*:\s*(\[[\s\S]*?\])[^{}]*\}');
+      final seriesMatches = seriesRegex.allMatches(jsString);
+      for (final seriesMatch in seriesMatches) {
+        final name = seriesMatch.group(1)!;
+        final dataStr = seriesMatch.group(2)!;
+        List<dynamic> dataPoints;
+        try {
+          dataPoints = jsonDecode(dataStr);
+        } catch (e) {
+          final pointRegex = RegExp(r'\[(\d+),([\d\.]+)\]');
+          dataPoints = pointRegex.allMatches(dataStr).map((m) {
+            return [int.parse(m.group(1)!), double.parse(m.group(2)!)];
+          }).toList();
+        }
+        grandTotal.add({'name': name, 'data': dataPoints});
+      }
+    }
+
+    List<NetWorthPoint> averagePoints = [];
+    List<NetWorthPoint> hs300Points = [];
+
+    for (var series in grandTotal) {
+      final name = series['name'] as String;
+      final data = series['data'] as List;
+      if (name.contains('同类平均')) {
+        averagePoints = data.map((item) {
+          final ts = item[0] as int;
+          final val = (item[1] as num).toDouble();
+          return NetWorthPoint(
+            date: DateTime.fromMillisecondsSinceEpoch(ts),
+            nav: val,
+            series: 'average',
+          );
+        }).toList();
+      } else if (name.contains('沪深300')) {
+        hs300Points = data.map((item) {
+          final ts = item[0] as int;
+          final val = (item[1] as num).toDouble();
+          return NetWorthPoint(
+            date: DateTime.fromMillisecondsSinceEpoch(ts),
+            nav: val,
+            series: 'hs300',
+          );
+        }).toList();
+      }
+    }
+
+    return {'average': averagePoints, 'hs300': hs300Points};
+  }
+
+  Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
+    final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
+    
+    http.Response? response;
+    var retryCount = 0;
+    const maxRetries = 2; 
+    Exception? lastException;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        response = await HttpClientProvider.client.get(
+          url,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://fund.eastmoney.com/',
+          },
+        ).timeout(const Duration(seconds: 15));
+        
+        if (response.statusCode == 200) {
+          break;
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        retryCount++;
+        
+        if (retryCount <= maxRetries) {
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        }
+      }
+    }
+    
+    if (response == null) {
+      throw lastException ?? Exception('请求失败');
+    }
+    
+    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+    final htmlString = utf8.decode(response.bodyBytes);
+    final document = html_parser.parse(htmlString);
+
+    final tbody = document.querySelector('tbody');
+    if (tbody == null) {
+      return [];
+    }
+
+    final thead = document.querySelector('thead');
+    List<String> headers = [];
+    if (thead != null) {
+      final ths = thead.querySelectorAll('th');
+      headers = ths.map((th) => th.text.trim()).toList();
+    }
+
+    int ratioIndex = -1;
+    for (int i = 0; i < headers.length; i++) {
+      if (headers[i].contains('占净值比例') || headers[i].contains('占比')) {
+        ratioIndex = i;
+        break;
+      }
+    }
+    if (ratioIndex == -1) ratioIndex = 5;
+
+    final rows = tbody.querySelectorAll('tr');
+    final holdings = <TopHolding>[];
+    for (final row in rows) {
+      final cells = row.querySelectorAll('td');
+      if (cells.length < 3) continue;
+
+      final codeRaw = cells[1].text.trim();
+      final codeMatch = RegExp(r'(\d{6})').firstMatch(codeRaw);
+      final stockCode = codeMatch?.group(1) ?? codeRaw;
+
+      final stockName = cells[2].text.trim();
+
+      String ratioRaw = '';
+      if (cells.length > ratioIndex) {
+        ratioRaw = cells[ratioIndex].text.trim().replaceAll('%', '');
+      } else {
+        for (int i = cells.length - 1; i >= 0; i--) {
+          final text = cells[i].text.trim();
+          if (text.contains('%')) {
+            ratioRaw = text.replaceAll('%', '');
+            break;
+          }
+        }
+      }
+      final ratio = double.tryParse(ratioRaw) ?? 0.0;
+
+      if (stockCode.isNotEmpty && stockName.isNotEmpty && ratio > 0) {
+        holdings.add(TopHolding(stockCode: stockCode, stockName: stockName, ratio: ratio));
+      }
+    }
+
+    return holdings.take(10).toList();
+  }
+
+  // ── Backend API methods (akshare-powered) ──
+
+  /// Fetch top-10 holdings for multiple funds from the backend in one call.
+  /// Returns {code: {fundName, holdings: [TopHolding]}}.
+  /// Falls back to empty map on any error (caller should use HTML scraping).
+  Future<Map<String, Map<String, dynamic>>> fetchTopHoldingsFromApi(
+      List<String> codes) async {
+    if (codes.isEmpty) return {};
+    try {
+      final url = Uri.parse(AppConstants.apiFundHoldings);
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'codes': codes}))
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode != 200) return {};
+
+      final body = jsonDecode(response.body);
+      final data = body['data'] as Map<String, dynamic>?;
+      if (data == null) return {};
+
+      final result = <String, Map<String, dynamic>>{};
+      for (final entry in data.entries) {
+        final fundData = entry.value as Map<String, dynamic>?;
+        if (fundData == null) continue;
+        final rawHoldings = fundData['holdings'] as List<dynamic>? ?? [];
+        final holdings = rawHoldings.map((h) => TopHolding(
+              stockCode: h['stockCode']?.toString() ?? '',
+              stockName: h['stockName']?.toString() ?? '',
+              ratio: (h['ratio'] as num?)?.toDouble() ?? 0.0,
+            )).toList();
+        result[entry.key] = {
+          'fundName': fundData['fundName']?.toString() ?? '',
+          'holdings': holdings,
+        };
+      }
+      return result;
+    } catch (e) {
+      _dataManager?.addLog('后端基金持仓查询失败: $e', type: LogType.warning);
+      return {};
+    }
+  }
+
+  /// Fetch fundamental analysis for stocks from the backend.
+  /// Returns {code: {stockName, pe, pb, totalMv, industry, marketCapStyle, valueStyle, ...}}
+  Future<Map<String, Map<String, dynamic>>> fetchStockAnalysisFromApi(
+      List<String> codes) async {
+    if (codes.isEmpty) return {};
+    try {
+      final url = Uri.parse(AppConstants.apiStockAnalysis);
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'codes': codes}))
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode != 200) return {};
+
+      final body = jsonDecode(response.body);
+      final data = body['data'] as Map<String, dynamic>?;
+      if (data == null) return {};
+
+      return data.map((k, v) => MapEntry(k, v as Map<String, dynamic>));
+    } catch (e) {
+      _dataManager?.addLog('后端股票分析查询失败: $e', type: LogType.warning);
+      return {};
+    }
+  }
+
+  /// Comprehensive portfolio analysis — fetches holdings, stock data,
+  /// computes weighted top-10, style distribution, industry distribution,
+  /// overlap detection, and smart summary — all from the backend.
+  Future<Map<String, dynamic>?> fetchPortfolioAnalysis(
+      List<Map<String, dynamic>> funds) async {
+    if (funds.isEmpty) return null;
+
+    // Check memory cache first
+    final cacheKey = _portfolioCacheKey(funds);
+    final cached = _portfolioCache[cacheKey];
+    final cachedTime = _portfolioCacheTimestamps[cacheKey];
+    if (cached != null && cachedTime != null &&
+        DateTime.now().difference(cachedTime) < _portfolioCacheTtl) {
+      _dataManager?.addLog(
+        '📦 组合分析数据已缓存（${funds.length}只基金），直接使用本地数据',
+        type: LogType.cache,
+      );
+      return cached;
+    }
+
+    try {
+      final url = Uri.parse(AppConstants.apiPortfolioAnalysis);
+      debugPrint('[FundService] POST $url (${funds.length} funds)');
+      final response = await HttpClientProvider.client
+          .post(url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'funds': funds}))
+          .timeout(const Duration(seconds: 60));
+
+      debugPrint('[FundService] 后端响应 HTTP ${response.statusCode}');
+      if (response.statusCode != 200) {
+        final snippet = response.body.length > 200
+            ? '${response.body.substring(0, 200)}...'
+            : response.body;
+        debugPrint('[FundService] 后端返回非200: $snippet');
+        // Return stale cache if available even if expired
+        return cached;
+      }
+
+      final body = jsonDecode(response.body);
+      final result = body['data'] as Map<String, dynamic>?;
+      if (result != null) {
+        _portfolioCache[cacheKey] = result;
+        _portfolioCacheTimestamps[cacheKey] = DateTime.now();
+      }
+      return result;
+    } catch (e) {
+      debugPrint('[FundService] 后端组合分析失败: $e');
+      _dataManager?.addLog('后端组合分析失败: $e', type: LogType.warning);
+      // Return stale cache on error if available
+      return cached;
+    }
+  }
+
+  Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {
+    if (stockCodes.isEmpty) return {};
+    
+    _dataManager?.addLog('获取 ${stockCodes.length}只股票行情', type: LogType.network);
+    
+    final codesParam = stockCodes.map((code) {
+      if (code.length == 5 && RegExp(r'^\d{5}$').hasMatch(code)) {
+        return 'hk$code';
+      }
+      if (code.startsWith('6')) return 'sh$code';
+      if (code.startsWith('0') || code.startsWith('3')) return 'sz$code';
+      if (code.startsWith('5')) return 'sz$code';
+      return code;
+    }).join(',');
+    final url = Uri.parse(AppConstants.apiGtimgStockQuote.replaceAll('{codes}', codesParam));
+    final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      _dataManager?.addLog('股票行情获取失败: HTTP ${response.statusCode}', type: LogType.error);
+      return {};
+    }
+    String body;
+    try {
+      body = utf8.decode(response.bodyBytes);
+    } catch (e) {
+      body = String.fromCharCodes(response.bodyBytes);
+    }
+    final Map<String, double> quoteMap = {};
+    final lines = body.split('\n');
+    for (var line in lines) {
+      if (line.trim().isEmpty) continue;
+      final match = RegExp(r'v_([^=]+)="([^"]+)"').firstMatch(line);
+      if (match != null) {
+        final code = match.group(1)!;
+        final parts = match.group(2)!.split('~');
+        if (parts.length > 4) {
+          final currentPrice = double.tryParse(parts[3]) ?? 0.0;
+          final lastClose = double.tryParse(parts[4]) ?? 0.0;
+          final changePercent = lastClose > 0 ? ((currentPrice - lastClose) / lastClose) * 100 : 0.0;
+          quoteMap[code] = changePercent;
+        }
+      }
+    }
+    
+    if (quoteMap.isNotEmpty) {
+      _dataManager?.addLog(
+        '股票行情获取成功: ${quoteMap.length}只',
+        type: LogType.cache,
+      );
+    }
+    
+    return quoteMap;
+  }
+
+  Future<Map<String, dynamic>?> fetchRealtimeValuation(String code) async {
+    if (code.isEmpty || code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
+      return null;
+    }
+
+    for (int i = 0; i < AppConstants.apiValuationSources.length; i++) {
+      final sourceUrl = AppConstants.apiValuationSources[i];
+      final sourceName = i == 0 ? '主源' : '备用源${i}';
+      
+      try {
+        final url = Uri.parse(sourceUrl
+            .replaceAll('{code}', code)
+            .replaceAll('{timestamp}', DateTime.now().millisecondsSinceEpoch.toString()));
+
+        final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) {
+          _dataManager?.addLog(
+            '基金 $code 估值获取失败($sourceName): HTTP ${response.statusCode}',
+            type: LogType.error,
+          );
+          continue;
+        }
+
+        final bodyBytes = response.bodyBytes;
+        if (bodyBytes.isEmpty) continue;
+
+        String jsString;
+        try {
+          jsString = utf8.decode(bodyBytes);
+        } catch (e) {
+          _dataManager?.addLog('基金 $code 解码响应失败: $e', type: LogType.error);
+          try {
+            jsString = String.fromCharCodes(bodyBytes);
+          } catch (e2) {
+            _dataManager?.addLog('基金 $code 二次解码也失败: $e2', type: LogType.error);
+            continue;
+          }
+        }
+
+        final trimmed = jsString.trim();
+        if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'jsonpgz();') continue;
+        if (!trimmed.contains('{') || !trimmed.contains('}')) continue;
+
+        String jsonStr = trimmed;
+        if (trimmed.contains('(') && trimmed.contains(')')) {
+          final startIdx = trimmed.indexOf('(');
+          final endIdx = trimmed.lastIndexOf(')');
+          if (startIdx != -1 && endIdx != -1 && endIdx > startIdx) {
+            jsonStr = trimmed.substring(startIdx + 1, endIdx);
+          }
+        }
+
+        jsonStr = jsonStr.trim();
+        if (jsonStr.endsWith(';')) {
+          jsonStr = jsonStr.substring(0, jsonStr.length - 1);
+        }
+
+        if (jsonStr.isEmpty) continue;
+
+        Map<String, dynamic> data;
+        try {
+          data = jsonDecode(jsonStr);
+        } on FormatException catch (e) {
+          _dataManager?.addLog('基金 $code JSON格式错误: $e', type: LogType.error);
+          continue;
+        } catch (e) {
+          _dataManager?.addLog('基金 $code JSON解析异常: $e', type: LogType.error);
+          continue;
+        }
+
+        final fundName = data['name']?.toString() ?? '';
+        if (fundName.isEmpty || fundName == 'null' || fundName == 'undefined') continue;
+
+        String gszStr = data['gsz']?.toString() ?? '';
+        if (gszStr.isEmpty || gszStr == 'null' || gszStr == 'undefined') continue;
+
+        double gsz;
+        double gszzl;
+        try {
+          gsz = double.tryParse(gszStr) ?? 0.0;
+          gszzl = double.tryParse(data['gszzl']?.toString() ?? '0') ?? 0.0;
+        } catch (e) {
+          _dataManager?.addLog('基金 $code 解析估值数据失败: $e', type: LogType.error);
+          continue;
+        }
+
+        final gztime = data['gztime']?.toString() ?? '';
+        _dataManager?.addLog(
+          '基金 $code 估值获取成功($sourceName): $fundName ${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
+          type: LogType.cache,
+        );
+
+        return {
+          'fundCode': code,
+          'name': fundName,
+          'dwjz': double.tryParse(data['dwjz']?.toString() ?? '0') ?? 0.0,
+          'gsz': gsz,
+          'gszzl': gszzl,
+          'gztime': gztime,
+          'jzrq': data['jzrq']?.toString() ?? '',
+        };
+      } catch (e) {
+        _dataManager?.addLog(
+          '基金 $code 估值获取异常($sourceName): $e',
+          type: LogType.error,
+        );
+        continue;
+      }
+    }
+    
+    _dataManager?.addLog(
+      '基金 $code 估值获取失败: 所有数据源均不可用',
+      type: LogType.error,
+    );
+    return null;
+  }
+
+  Future<List<NetWorthPoint>> fetchIndexData(String indexCode) async {
+    final url = Uri.parse(
+      'https://push2.eastmoney.com/api/qt/kline/get?'
+      'secid=1.$indexCode&'
+      'klt=101&'
+      'fqt=1&'
+      'beg=19900101&'
+      'end=20500101&'
+      'lmt=10000',
+    );
+    
+    final response = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    
+    final jsonData = jsonDecode(utf8.decode(response.bodyBytes));
+    final data = jsonData['data'];
+    if (data == null || data['klines'] == null) {
+      return [];
+    }
+    
+    final klines = data['klines'] as List;
+    final points = <NetWorthPoint>[];
+    
+    for (var kline in klines) {
+      final parts = kline.split(',');
+      if (parts.length >= 3) {
+        try {
+          final dateStr = parts[0];
+          final closePrice = double.parse(parts[2]);
+          
+          final dateParts = dateStr.split('-');
+          if (dateParts.length == 3) {
+            final date = DateTime(
+              int.parse(dateParts[0]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[2]),
+            );
+            
+            points.add(NetWorthPoint(
+              date: date,
+              nav: closePrice,
+              series: 'index',
+            ));
+          }
+        } catch (e) {
+          _dataManager?.addLog('解析指数数据行失败: $e', type: LogType.error);
+          continue;
+        }
+      }
+    }
+    
+    return points;
+  }
+  
+  
+  String _getNavCacheKey(String code) {
+    return 'fund_nav_cache_$code';
+  }
+  
+  Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
+    return _navCache[code];
+  }
+  
+  Future<void> saveNavToCache(String code, List<NetWorthPoint> points) async {
+    _navCache[code] = points;
+  }
+  
+  Future<void> clearNavCache(String code) async {
+    _navCache.remove(code);
+  }
+  
+  Future<FundCompleteData> fetchFundCompleteData(String code) async {
+    try {
+      final results = await Future.wait([
+        fetchNetWorthTrend(code).catchError((e) {
+          _dataManager?.addLog('获取净值趋势失败: $e', type: LogType.error);
+          return <NetWorthPoint>[];
+        }),
+        fetchBenchmarkData(code).catchError((e) {
+          _dataManager?.addLog('获取基准数据失败: $e', type: LogType.error);
+          return <String, List<NetWorthPoint>>{'average': [], 'hs300': []};
+        }),
+        fetchTopHoldingsFromHtml(code).catchError((e) {
+          _dataManager?.addLog('获取重仓股失败: $e', type: LogType.error);
+          return <TopHolding>[];
+        }),
+      ]);
+      
+      return FundCompleteData(
+        netWorthPoints: results[0] as List<NetWorthPoint>,
+        benchmarkData: results[1] as Map<String, List<NetWorthPoint>>,
+        topHoldings: results[2] as List<TopHolding>,
+      );
+    } catch (e) {
+      _dataManager?.addLog('获取基金完整数据失败: $e', type: LogType.error);
+      return FundCompleteData(
+        netWorthPoints: [],
+        benchmarkData: {'average': [], 'hs300': []},
+        topHoldings: [],
+      );
+    }
+  }
+}
+
+class FundCompleteData {
+  final List<NetWorthPoint> netWorthPoints;
+  final Map<String, List<NetWorthPoint>> benchmarkData;
+  final List<TopHolding> topHoldings;
+  
+  FundCompleteData({
+    required this.netWorthPoints,
+    required this.benchmarkData,
+    required this.topHoldings,
+  });
+}

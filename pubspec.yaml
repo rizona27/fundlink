@@ -1,0 +1,102 @@
+name: fund_holding_management
+description: A fund holding management app
+publish_to: 'none'
+version: 1.4.0+40
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.0
+  shared_preferences: ^2.5.5
+  uuid: ^4.3.3
+  fast_gbk: ^1.0.0
+  fl_chart: ^0.70.0
+  html: ^0.15.4
+  permission_handler: ^12.0.1
+  excel: ^4.0.0
+  csv: ^5.1.1
+  archive: ^3.6.1
+  desktop_drop: ^0.4.4
+  share_plus: ^7.2.2
+  file_saver: ^0.3.1
+  path_provider: ^2.1.5
+  file_picker: ^11.0.2
+  url_launcher: ^6.3.0
+  universal_html: ^2.3.0
+  mime: ^1.0.0
+  file_save_directory: ^1.0.0
+  world_holidays: ^2.0.1
+  pinyin: ^3.3.0
+  receive_sharing_intent: ^1.8.1
+  # 数据库相关
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.7+1
+  path: ^1.8.3
+  # 版本信息
+  package_info_plus: ^9.0.1
+  # 内存监控
+  flutter_memory_info: ^0.0.3
+  # 保存图片到相册
+  gal: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  # 添加资源目录
+  assets:
+    - assets/icon/
+    - assets/database/
+    - assets/fonts/
+
+  # 自定义字体
+  fonts:
+    - family: FundLinkEN
+      fonts:
+        - asset: assets/fonts/FundLinkEN-Regular.ttf
+    - family: FundLinkZH
+      fonts:
+        - asset: assets/fonts/FundLinkZH-Regular.ttf
+    - family: FundLinkSub
+      fonts:
+        - asset: assets/fonts/FundLinkSub-Regular.ttf
+
+# 图标配置
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+
+  # Android 自适应图标
+  adaptive_icon_background: "#6366F1"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+
+  # iOS 配置
+  remove_alpha_ios: true
+
+  # Web 配置
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#6366F1"
+    theme_color: "#6366F1"
+
+  # macOS 桌面端（可选）
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+
+  # Windows 桌面端（可选）
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 48

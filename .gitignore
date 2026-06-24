@@ -1,0 +1,69 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# iOS
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/ephemeral/
+/ios/Flutter/flutter_export_environment.sh
+
+# Android
+/android/.gradle/
+/android/build/
+/android/local.properties
+/android/*.iml
+/android/.kotlin/
+android/key.properties
+
+# macOS
+/macos/Pods/
+/macos/.symlinks/
+/macos/Flutter/ephemeral/
+
+# Windows
+/windows/flutter/ephemeral/
+
+# Linux
+/linux/flutter/ephemeral/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.metadata
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets & Keys
+.env
+*.key
+*.p12
+*.jks
+
+# Build artifacts
+*.zip
+*.dll
+*.exe
+/data/
+
+# Backend
+env
+*.sh
+/backend
+/test
+*.log
+build_all.py

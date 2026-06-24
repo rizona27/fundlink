@@ -1,0 +1,1259 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import '../models/transaction_record.dart';
+import '../models/net_worth_point.dart';
+import '../services/data_manager.dart';
+import '../services/fund_service.dart';
+import '../services/transaction_utils.dart';
+import '../widgets/toast.dart';
+import '../widgets/glass_button.dart';
+import '../utils/input_formatters.dart';
+
+class AddTransactionDialog extends StatefulWidget {
+  final String clientId;
+  final String clientName;
+  final String fundCode;
+  final String fundName;
+  final TransactionType type;
+  final double? currentNav;
+  final double currentShares;
+  final VoidCallback onTransactionAdded;
+
+  const AddTransactionDialog({
+    super.key,
+    required this.clientId,
+    required this.clientName,
+    required this.fundCode,
+    required this.fundName,
+    required this.type,
+    this.currentNav,
+    required this.currentShares,
+    required this.onTransactionAdded,
+  });
+
+  @override
+  State<AddTransactionDialog> createState() => _AddTransactionDialogState();
+}
+
+class _AddTransactionDialogState extends State<AddTransactionDialog> {
+  late DataManager _dataManager;
+  
+  final TextEditingController _sharesController = TextEditingController();
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _navController = TextEditingController();
+  final TextEditingController _feeController = TextEditingController();
+  
+  DateTime _tradeDate = DateTime.now();
+  bool _isLoading = false;
+  String? _timeHint;
+  double? _estimatedShares; 
+  bool _hasManuallyEditedShares = false; 
+  bool _hasManuallyEditedAmount = false; 
+  bool _isFetchingNav = false; 
+  bool _isAfter1500 = false; 
+  bool _isPendingTransaction = false; 
+  
+  Future<String>? _pendingHintFuture;
+  
+  bool get _isTodayTransaction {
+    return _isPendingTransaction;
+  }
+  
+  Future<void> _updatePendingStatus() async {
+    final isPending = await TransactionUtils.isTransactionPendingAsync(_tradeDate, _isAfter1500);
+    if (mounted) {
+      setState(() {
+        _isPendingTransaction = isPending;
+      });
+    }
+  }
+  
+  Future<String> _getPendingTransactionHint() async {
+    if (!_isTodayTransaction) return '';
+    
+    final confirmDate = await TransactionUtils.calculateConfirmDateAsync(_tradeDate, _isAfter1500);
+    
+    return '待确认-${confirmDate.month.toString().padLeft(2, '0')}-${confirmDate.day.toString().padLeft(2, '0')}日自动更新';
+  }
+  
+  Future<String> _getOrCreatePendingHintFuture() {
+    if (_pendingHintFuture == null) {
+      _pendingHintFuture = _getPendingTransactionHint();
+    }
+    return _pendingHintFuture!;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dataManager = DataManagerProvider.of(context);
+    _updatePendingStatus().then((_) {
+      if (mounted) {
+        _checkTimeHint();
+        _fetchNavByDate();
+      }
+    });
+  }
+
+  void _checkTimeHint() {
+    if (!mounted) return;
+
+    final now = DateTime.now();
+    final hour = now.hour;
+    final minute = now.minute;
+
+    if (hour == 14 && minute >= 50) {
+      setState(() {
+        _timeHint = '即将收盘，注意区分15:00前后净值';
+      });
+    } else if (hour == 15 && minute <= 10) {
+      setState(() {
+        _timeHint = '刚过15:00，今日净值尚未更新';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _sharesController.dispose();
+    _amountController.dispose();
+    _navController.dispose();
+    _feeController.dispose();
+    super.dispose();
+  }
+
+  void _calculateEstimated() {
+    if (_isTodayTransaction) {
+      return;
+    }
+    
+    final amountText = _amountController.text.trim();
+    final navText = _navController.text.trim();
+    final feeText = _feeController.text.trim();
+    final sharesText = _sharesController.text.trim();
+    
+    if (widget.type == TransactionType.buy) {
+      if (amountText.isEmpty || navText.isEmpty) {
+        setState(() => _estimatedShares = null);
+        return;
+      }
+      
+      final amount = double.tryParse(amountText);
+      final nav = double.tryParse(navText);
+      final feeRate = feeText.isEmpty ? 0.0 : double.tryParse(feeText) ?? 0.0;
+      
+      if (amount == null || nav == null || nav <= 0) {
+        setState(() => _estimatedShares = null);
+        return;
+      }
+      
+      if (feeRate <= -100) return; // Would cause division by zero
+      final estimatedShares = amount / (1 + feeRate / 100) / nav;
+      setState(() => _estimatedShares = estimatedShares > 0 ? estimatedShares : null);
+      
+      if (!_hasManuallyEditedShares && estimatedShares > 0) {
+        _sharesController.text = estimatedShares.toStringAsFixed(2);
+      }
+    } else {
+      if (sharesText.isEmpty || navText.isEmpty) {
+        setState(() => _estimatedShares = null);
+        return;
+      }
+      
+      final shares = double.tryParse(sharesText);
+      final nav = double.tryParse(navText);
+      final feeRate = feeText.isEmpty ? 0.0 : double.tryParse(feeText) ?? 0.0;
+      
+      if (shares == null || nav == null || nav <= 0) {
+        setState(() => _estimatedShares = null);
+        return;
+      }
+      
+      final estimatedAmount = shares * nav * (1 - feeRate / 100);
+      setState(() => _estimatedShares = estimatedAmount > 0 ? estimatedAmount : null);
+      
+      if (!_hasManuallyEditedAmount && estimatedAmount > 0) {
+        _amountController.text = estimatedAmount.toStringAsFixed(2);
+      }
+    }
+  }
+
+  Future<void> _selectDate() async {
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => _TransactionDatePickerModal(
+        initialDate: _tradeDate,
+        onConfirm: (date) {
+          if (mounted) {
+            setState(() {
+              _tradeDate = date;
+              _pendingHintFuture = null;
+            });
+          }
+          _updatePendingStatus().then((_) {
+            _fetchNavByDate().then((_) {
+              if (_isTodayTransaction) {
+                // Switched to today: clear auto-calculated fields.
+                _estimatedShares = null;
+                _hasManuallyEditedShares = false;
+                _hasManuallyEditedAmount = false;
+                if (widget.type == TransactionType.buy) {
+                  _sharesController.clear();
+                } else {
+                  _amountController.clear();
+                }
+                if (mounted) setState(() {});
+              } else if (mounted) {
+                _calculateEstimated();
+              }
+            });
+          });
+        },
+      ),
+    );
+  }
+  
+  Future<void> _fetchNavByDate() async {
+    try {
+      final fundService = FundService(_dataManager);
+      
+      final isPending = TransactionUtils.isTransactionPending(_tradeDate, _isAfter1500);
+      
+      if (isPending) {
+        if (mounted) {
+          setState(() {
+            _navController.clear();
+          });
+        }
+        return;
+      }
+      
+      if (mounted) setState(() => _isFetchingNav = true);
+      
+      final targetNavDate = await TransactionUtils.calculateNavDateForTradeAsync(_tradeDate, _isAfter1500);
+      
+      NetWorthPoint? selectedPoint;
+      
+      final trendData = await fundService.fetchNetWorthTrend(widget.fundCode);
+      if (trendData.isNotEmpty) {
+        NetWorthPoint? exactPoint;
+        NetWorthPoint? nextPoint;
+        NetWorthPoint? closestPoint;
+        int minDiff = 999999;
+        
+        for (final point in trendData) {
+          final diff = point.date.difference(targetNavDate).inDays;
+          
+          if (diff == 0) {
+            exactPoint = point;
+            break;
+          }
+          
+          if (diff > 0 && (nextPoint == null || diff < nextPoint!.date.difference(targetNavDate).inDays)) {
+            nextPoint = point;
+          }
+          
+          final absDiff = diff.abs();
+          if (absDiff < minDiff) {
+            minDiff = absDiff;
+            closestPoint = point;
+          }
+        }
+        
+        if (exactPoint != null) {
+          selectedPoint = exactPoint;
+        } else if (nextPoint != null && nextPoint!.date.difference(targetNavDate).inDays <= 3) {
+          selectedPoint = nextPoint;
+        } else if (closestPoint != null && minDiff <= 3) {
+          selectedPoint = closestPoint;
+        }
+      }
+      
+      if (selectedPoint == null) {
+        // No historical NAV found for the target date. Keep field empty so the
+        // user enters it manually, rather than silently falling back to latest.
+        if (mounted) {
+          setState(() {
+            _navController.clear();
+          });
+        }
+        return;
+      }
+      
+      if (selectedPoint != null && mounted) {
+        setState(() {
+          _navController.text = selectedPoint!.nav.toStringAsFixed(4);
+        });
+        
+        _calculateEstimated();
+      }
+    } catch (e) {
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingNav = false);
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_isLoading) return;
+
+    final sharesText = _sharesController.text.trim();
+    final amountText = _amountController.text.trim();
+    final navText = _navController.text.trim();
+    final feeText = _feeController.text.trim();
+
+    if (sharesText.isEmpty && amountText.isEmpty) {
+      context.showToast('请至少输入份额或金额');
+      return;
+    }
+
+    double? shares;
+    double? amount;
+    double? nav;
+    double feeRate = 0.0; 
+
+    if (sharesText.isNotEmpty) {
+      shares = double.tryParse(sharesText);
+      if (shares == null || shares <= 0) {
+        context.showToast('请输入有效的份额');
+        return;
+      }
+    }
+
+    if (amountText.isNotEmpty) {
+      amount = double.tryParse(amountText);
+      if (amount == null || amount <= 0) {
+        context.showToast('请输入有效的金额');
+        return;
+      }
+    }
+
+    if (navText.isNotEmpty) {
+      nav = double.tryParse(navText);
+      if (nav == null || nav <= 0) {
+        context.showToast('请输入有效的净值');
+        return;
+      }
+    }
+
+    if (feeText.isNotEmpty) {
+      feeRate = double.tryParse(feeText) ?? 0.0;
+      if (feeRate < 0) {
+        context.showToast('费率不能为负数');
+        return;
+      }
+    }
+
+    if (shares == null && amount != null && nav != null && nav > 0) {
+      if (widget.type == TransactionType.buy) {
+        shares = amount / (1 + feeRate / 100) / nav;
+      } else {
+        shares = amount / nav;
+      }
+    }
+
+    if (amount == null && shares != null && nav != null && nav > 0) {
+      if (widget.type == TransactionType.buy) {
+        amount = shares * nav * (1 + feeRate / 100);
+      } else {
+        amount = shares * nav * (1 - feeRate / 100);
+      }
+    }
+
+    final isPending = TransactionUtils.isTransactionPending(_tradeDate, _isAfter1500);
+    
+    if (widget.type == TransactionType.buy) {
+      if (shares == null || shares <= 0) {
+        if (isPending && amount != null && amount > 0) {
+          shares = 0;
+        } else {
+          context.showToast('无法计算份额，请输入净值或份额');
+          return;
+        }
+      }
+    } else {
+      if (shares == null || shares <= 0) {
+        context.showToast('卖出时必须输入份额');
+        return;
+      }
+    }
+
+    if (amount == null || amount <= 0) {
+      if (widget.type == TransactionType.sell && isPending) {
+        amount = 0;
+      } else {
+        context.showToast('无法计算金额，请输入净值或金额');
+        return;
+      }
+    }
+
+    if (widget.type == TransactionType.sell && shares > widget.currentShares) {
+      context.showToast('卖出份额不能超过持有份额(${widget.currentShares.toStringAsFixed(2)})');
+      return;
+    }
+
+    // All transactions must be on or after the foundation (earliest buy) date.
+    final history = _dataManager.getTransactionHistory(widget.clientId, widget.fundCode);
+    final buyTxs = history.where((t) => t.type == TransactionType.buy).toList();
+    if (buyTxs.isNotEmpty) {
+      final foundationDate = buyTxs.map((t) => t.tradeDate).reduce((a, b) => a.isBefore(b) ? a : b);
+      final tradeDay = DateTime(_tradeDate.year, _tradeDate.month, _tradeDate.day);
+      final foundationDay = DateTime(foundationDate.year, foundationDate.month, foundationDate.day);
+      if (tradeDay.isBefore(foundationDay)) {
+        context.showToast('交易日期不能早于首次买入日期\n(${foundationDay.year}-${foundationDay.month.toString().padLeft(2, '0')}-${foundationDay.day.toString().padLeft(2, '0')})');
+        return;
+      }
+    }
+
+    double? confirmedNav;
+    
+    if (isPending) {
+      confirmedNav = null;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final transaction = TransactionRecord(
+        clientId: widget.clientId,
+        clientName: widget.clientName,
+        fundCode: widget.fundCode,
+        fundName: widget.fundName,
+        type: widget.type,
+        amount: amount,
+        shares: shares,
+        tradeDate: _tradeDate,
+        nav: nav,
+        fee: feeRate > 0 ? feeRate : null,
+        remarks: '',
+        isAfter1500: _isAfter1500,
+        isPending: isPending,
+        confirmedNav: confirmedNav,
+      );
+
+      await _dataManager.addTransaction(transaction);
+      widget.onTransactionAdded();
+      
+      if (mounted) {
+        Navigator.pop(context);
+        if (isPending) {
+          final confirmDays = _isAfter1500 ? 'T+2' : 'T+1';
+          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功\n净值待${confirmDays}确认后生效');
+        } else {
+          context.showToast('${widget.type == TransactionType.buy ? "加仓" : "减仓"}成功');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        context.showToast('操作失败: $msg');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
+    final secondaryColor = isDark 
+        ? CupertinoColors.white.withOpacity(0.6)
+        : CupertinoColors.systemGrey;
+
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: CupertinoPopupSurface(
+          isSurfacePainted: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      widget.type == TransactionType.buy ? '加仓' : '减仓',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? CupertinoColors.systemGrey.withOpacity(0.3)
+                              : CupertinoColors.systemGrey.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          CupertinoIcons.xmark,
+                          size: 16,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: bgColor,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                    Text(
+                      widget.fundName,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '代码: ${widget.fundCode}',
+                      style: TextStyle(fontSize: 12, color: secondaryColor),
+                    ),
+                    
+                    if (_timeHint != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemOrange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: CupertinoColors.systemOrange.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              CupertinoIcons.exclamationmark_triangle_fill,
+                              size: 14,
+                              color: CupertinoColors.systemOrange,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _timeHint!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: CupertinoColors.systemOrange,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '持有份额',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Text(
+                                '${widget.currentShares.toStringAsFixed(2)}份',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '持仓市值',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Text(
+                                widget.currentNav != null && widget.currentNav! > 0
+                                    ? '¥${(widget.currentShares * widget.currentNav!).toStringAsFixed(2)}'
+                                    : '-',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '累计收益',
+                                style: TextStyle(fontSize: 12, color: secondaryColor),
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final transactions = _dataManager.getTransactionHistory(
+                                    widget.clientId,
+                                    widget.fundCode,
+                                  );
+                                  if (transactions.isEmpty || widget.currentNav == null || widget.currentNav! <= 0) {
+                                    return Text('-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor));
+                                  }
+                                  
+                                  // Use average-cost method matching FundHolding.fromTransactions
+                                  double totalCost = 0;
+                                  double totalShares = 0;
+                                  for (final tx in transactions) {
+                                    if (tx.isPending) continue;
+                                    if (tx.isBuy) {
+                                      totalShares += tx.shares;
+                                      totalCost += tx.amount;
+                                    } else if (tx.isSell && totalShares > 0) {
+                                      final costPerShare = totalCost / totalShares;
+                                      totalCost -= tx.shares * costPerShare;
+                                      totalShares -= tx.shares;
+                                    }
+                                  }
+                                  
+                                  final marketValue = widget.currentShares * widget.currentNav!;
+                                  final profit = marketValue - totalCost;
+                                  final profitColor = profit >= 0 ? const Color(0xFFFF3B30) : const Color(0xFF34C759);
+                                  
+                                  return Text(
+                                    '${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: profitColor),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    GestureDetector(
+                      onTap: _selectDate,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              '交易日期',
+                              style: TextStyle(fontSize: 13, color: secondaryColor),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_tradeDate.year}-${_tradeDate.month.toString().padLeft(2, '0')}-${_tradeDate.day.toString().padLeft(2, '0')}',
+                              style: TextStyle(fontSize: 14, color: textColor),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(CupertinoIcons.calendar, size: 16, color: secondaryColor),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isAfter1500 = false;
+                                  _pendingHintFuture = null;
+                                });
+                                _updatePendingStatus().then((_) {
+                                  _fetchNavByDate(); 
+                                  _calculateEstimated(); 
+                                });
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: !_isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '15:00前',
+                                  style: TextStyle(
+                                    color: !_isAfter1500 ? CupertinoColors.white : secondaryColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isAfter1500 = true;
+                                  _pendingHintFuture = null;
+                                });
+                                _updatePendingStatus().then((_) {
+                                  _fetchNavByDate(); 
+                                  _calculateEstimated(); 
+                                });
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '15:00后',
+                                  style: TextStyle(
+                                    color: _isAfter1500 ? CupertinoColors.white : secondaryColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (widget.type == TransactionType.buy) ...[
+                      _buildInputField(
+                        label: '交易金额',
+                        controller: _amountController,
+                        hint: '请输入买入金额',
+                        suffix: '元',
+                        onChanged: (value) => _calculateEstimated(),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '成交净值',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
+                                ),
+                              ),
+                              if (_isTodayTransaction)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '待确认',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: CupertinoColors.systemOrange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (_isTodayTransaction) ...[
+                            const SizedBox(height: 4),
+                            FutureBuilder<String>(
+                              future: _getOrCreatePendingHintFuture(),
+                              builder: (context, snapshot) {
+                                final hint = snapshot.data ?? '加载中...';
+                                return Text(
+                                  hint,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondaryColor,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          _buildInputField(
+                            label: '',
+                            controller: _navController,
+                            hint: _isTodayTransaction 
+                                ? ''
+                                : (_isFetchingNav ? '加载中...' : '用于计算份额'),
+                            suffix: '',
+                            onChanged: (value) => _calculateEstimated(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      _buildInputField(
+                        label: '交易费率',
+                        controller: _feeController,
+                        hint: '选填，默认0',
+                        suffix: '%',
+                        onChanged: (value) => _calculateEstimated(),
+                      ),
+                      
+                      if (_estimatedShares != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBlue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.info_circle_fill,
+                                size: 14,
+                                color: CupertinoColors.systemBlue,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '预估份额: ${_estimatedShares!.toStringAsFixed(2)}份',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: CupertinoColors.systemBlue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      const SizedBox(height: 12),
+                      _buildInputField(
+                        label: '确认份额',
+                        controller: _sharesController,
+                        hint: _isTodayTransaction ? '待净值确认后自动计算' : '可手动修改',
+                        suffix: '份',
+                        onChanged: (value) {
+                          setState(() => _hasManuallyEditedShares = true);
+                        },
+                      ),
+                    ] else ...[
+                      _buildInputField(
+                        label: '交易份额',
+                        controller: _sharesController,
+                        hint: '请输入卖出份额',
+                        suffix: '份',
+                        onChanged: (value) => _calculateEstimated(),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '成交净值',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? CupertinoColors.white.withOpacity(0.8) : textColor,
+                                ),
+                              ),
+                              if (_isTodayTransaction)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: CupertinoColors.systemOrange.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '待确认',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: CupertinoColors.systemOrange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (_isTodayTransaction) ...[
+                            const SizedBox(height: 4),
+                            FutureBuilder<String>(
+                              future: _getOrCreatePendingHintFuture(),
+                              builder: (context, snapshot) {
+                                final hint = snapshot.data ?? '加载中...';
+                                return Text(
+                                  hint,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondaryColor,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          _buildInputField(
+                            label: '',
+                            controller: _navController,
+                            hint: _isTodayTransaction 
+                                ? ''
+                                : (_isFetchingNav ? '加载中...' : '用于计算金额'),
+                            suffix: '',
+                            onChanged: (value) => _calculateEstimated(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      _buildInputField(
+                        label: '交易费率',
+                        controller: _feeController,
+                        hint: '选填，默认0',
+                        suffix: '%',
+                        onChanged: (value) => _calculateEstimated(),
+                      ),
+                      
+                      if (_estimatedShares != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemOrange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.info_circle_fill,
+                                size: 14,
+                                color: CupertinoColors.systemOrange,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '预估金额: ¥${_estimatedShares!.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: CupertinoColors.systemOrange,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      const SizedBox(height: 12),
+                      _buildInputField(
+                        label: '确认金额',
+                        controller: _amountController,
+                        hint: _isTodayTransaction ? '待净值确认后自动计算' : '可手动修改',
+                        suffix: '元',
+                        onChanged: (value) {
+                          setState(() => _hasManuallyEditedAmount = true);
+                        },
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    GlassButton(
+                      label: _isLoading 
+                          ? (widget.type == TransactionType.buy ? '加仓中...' : '减仓中...')
+                          : (widget.type == TransactionType.buy ? '确认加仓' : '确认减仓'),
+                      onPressed: _isLoading ? null : _submit,
+                      isPrimary: true,
+                      height: 44,
+                      borderRadius: 12,
+                      expand: true,
+                      backgroundColorOverride: widget.type == TransactionType.buy 
+                          ? const Color(0xFFFF3B30).withOpacity(0.15) 
+                          : const Color(0xFF34C759).withOpacity(0.15), 
+                      textColorOverride: widget.type == TransactionType.buy 
+                          ? const Color(0xFFFF3B30) 
+                          : const Color(0xFF34C759), 
+                    ),
+                  ],
+                ), 
+              ),
+            ), 
+            ], 
+          ), 
+        ), 
+      ), 
+    ),
+    ); 
+  }
+
+  Widget _buildInputField({
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    required String suffix,
+    ValueChanged<String>? onChanged,
+  }) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
+    final placeholderColor = isDark 
+        ? CupertinoColors.white.withOpacity(0.5)
+        : CupertinoColors.systemGrey;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isDark ? CupertinoColors.white.withOpacity(0.8) : CupertinoColors.label,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: CupertinoTextField(
+            controller: controller,
+            placeholder: hint,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            style: TextStyle(color: textColor, fontSize: 15),
+            placeholderStyle: TextStyle(color: placeholderColor),
+            onChanged: onChanged,
+            inputFormatters: [AmountInputFormatter()],
+            suffix: suffix.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Text(suffix, style: TextStyle(color: placeholderColor)),
+                  )
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransactionDatePickerModal extends StatefulWidget {
+  final DateTime initialDate;
+  final ValueChanged<DateTime> onConfirm;
+
+  const _TransactionDatePickerModal({
+    required this.initialDate,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_TransactionDatePickerModal> createState() => _TransactionDatePickerModalState();
+}
+
+class _TransactionDatePickerModalState extends State<_TransactionDatePickerModal> {
+  late DateTime _tempDate;
+  final List<FixedExtentScrollController> _pickerControllers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _tempDate = widget.initialDate;
+  }
+
+  @override
+  void dispose() {
+    for (final c in _pickerControllers) {
+      c.dispose();
+    }
+    _pickerControllers.clear();
+    super.dispose();
+  }
+
+  void _updateTempDate({int? year, int? month, int? day}) {
+    setState(() {
+      int y = year ?? _tempDate.year;
+      int m = month ?? _tempDate.month;
+      int d = day ?? _tempDate.day;
+      int maxDays = DateTime(y, m + 1, 0).day;
+      if (d > maxDays) d = maxDays;
+      _tempDate = DateTime(y, m, d);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final now = DateTime.now();
+    final years = List.generate(10, (i) => now.year - 5 + i);
+    final months = List.generate(12, (i) => i + 1);
+    final days = List.generate(
+      DateTime(_tempDate.year, _tempDate.month + 1, 0).day,
+      (i) => i + 1,
+    );
+
+    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
+    final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
+      background: isDarkMode
+          ? CupertinoColors.white.withOpacity(0.05)
+          : CupertinoColors.black.withOpacity(0.03),
+    );
+
+    return CupertinoPopupSurface(
+      child: Container(
+        height: 280,
+        decoration: BoxDecoration(
+          color: panelBgColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  _buildPickerColumn(
+                    years,
+                    years.indexOf(_tempDate.year),
+                    '年',
+                    (i) => _updateTempDate(year: years[i]),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    months,
+                    _tempDate.month - 1,
+                    '月',
+                    (i) => _updateTempDate(month: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                  _buildPickerColumn(
+                    days,
+                    _tempDate.day - 1,
+                    '日',
+                    (i) => _updateTempDate(day: i + 1),
+                    panelBgColor,
+                    textColor,
+                    selectionOverlay,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              height: 0.5,
+              color: isDarkMode
+                  ? CupertinoColors.separator
+                  : CupertinoColors.opaqueSeparator,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: GlassButton(
+                      label: '取消',
+                      onPressed: () => Navigator.pop(context),
+                      isPrimary: false,
+                      height: 44,
+                      borderRadius: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GlassButton(
+                      label: '确定',
+                      onPressed: () {
+                        widget.onConfirm(_tempDate);
+                        Navigator.pop(context);
+                      },
+                      isPrimary: true,
+                      height: 44,
+                      borderRadius: 30,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPickerColumn(
+    List<int> items,
+    int initial,
+    String unit,
+    ValueChanged<int> onChanged,
+    Color bgColor,
+    Color textColor,
+    Widget overlay,
+  ) {
+    final controller = FixedExtentScrollController(initialItem: initial);
+    _pickerControllers.add(controller);
+    return Expanded(
+      child: CupertinoPicker(
+        scrollController: controller,
+        itemExtent: 40,
+        backgroundColor: bgColor,
+        selectionOverlay: overlay,
+        onSelectedItemChanged: onChanged,
+        children: items.map((item) => Center(
+          child: Text('$item$unit', style: TextStyle(color: textColor, fontSize: 16)),
+        )).toList(),
+      ),
+    );
+  }
+}
