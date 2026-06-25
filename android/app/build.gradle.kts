@@ -51,8 +51,12 @@ android {
             // 3. 将原先的 debug 改为我们刚才定义的 release
             signingConfig = signingConfigs.getByName("release")
             
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
