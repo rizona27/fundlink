@@ -17,11 +17,11 @@ class Toast {
 
     final isDark = brightness != null
         ? brightness == Brightness.dark
-        : CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        : AppConstants.isDark(context);
 
     final backgroundColor = isDark
-        ? const Color(0xFF1C1C1E)
-        : const Color(0xFFF2F2F7);
+        ? AppConstants.darkBackground
+        : AppConstants.lightBackground;
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.black;
 
     OverlayEntry? overlayEntry;

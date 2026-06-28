@@ -8,6 +8,7 @@ import '../services/transaction_utils.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
+import '../constants/app_constants.dart';
 
 class AddTransactionDialog extends StatefulWidget {
   final String clientId;
@@ -458,8 +459,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final secondaryColor = isDark 
         ? CupertinoColors.white.withOpacity(0.6)
@@ -482,7 +483,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
@@ -578,7 +579,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Column(
@@ -648,7 +649,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                   
                                   final marketValue = widget.currentShares * widget.currentNav!;
                                   final profit = marketValue - totalCost;
-                                  final profitColor = profit >= 0 ? const Color(0xFFFF3B30) : const Color(0xFF34C759);
+                                  final profitColor = profit >= 0 ? AppConstants.errorRed : AppConstants.successGreen;
                                   
                                   return Text(
                                     '${profit >= 0 ? '+' : ''}¥${profit.toStringAsFixed(2)}',
@@ -668,7 +669,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                          color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
@@ -693,7 +694,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     Container(
                       height: 40,
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
@@ -712,7 +713,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                               },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: !_isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  color: !_isAfter1500 ? AppConstants.primaryBlue : CupertinoColors.transparent,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 alignment: Alignment.center,
@@ -741,7 +742,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                               },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: _isAfter1500 ? const Color(0xFF007AFF) : CupertinoColors.transparent,
+                                  color: _isAfter1500 ? AppConstants.primaryBlue : CupertinoColors.transparent,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 alignment: Alignment.center,
@@ -1015,11 +1016,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       borderRadius: 12,
                       expand: true,
                       backgroundColorOverride: widget.type == TransactionType.buy 
-                          ? const Color(0xFFFF3B30).withOpacity(0.15) 
-                          : const Color(0xFF34C759).withOpacity(0.15), 
+                          ? AppConstants.errorRed.withOpacity(0.15) 
+                          : AppConstants.successGreen.withOpacity(0.15), 
                       textColorOverride: widget.type == TransactionType.buy 
-                          ? const Color(0xFFFF3B30) 
-                          : const Color(0xFF34C759), 
+                          ? AppConstants.errorRed 
+                          : AppConstants.successGreen, 
                     ),
                   ],
                 ), 
@@ -1040,7 +1041,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     required String suffix,
     ValueChanged<String>? onChanged,
   }) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final placeholderColor = isDark 
         ? CupertinoColors.white.withOpacity(0.5)
@@ -1060,7 +1061,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+            color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
             borderRadius: BorderRadius.circular(10),
           ),
           child: CupertinoTextField(
@@ -1130,7 +1131,7 @@ class _TransactionDatePickerModalState extends State<_TransactionDatePickerModal
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final now = DateTime.now();
     final years = List.generate(10, (i) => now.year - 5 + i);
     final months = List.generate(12, (i) => i + 1);
@@ -1139,7 +1140,7 @@ class _TransactionDatePickerModalState extends State<_TransactionDatePickerModal
       (i) => i + 1,
     );
 
-    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final panelBgColor = isDarkMode ? AppConstants.darkBackground : CupertinoColors.white;
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
     final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
       background: isDarkMode

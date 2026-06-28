@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class PageScrollToTop extends StatefulWidget {
   final ScrollController scrollController;
@@ -100,13 +101,13 @@ class _PageScrollToTopState extends State<PageScrollToTop>
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final mediaQuery = MediaQuery.of(context);
     final bottomPadding = mediaQuery.padding.bottom;
     final bottom = bottomPadding + widget.bottomMargin;
 
     final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withOpacity(0.85)
+        ? AppConstants.darkCardBg.withOpacity(0.85)
         : CupertinoColors.white.withOpacity(0.85);
 
     if (!_isVisible) {

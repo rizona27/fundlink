@@ -167,8 +167,8 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return PopScope(
       canPop: !_isImporting || _isPaused,
@@ -246,9 +246,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isActive
-                ? const Color(0xFF8B9DC3)
+                ? AppConstants.secondaryText
                 : (isDone
-                ? const Color(0xFF9BABB8)
+                ? AppConstants.tertiaryText
                 : (isDarkMode ? CupertinoColors.systemGrey5 : CupertinoColors.systemGrey4)),
           ),
           child: Center(
@@ -263,7 +263,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
           style: TextStyle(
             fontSize: 12,
             color: isActive
-                ? const Color(0xFF8B9DC3)
+                ? AppConstants.secondaryText
                 : (isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey),
           ),
         ),
@@ -277,7 +277,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       height: 2,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       color: _currentStep > step
-          ? const Color(0xFF9BABB8)
+          ? AppConstants.tertiaryText
           : (isDarkMode ? CupertinoColors.systemGrey5 : CupertinoColors.systemGrey4),
     );
   }
@@ -306,10 +306,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           border: _isDragging
-              ? Border.all(color: const Color(0xFF8B9DC3), width: 2.5)
+              ? Border.all(color: AppConstants.secondaryText, width: 2.5)
               : null,
           color: _isDragging
-              ? const Color(0xFF8B9DC3).withOpacity(0.05)
+              ? AppConstants.secondaryText.withOpacity(0.05)
               : null,
         ),
         child: Column(
@@ -319,7 +319,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                   ? CupertinoIcons.doc_plaintext
                   : CupertinoIcons.cloud_upload,
               size: 48,
-              color: const Color(0xFF8B9DC3),
+              color: AppConstants.secondaryText,
             ),
             const SizedBox(height: 16),
             Text(
@@ -330,7 +330,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
               style: TextStyle(
                 fontSize: 15,
                 color: _fileName != null
-                    ? const Color(0xFF8B9DC3)
+                    ? AppConstants.secondaryText
                     : (isDarkMode
                         ? CupertinoColors.white.withOpacity(0.7)
                         : CupertinoColors.systemGrey),
@@ -354,7 +354,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                 '松开以导入文件',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF8B9DC3),
+                  color: AppConstants.secondaryText,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -450,7 +450,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                 padding: EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Icon(CupertinoIcons.arrow_2_squarepath, size: 16, color: Color(0xFF8B9DC3)),
+                    Icon(CupertinoIcons.arrow_2_squarepath, size: 16, color: AppConstants.secondaryText),
                     SizedBox(width: 8),
                     Text(
                       '请将左侧字段映射到文件中的对应列',
@@ -519,7 +519,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                         margin: const EdgeInsets.only(right: 6),
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFFD46B6B),
+                          color: AppConstants.lossRed,
                         ),
                       ),
                     Expanded(
@@ -563,7 +563,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: config.mappedIndex != -1
-                            ? const Color(0xFF8B9DC3).withOpacity(0.3)
+                            ? AppConstants.secondaryText.withOpacity(0.3)
                             : Colors.transparent,
                       ),
                     ),
@@ -577,7 +577,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                             color: config.mappedIndex != -1
                                 ? (isDarkMode
                                     ? CupertinoColors.white
-                                    : const Color(0xFF8B9DC3))
+                                    : AppConstants.secondaryText)
                                 : (isDarkMode
                                 ? CupertinoColors.white.withOpacity(0.8)
                                 : CupertinoColors.systemGrey),
@@ -616,7 +616,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     showCupertinoModalPopup(
       context: context,
       builder: (context) {
-        final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        final isDarkMode = AppConstants.isDark(context);
         final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.black;
         
         return Container(
@@ -939,10 +939,10 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                               : CupertinoIcons.exclamationmark_triangle_fill),
                           size: 24,
                           color: _importResult == null
-                              ? const Color(0xFF8B9DC3)
+                              ? AppConstants.secondaryText
                               : (_importResult!.successCount > 0
-                              ? const Color(0xFF9BABB8)
-                              : const Color(0xFFD46B6B)),
+                              ? AppConstants.tertiaryText
+                              : AppConstants.lossRed),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -959,7 +959,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B9DC3).withOpacity(0.1),
+                        color: AppConstants.secondaryText.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -973,7 +973,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF8B9DC3),
+                                  color: AppConstants.secondaryText,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -1002,7 +1002,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: _invalidRowsCount > 0 ? const Color(0xFFD46B6B) : const Color(0xFF9BABB8),
+                                  color: _invalidRowsCount > 0 ? AppConstants.lossRed : AppConstants.tertiaryText,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -1026,7 +1026,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF8B9DC3),
+                                  color: AppConstants.secondaryText,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -1055,7 +1055,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF9BABB8),
+                                  color: AppConstants.tertiaryText,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -1084,7 +1084,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: _importResult!.failCount > 0 ? const Color(0xFFD46B6B) : const Color(0xFF9BABB8),
+                                  color: _importResult!.failCount > 0 ? AppConstants.lossRed : AppConstants.tertiaryText,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -1107,7 +1107,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD46B6B).withOpacity(0.1),
+                          color: AppConstants.lossRed.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1118,7 +1118,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 Icon(
                                   CupertinoIcons.exclamationmark_triangle,
                                   size: 16,
-                                  color: const Color(0xFFD46B6B),
+                                  color: AppConstants.lossRed,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -1126,7 +1126,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFFD46B6B),
+                                    color: AppConstants.lossRed,
                                   ),
                                 ),
                               ],
@@ -1138,7 +1138,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 reason,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: const Color(0xFFD46B6B),
+                                  color: AppConstants.lossRed,
                                 ),
                               ),
                             )),
@@ -1150,7 +1150,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontStyle: FontStyle.italic,
-                                    color: const Color(0xFFD46B6B).withOpacity(0.7),
+                                    color: AppConstants.lossRed.withOpacity(0.7),
                                   ),
                                 ),
                               ),
@@ -1163,7 +1163,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF9BABB8).withOpacity(0.1),
+                          color: AppConstants.tertiaryText.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1174,7 +1174,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 Icon(
                                   CupertinoIcons.info_circle,
                                   size: 16,
-                                  color: const Color(0xFF9BABB8),
+                                  color: AppConstants.tertiaryText,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -1182,7 +1182,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF9BABB8),
+                                    color: AppConstants.tertiaryText,
                                   ),
                                 ),
                               ],
@@ -1194,7 +1194,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 reason,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: const Color(0xFF9BABB8),
+                                  color: AppConstants.tertiaryText,
                                 ),
                               ),
                             )),
@@ -1206,7 +1206,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontStyle: FontStyle.italic,
-                                    color: const Color(0xFF9BABB8).withOpacity(0.7),
+                                    color: AppConstants.tertiaryText.withOpacity(0.7),
                                   ),
                                 ),
                               ),
@@ -1219,7 +1219,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD46B6B).withOpacity(0.1),
+                          color: AppConstants.lossRed.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1230,7 +1230,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 Icon(
                                   CupertinoIcons.exclamationmark_triangle,
                                   size: 16,
-                                  color: const Color(0xFFD46B6B),
+                                  color: AppConstants.lossRed,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -1238,7 +1238,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFFD46B6B),
+                                    color: AppConstants.lossRed,
                                   ),
                                 ),
                               ],
@@ -1250,7 +1250,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                 error,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: const Color(0xFFD46B6B),
+                                  color: AppConstants.lossRed,
                                 ),
                               ),
                             )),
@@ -1262,7 +1262,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontStyle: FontStyle.italic,
-                                    color: const Color(0xFFD46B6B).withOpacity(0.7),
+                                    color: AppConstants.lossRed.withOpacity(0.7),
                                   ),
                                 ),
                               ),
@@ -1297,7 +1297,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
                               child: Container(
                                 height: 4,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF8B9DC3),
+                                  color: AppConstants.secondaryText,
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
@@ -1387,7 +1387,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     await showCupertinoModalPopup(
       context: context,
       builder: (context) {
-        final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        final isDarkMode = AppConstants.isDark(context);
         
         return CupertinoActionSheet(
           title: const Text('选择模板类型'),
@@ -2194,7 +2194,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       for (final m in allMappings) {
         mappingMap[m.clientId] = m.clientName;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('加载客户映射失败: $e');
+    }
 
     // Pre-build duplicate set for O(1) duplicate check
     final existingPairs = <String>{};

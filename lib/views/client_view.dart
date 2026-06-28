@@ -362,14 +362,14 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
   Color _colorForHoldingCount(int count) {
     if (count == 1) return const Color(0xFFD4A84B);
     if (count <= 3) return const Color(0xFFD4844B);
-    return const Color(0xFFD46B6B);
+    return AppConstants.lossRed;
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     const bottomNavBarHeight = 56.0;
     final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
@@ -385,7 +385,7 @@ class _ClientViewState extends State<ClientView> with TickerProviderStateMixin, 
       children: [
         GradientCard(
           title: '置顶',
-          gradient: const [Color(0xFFFF9500), Color(0xFFFFB347)],
+          gradient: const [AppConstants.warningOrange, Color(0xFFFFB347)],
           isExpanded: _isPinnedSectionExpanded,
           isDarkMode: isDarkMode,
           onTap: _togglePinnedSection,

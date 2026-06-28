@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:ui' as ui show Color;
 import 'package:flutter/cupertino.dart';
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import '../utils/view_utils.dart';
+import '../constants/app_constants.dart';
 
 class FloatingTabBar extends StatefulWidget {
   final int currentIndex;
@@ -35,8 +36,6 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
   static const double _normalOpacity = 1.0;
   static const double _scrollingOpacity = 0.6; 
   
-  bool get _isDesktopPlatform => kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-
   final List<AnimationController> _scaleControllers = [];
   final List<Animation<double>> _scaleAnimations = [];
   final List<AnimationController> _rotateControllers = [];
@@ -49,7 +48,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
       vsync: this,
     )..value = _normalOpacity;
 
-    if (_isDesktopPlatform) {
+    if (ViewUtils.isDesktopPlatform()) {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           _startAutoFade();
@@ -82,7 +81,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     if (!_isScrolling) {
       _isScrolling = true;
       _cancelAutoFade(); 
-      if (_isDesktopPlatform && _opacityController.value != _scrollingOpacity) {
+      if (ViewUtils.isDesktopPlatform() && _opacityController.value != _scrollingOpacity) {
         _opacityController.animateTo(_scrollingOpacity, curve: Curves.easeOut);
       }
     }
@@ -120,7 +119,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
     _isScrolling = false;
     if (_opacityController.value != _normalOpacity) {
       _opacityController.animateTo(_normalOpacity, curve: Curves.easeOut);
-      if (_isDesktopPlatform) {
+      if (ViewUtils.isDesktopPlatform()) {
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted && !_isScrolling && !_isHovered) {
             _startAutoFade();
@@ -165,11 +164,11 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     final Color backgroundColor = isDarkMode
-        ? const ui.Color(0xFF2C2C2E).withValues(alpha: 0.95)  
+        ? AppConstants.darkCardBg.withValues(alpha: 0.95)
         : CupertinoColors.white.withValues(alpha: 0.95);      
 
     final inactiveIconColor = isDarkMode
@@ -349,7 +348,7 @@ class FloatingTabBarState extends State<FloatingTabBar> with TickerProviderState
           ),
         );
         
-        if (_isDesktopPlatform) {
+        if (ViewUtils.isDesktopPlatform()) {
           return MouseRegion(
             onEnter: (_) {
               setState(() => _isHovered = true);

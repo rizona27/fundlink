@@ -1,17 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter/foundation.dart';
+import 'view_utils.dart';
 
 class DesktopFocusManager {
-  static bool get isDesktopPlatform {
-    return kIsWeb || 
-           defaultTargetPlatform == TargetPlatform.windows ||
-           defaultTargetPlatform == TargetPlatform.macOS ||
-           defaultTargetPlatform == TargetPlatform.linux;
-  }
-  
   static KeyEventResult handleTabKey(FocusNode currentNode, FocusScopeNode scope, {bool shiftPressed = false}) {
-    if (!isDesktopPlatform) {
+    if (!ViewUtils.isDesktopPlatform()) {
       return KeyEventResult.ignored;
     }
     

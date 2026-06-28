@@ -156,7 +156,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
       context: context,
       barrierDismissible: true,
       builder: (context) {
-        final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        final isDark = AppConstants.isDark(context);
         
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
@@ -170,7 +170,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   constraints: const BoxConstraints(maxWidth: 400),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                    color: isDark ? AppConstants.darkCardBg : CupertinoColors.white,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Column(
@@ -231,7 +231,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                             '保存',
                             style: TextStyle(
                               fontSize: 17,
-                              color: Color(0xFF007AFF),
+                              color: AppConstants.primaryBlue,
                             ),
                           ),
                         ),
@@ -267,7 +267,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             style: TextStyle(
@@ -308,7 +308,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             style: TextStyle(
@@ -338,18 +338,21 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
     clientNameFocusNode.dispose();
     
     if (result != null && mounted) {
+      final cid = result['clientId'] ?? '';
+      final cname = result['clientName'] ?? '';
+      if (cid.isEmpty || cname.isEmpty) return;
       try {
         if (isEdit) {
           await _mappingService.updateMapping(
             mapping.id,
-            result['clientId']!,
-            result['clientName']!,
+            cid,
+            cname,
           );
           context.showToast('更新成功');
         } else {
           await _mappingService.addMapping(
-            result['clientId']!,
-            result['clientName']!,
+            cid,
+            cname,
           );
           context.showToast('添加成功');
         }
@@ -406,8 +409,8 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return buildWithScrollToTop(
       GestureDetector(
@@ -458,7 +461,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                         ? Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
-                              color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                              color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white,
                               border: Border(
                                 bottom: BorderSide(
                                   color: isDarkMode
@@ -566,7 +569,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: isDarkMode
-                                      ? const Color(0xFF2C2C2E).withOpacity(0.85)
+                                      ? AppConstants.darkCardBg.withOpacity(0.85)
                                       : CupertinoColors.white.withOpacity(0.85),
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
@@ -580,7 +583,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                                 child: const Icon(
                                   CupertinoIcons.plus,
                                   size: 24,
-                                  color: Color(0xFF007AFF),
+                                  color: AppConstants.primaryBlue,
                                 ),
                               ),
                             ),
@@ -601,7 +604,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
   Widget _buildHeaderRow(bool isDarkMode) {
     return Container(
       height: 40,
-      color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+      color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
       child: Row(
         children: [
           Expanded(
@@ -635,7 +638,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                             ? CupertinoIcons.arrow_up
                             : CupertinoIcons.arrow_down,
                         size: 12,
-                        color: const Color(0xFF007AFF),
+                        color: AppConstants.primaryBlue,
                       ),
                   ],
                 ),
@@ -663,7 +666,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                             ? CupertinoIcons.arrow_up
                             : CupertinoIcons.arrow_down,
                         size: 12,
-                        color: const Color(0xFF007AFF),
+                        color: AppConstants.primaryBlue,
                       ),
                   ],
                 ),
@@ -689,7 +692,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
 
   Widget _buildMappingRow(ClientMapping mapping, int index, bool isDarkMode) {
     final backgroundColor = isDarkMode
-        ? (index % 2 == 0 ? const Color(0xFF1C1C1E) : const Color(0xFF2C2C2E))
+        ? (index % 2 == 0 ? AppConstants.darkBackground : AppConstants.darkCardBg)
         : (index % 2 == 0 ? CupertinoColors.white : CupertinoColors.systemGrey6);
 
     return Container(
@@ -758,7 +761,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                   child: const Icon(
                     CupertinoIcons.pencil,
                     size: 18,
-                    color: Color(0xFF007AFF),
+                    color: AppConstants.primaryBlue,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -769,7 +772,7 @@ class _MappingDictionaryViewState extends State<MappingDictionaryView> with Scro
                   child: const Icon(
                     CupertinoIcons.trash,
                     size: 18,
-                    color: Color(0xFFFF3B30),
+                    color: AppConstants.errorRed,
                   ),
                 ),
               ],

@@ -2,6 +2,7 @@ import '../utils/animation_config.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import '../models/top_holding.dart';
+import '../constants/app_constants.dart';
 
 class TopHoldingsWidget extends StatelessWidget {
   final List<TopHolding> topHoldings;
@@ -22,7 +23,7 @@ class TopHoldingsWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+        color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -143,7 +144,7 @@ class TopHoldingsWidget extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                      color: isDark ? AppConstants.darkCardBg : CupertinoColors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isDark

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import '../services/fund_service.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
+import '../constants/app_constants.dart';
 
 class CustomFundConfigDialog extends StatefulWidget {
   final String currentCode;
@@ -81,7 +82,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
 
     return Center(
       child: Container(
@@ -98,7 +99,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                  color: isDark ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
@@ -217,7 +218,7 @@ class _CustomFundConfigDialogState extends State<CustomFundConfigDialog> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                  color: isDark ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
                   borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
                 ),
                 child: Row(

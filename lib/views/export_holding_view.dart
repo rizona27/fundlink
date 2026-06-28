@@ -9,6 +9,7 @@ import '../utils/desktop_focus_manager.dart';
 import '../utils/input_formatters.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class ExportHoldingView extends StatefulWidget {
   const ExportHoldingView({super.key});
@@ -283,21 +284,37 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
 
       _dataManager.addLog('开始导出数据: 格式=$_format, 范围=$_scope, 数量=${_filteredHoldings.length}', type: LogType.info);
 
-      await FileExportService.exportAndDownload(
-        holdings: _filteredHoldings,
+      final result = await FileExportService.exportData(
         format: _format,
+        holdings: _filteredHoldings,
         selectedFields: selectedFieldIds,
-        context: context,
-        shareAfterSave: false,
       );
 
-      final dateStr = DateTime.now().toIso8601String().split('T')[0];
-      final fileName = 'fundlink_$dateStr.${_format == 'csv' ? 'csv' : 'xlsx'}';
+      if (!result.success) {
+        _exportError = result.errorMessage ?? '导出失败';
+        context.showToast(_exportError!);
+        _dataManager.addLog('导出失败: $_exportError', type: LogType.error);
+        if (mounted) setState(() => _isExporting = false);
+        return;
+      }
 
-      _exportSuccess = true;
-      _exportedFileName = fileName;
-      _saveToHistory(fileName, _filteredHoldings.length);
-      _dataManager.addLog('导出成功: $fileName (${_filteredHoldings.length}条)', type: LogType.success);
+      // Save to disk
+      final saved = await FileExportService.saveToDisk(
+        bytes: result.bytes,
+        fileName: result.fileName,
+        mimeType: result.mimeType,
+      );
+
+      if (saved.error != null) {
+        context.showToast('保存文件失败: ${saved.error}');
+        _dataManager.addLog('导出文件失败: ${saved.error}', type: LogType.error);
+      } else if (saved.savedPath != null && saved.savedPath!.isNotEmpty) {
+        context.showToast('文件已保存: ${result.fileName}');
+        _dataManager.addLog('导出文件成功: ${result.fileName}', type: LogType.success);
+        _exportSuccess = true;
+        _exportedFileName = result.fileName;
+        _saveToHistory(result.fileName, _filteredHoldings.length);
+      }
     } catch (e) {
       _exportError = e.toString();
       _exportSuccess = false;
@@ -321,7 +338,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   }
 
   Widget _buildStepIndicator() {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
@@ -348,8 +365,8 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isActive
-                ? const Color(0xFF8B9DC3)
-                : (isDone ? const Color(0xFF9BABB8) : (isDarkMode ? CupertinoColors.systemGrey5 : CupertinoColors.systemGrey4)),
+                ? AppConstants.secondaryText
+                : (isDone ? AppConstants.tertiaryText : (isDarkMode ? CupertinoColors.systemGrey5 : CupertinoColors.systemGrey4)),
           ),
           child: Center(
             child: isDone
@@ -363,7 +380,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
           style: TextStyle(
             fontSize: 12,
             color: isActive
-                ? const Color(0xFF8B9DC3)
+                ? AppConstants.secondaryText
                 : (isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey),
           ),
         ),
@@ -377,7 +394,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       height: 2,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       color: _currentStep > step
-          ? const Color(0xFF9BABB8)
+          ? AppConstants.tertiaryText
           : (isDarkMode ? CupertinoColors.systemGrey5 : CupertinoColors.systemGrey4),
     );
   }
@@ -396,7 +413,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   }
 
   Widget _buildConfigStep() {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final bool isNextEnabled = _previewCount > 0 && _amountError.isEmpty && _profitError.isEmpty;
     return Column(
       children: [
@@ -465,12 +482,12 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 12, color: Color(0xFFD46B6B)),
+                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 12, color: AppConstants.lossRed),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           _amountError,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFFD46B6B)),
+                          style: const TextStyle(fontSize: 11, color: AppConstants.lossRed),
                         ),
                       ),
                     ],
@@ -488,12 +505,12 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 12, color: Color(0xFFD46B6B)),
+                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 12, color: AppConstants.lossRed),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           _profitError,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFFD46B6B)),
+                          style: const TextStyle(fontSize: 11, color: AppConstants.lossRed),
                         ),
                       ),
                     ],
@@ -512,7 +529,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.eye, size: 16, color: Color(0xFF8B9DC3)),
+              const Icon(CupertinoIcons.eye, size: 16, color: AppConstants.secondaryText),
               const SizedBox(width: 8),
               Text(
                 '符合条件的数据：$_previewCount 条',
@@ -552,7 +569,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   }
 
   Widget _buildFieldsStep() {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return Column(
       children: [
         _buildCard(
@@ -597,7 +614,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
   }
 
   Widget _buildResultStep() {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return Column(
       children: [
         _buildCard(
@@ -628,7 +645,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                             widthFactor: _exportProgress,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: const Color(0xFF8B9DC3),
+                                color: AppConstants.secondaryText,
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -645,7 +662,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      const Icon(CupertinoIcons.checkmark_alt_circle, size: 48, color: Color(0xFF8B9DC3)),
+                      const Icon(CupertinoIcons.checkmark_alt_circle, size: 48, color: AppConstants.secondaryText),
                       const SizedBox(height: 12),
                       const Text('导出成功！', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -668,7 +685,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 48, color: Color(0xFFD46B6B)),
+                      const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 48, color: AppConstants.lossRed),
                       const SizedBox(height: 12),
                       const Text('导出失败', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -734,7 +751,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
                     color: isDarkMode ? CupertinoColors.systemGrey5.withOpacity(0.3) : CupertinoColors.systemGrey6,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, size: 16, color: const Color(0xFF8B9DC3)),
+                  child: Icon(icon, size: 16, color: AppConstants.secondaryText),
                 ),
                 const SizedBox(width: 12),
                 Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: isDarkMode ? CupertinoColors.white : CupertinoColors.label)),
@@ -771,10 +788,10 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: selected ? const Color(0xFF8B9DC3).withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey5.withOpacity(0.3) : CupertinoColors.systemGrey6),
+              color: selected ? AppConstants.secondaryText.withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey5.withOpacity(0.3) : CupertinoColors.systemGrey6),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 16, color: selected ? const Color(0xFF8B9DC3) : const Color(0xFF9BABB8)),
+            child: Icon(icon, size: 16, color: selected ? AppConstants.secondaryText : AppConstants.tertiaryText),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -789,7 +806,7 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
               ],
             ),
           ),
-          if (selected) const Icon(CupertinoIcons.checkmark_alt, size: 18, color: Color(0xFF8B9DC3)),
+          if (selected) const Icon(CupertinoIcons.checkmark_alt, size: 18, color: AppConstants.secondaryText),
         ],
       ),
     );
@@ -804,19 +821,19 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF8B9DC3).withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.white),
+          color: isSelected ? AppConstants.secondaryText.withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.white),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? const Color(0xFF8B9DC3) : (isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4.withOpacity(0.5))),
+          border: Border.all(color: isSelected ? AppConstants.secondaryText : (isDarkMode ? CupertinoColors.white.withOpacity(0.1) : CupertinoColors.systemGrey4.withOpacity(0.5))),
         ),
         child: Center(
-          child: Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal, color: isSelected ? const Color(0xFF8B9DC3) : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label))),
+          child: Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal, color: isSelected ? AppConstants.secondaryText : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label))),
         ),
       ),
     );
   }
 
   Widget _buildFilterTextField(String label, String key, {bool isNumber = false, bool allowNegative = false}) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     
     FocusNode? focusNode;
     TextInputAction textInputAction = TextInputAction.next;
@@ -889,16 +906,16 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: field.selected ? const Color(0xFF8B9DC3).withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6),
+          color: field.selected ? AppConstants.secondaryText.withOpacity(0.15) : (isDarkMode ? CupertinoColors.systemGrey6.withOpacity(0.3) : CupertinoColors.systemGrey6),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: field.selected ? const Color(0xFF8B9DC3) : Colors.transparent),
+          border: Border.all(color: field.selected ? AppConstants.secondaryText : Colors.transparent),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (field.required)
-              const Padding(padding: EdgeInsets.only(right: 4), child: Icon(CupertinoIcons.lock_fill, size: 10, color: Color(0xFF9BABB8))),
-            Text(field.label, style: TextStyle(fontSize: 13, color: field.selected ? const Color(0xFF8B9DC3) : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label), fontWeight: field.selected ? FontWeight.w500 : FontWeight.normal)),
+              const Padding(padding: EdgeInsets.only(right: 4), child: Icon(CupertinoIcons.lock_fill, size: 10, color: AppConstants.tertiaryText)),
+            Text(field.label, style: TextStyle(fontSize: 13, color: field.selected ? AppConstants.secondaryText : (isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.label), fontWeight: field.selected ? FontWeight.w500 : FontWeight.normal)),
           ],
         ),
       ),
@@ -907,8 +924,8 @@ class _ExportHoldingViewState extends State<ExportHoldingView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return CupertinoPageScaffold(
       backgroundColor: backgroundColor,

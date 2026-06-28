@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:csv/csv.dart';
@@ -78,7 +79,7 @@ class FileImportService {
 
       return false;
     } catch (e) {
-      print('检测备份文件失败: $e');
+      debugPrint('检测备份文件失败: $e');
       return false;
     }
   }

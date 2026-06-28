@@ -1,7 +1,63 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/painting.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+enum ThemeMode { light, dark, system }
+
+extension ThemeModeExtension on ThemeMode {
+  String get displayName {
+    switch (this) {
+      case ThemeMode.light: return '浅色';
+      case ThemeMode.dark: return '深色';
+      case ThemeMode.system: return '跟随系统';
+    }
+  }
+}
 
 class AppConstants {
   AppConstants._();
+
+  // ═══════════════════════════════════════════════════════════════
+  // Theme colors — use these instead of inline Color(0x...)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Backgrounds
+  static const Color darkBackground = Color(0xFF1C1C1E);
+  static const Color darkCardBg = Color(0xFF2C2C2E);
+  static const Color darkBorder = Color(0xFF3A3A3C);
+  static const Color lightBackground = Color(0xFFF2F2F7);
+
+  // Brand
+  static const Color primaryBlue = Color(0xFF007AFF);
+  static const Color accentIndigo = Color(0xFF6366F1);
+  static const Color accentPurple = Color(0xFF8B5CF6);
+
+  // Status
+  static const Color successGreen = Color(0xFF34C759);
+  static const Color lossRed = Color(0xFFD46B6B);
+  static const Color errorRed = Color(0xFFFF3B30);
+  static const Color warningOrange = Color(0xFFFF9500);
+  static const Color attentionYellow = Color(0xFFFFD60A);
+  static const Color tealAccent = Color(0xFF00BCD4);
+
+  // Text
+  static const Color secondaryText = Color(0xFF8B9DC3);
+  static const Color tertiaryText = Color(0xFF9BABB8);
+  static const Color systemGray = Color(0xFF8E8E93);
+
+  // Dark-mode helpers
+  static bool isDark(BuildContext context) =>
+      CupertinoTheme.brightnessOf(context) == Brightness.dark;
+  static Color bgColor(Brightness b) =>
+      b == Brightness.dark ? darkBackground : lightBackground;
+  static Color cardColor(Brightness b) =>
+      b == Brightness.dark ? darkCardBg : CupertinoColors.white;
+  static Color primaryTextColor(Brightness b) =>
+      b == Brightness.dark ? CupertinoColors.white : darkBackground;
+
+  // ═══════════════════════════════════════════════════════════════
+  // App config keys & constants
+  // ═══════════════════════════════════════════════════════════════
 
   static const String keyHoldings = 'fund_holdings';
   static const String keyTransactions = 'fund_transactions';
@@ -77,6 +133,27 @@ class AppConstants {
   static const int tradingDayCheckBatchSize = 5;
   static const int refreshBatchSize = 5;
   static const double tradeTimeThreshold = 15.0;
+
+  // ── A-share trading session times (minutes since midnight) ──
+  /// Morning session start: 9:30
+  static const int tradingMorningStart = 9 * 60 + 30;
+  /// Morning session end: 11:30
+  static const int tradingMorningEnd = 11 * 60 + 30;
+  /// Afternoon session start: 13:00
+  static const int tradingAfternoonStart = 13 * 60;
+  /// Afternoon session end: 15:00
+  static const int tradingAfternoonEnd = 15 * 60;
+
+  /// Returns true if the current time falls within an A‑share trading
+  /// session on a weekday.
+  static bool isInTradingHours() {
+    final now = DateTime.now();
+    final w = now.weekday;
+    if (w == DateTime.saturday || w == DateTime.sunday) return false;
+    final t = now.hour * 60 + now.minute;
+    return (t >= tradingMorningStart && t <= tradingMorningEnd) ||
+           (t >= tradingAfternoonStart && t <= tradingAfternoonEnd);
+  }
 
   // ─── Decimal precision: input & display ───
   //

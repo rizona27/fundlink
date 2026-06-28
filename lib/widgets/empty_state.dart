@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class EmptyState extends StatelessWidget {
   final IconData icon;
@@ -26,7 +27,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final topPadding = MediaQuery.of(context).padding.top;
@@ -35,7 +36,7 @@ class EmptyState extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+      color: isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground,
       child: Stack(
         children: [
           Positioned.fill(
@@ -190,7 +191,7 @@ class _GlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return CupertinoButton(
       padding: EdgeInsets.zero,
       onPressed: onTap,

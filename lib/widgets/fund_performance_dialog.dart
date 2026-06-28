@@ -4,6 +4,7 @@ import '../services/data_manager.dart';
 import '../models/net_worth_point.dart';
 import '../models/fund_holding.dart';
 import '../widgets/glass_button.dart';
+import '../constants/app_constants.dart';
 
 class FundPerformanceDialog extends StatefulWidget {
   final String fundCode;
@@ -222,14 +223,14 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
 
   Color _getReturnColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
-    if (value > 0) return const Color(0xFFFF3B30); 
-    if (value < 0) return const Color(0xFF34C759); 
+    if (value > 0) return AppConstants.errorRed; 
+    if (value < 0) return AppConstants.successGreen; 
     return CupertinoColors.systemGrey; 
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
 
     return Center(
       child: Container(
@@ -246,7 +247,7 @@ class _FundPerformanceDialogState extends State<FundPerformanceDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                  color: isDark ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(

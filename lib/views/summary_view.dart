@@ -49,45 +49,9 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   bool _isPageVisible = true;
   DateTime? _lastValuationRefreshTime;
   
-  bool get _isMarketOpen {
-    final now = DateTime.now();
-    final weekday = now.weekday;
-    
-    if (weekday == DateTime.saturday || weekday == DateTime.sunday) return false;
-    
-    
-    final hour = now.hour;
-    final minute = now.minute;
-    final currentTime = hour * 60 + minute;
-    
-    final morningStart = 9 * 60 + 15;  
-    final afternoonEnd = 15 * 60 + 30;  
-    
-    return currentTime >= morningStart && currentTime < afternoonEnd;
-  }
+  bool get _isMarketOpen => AppConstants.isInTradingHours();
   
-  bool _shouldPauseAutoRefresh() {
-    final now = DateTime.now();
-    final weekday = now.weekday;
-    
-    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
-      return true;
-    }
-    
-    final hour = now.hour;
-    final minute = now.minute;
-    final currentTime = hour * 60 + minute;
-    
-    final morningStart = 9 * 60 + 15;
-    final morningEnd = 11 * 60 + 30;
-    final afternoonStart = 13 * 60;
-    final afternoonEnd = 15 * 60;
-    
-    final isTradingTime = (currentTime >= morningStart && currentTime <= morningEnd) ||
-                         (currentTime >= afternoonStart && currentTime <= afternoonEnd);
-    
-    return !isTradingTime;
-  }
+  bool _shouldPauseAutoRefresh() => !AppConstants.isInTradingHours();
 
   final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier(0.0);
   final ScrollController _scrollController = ScrollController();
@@ -194,9 +158,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     for (int i = 0; i < codes.length; i++) {
       _oldPositions![codes[i]] = i;
     }
-  }
-
-  void _saveExpandedState() {
   }
 
   @override
@@ -611,7 +572,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         _expandedFundCodes.addAll(_sortedFundCodes);
       }
     });
-    _saveExpandedState(); 
   }
 
   void _toggleExpand(String fundCode) {
@@ -629,7 +589,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
         }
       }
     });
-    _saveExpandedState(); 
   }
 
   void _scrollToBottom() {
@@ -672,7 +631,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Color _colorForHoldingCount(int count) {
     if (count == 1) return const Color(0xFFD4A84B);
     if (count <= 3) return const Color(0xFFD4844B);
-    return const Color(0xFFD46B6B);
+    return AppConstants.lossRed;
   }
 
   double? _calculateHoldingReturn(FundHolding holding) {
@@ -835,8 +794,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     super.build(context);
     final groups = _filteredGroupedFunds;
     final sortedCodes = _sortedFundCodes;
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDark = AppConstants.isDark(context);
+    final backgroundColor = isDark ? AppConstants.darkBackground : AppConstants.lightBackground;
     final hasData = _hasData;
     final showHolderCount = !_dataManager.isPrivacyMode;
     final bottomPadding = MediaQuery.of(context).padding.bottom;

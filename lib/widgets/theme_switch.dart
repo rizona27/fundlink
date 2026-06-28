@@ -1,25 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
-
-enum ThemeMode {
-  light,
-  dark,
-  system,
-}
-
-extension ThemeModeExtension on ThemeMode {
-  String get displayName {
-    switch (this) {
-      case ThemeMode.light:
-        return '浅色';
-      case ThemeMode.dark:
-        return '深色';
-      case ThemeMode.system:
-        return '跟随系统';
-    }
-  }
-}
+import '../constants/app_constants.dart';
 
 class ThemeSwitch extends StatefulWidget {
   final ThemeMode initialMode;

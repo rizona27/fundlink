@@ -9,6 +9,7 @@ import '../utils/desktop_focus_manager.dart';
 import '../utils/view_utils.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class PendingTransactionsView extends StatefulWidget {
   const PendingTransactionsView({super.key});
@@ -216,8 +217,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: CupertinoTheme.brightnessOf(context) == Brightness.dark
-                          ? const Color(0xFF3A3A3C)
+                      color: AppConstants.isDark(context)
+                          ? AppConstants.darkBorder
                           : CupertinoColors.systemGrey6,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                     ),
@@ -311,8 +312,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                             textInputAction: TextInputAction.done,
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
-                                  ? const Color(0xFF3A3A3C)
+                              color: AppConstants.isDark(context)
+                                  ? AppConstants.darkBorder
                                   : CupertinoColors.systemGrey6,
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -353,8 +354,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                             Expanded(
                               child: CupertinoButton(
                                 padding: const EdgeInsets.symmetric(vertical: 10),
-                                color: CupertinoTheme.brightnessOf(context) == Brightness.dark
-                                    ? const Color(0xFF3A3A3C)
+                                color: AppConstants.isDark(context)
+                                    ? AppConstants.darkBorder
                                     : CupertinoColors.systemGrey6,
                                 onPressed: () => Navigator.pop(context),
                                 child: Text(
@@ -442,12 +443,12 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-    final textColor = isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
+    final isDarkMode = AppConstants.isDark(context);
+    final bgColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
+    final textColor = isDarkMode ? CupertinoColors.white : AppConstants.darkBackground;
     final secondaryTextColor = isDarkMode 
         ? CupertinoColors.white.withOpacity(0.6)
-        : const Color(0xFF8E8E93);
+        : AppConstants.systemGray;
 
     return Container(
       color: bgColor,
@@ -478,7 +479,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -560,8 +561,8 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
 
   Widget _buildTransactionCard(TransactionRecord tx, bool isDarkMode, Color textColor, Color secondaryTextColor) {
     final typeColor = tx.type == TransactionType.buy 
-        ? const Color(0xFF34C759)
-        : const Color(0xFFFF3B30);
+        ? AppConstants.successGreen
+        : AppConstants.errorRed;
     
     final expectedConfirmDate = _getExpectedConfirmDate(tx);
     final now = DateTime.now();
@@ -571,7 +572,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: CupertinoColors.systemOrange.withOpacity(0.3),
@@ -728,7 +729,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: canConfirm 
-                            ? const Color(0xFF34C759)
+                            ? AppConstants.successGreen
                             : CupertinoColors.systemOrange,
                       ),
                     ),
@@ -744,7 +745,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: canConfirm
-                  ? const Color(0xFF34C759).withOpacity(0.1)
+                  ? AppConstants.successGreen.withOpacity(0.1)
                   : CupertinoColors.systemOrange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(6),
             ),
@@ -756,7 +757,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                       : CupertinoIcons.info_circle_fill,
                   size: 12,
                   color: canConfirm 
-                      ? const Color(0xFF34C759)
+                      ? AppConstants.successGreen
                       : CupertinoColors.systemOrange,
                 ),
                 const SizedBox(width: 4),
@@ -768,7 +769,7 @@ class _PendingTransactionsViewState extends State<PendingTransactionsView> {
                     style: TextStyle(
                       fontSize: 10,
                       color: canConfirm 
-                          ? const Color(0xFF34C759)
+                          ? AppConstants.successGreen
                           : CupertinoColors.systemOrange,
                     ),
                   ),

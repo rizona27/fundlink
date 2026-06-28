@@ -14,6 +14,7 @@ import '../mixins/scroll_to_top_mixin.dart';
 import '../utils/input_formatters.dart';
 import '../utils/animation_config.dart';
 import 'add_holding_view.dart';
+import '../constants/app_constants.dart';
 
 class TopPerformersView extends StatefulWidget {
   const TopPerformersView({super.key});
@@ -511,8 +512,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
 
   Color _getValueColor(double? value) {
     if (value == null) return CupertinoColors.systemGrey;
-    if (value > 0) return const Color(0xFFFF3B30);
-    if (value < 0) return const Color(0xFF34C759);
+    if (value > 0) return AppConstants.errorRed;
+    if (value < 0) return AppConstants.successGreen;
     return CupertinoColors.systemGrey;
   }
 
@@ -541,8 +542,8 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     const bottomNavBarHeight = 56.0;
     final totalBottomPadding = bottomPadding + bottomNavBarHeight + 20;
@@ -724,7 +725,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white,
         border: Border(
           bottom: BorderSide(
             color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
@@ -829,7 +830,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  color: isDarkMode ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
@@ -866,7 +867,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  color: isDarkMode ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
@@ -899,7 +900,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
   Widget _buildHeaderRow(bool isDarkMode) {
     return Container(
       height: 36,
-      color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+      color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
       child: Row(
         children: [
           Expanded(flex: 7, child: Container(alignment: Alignment.center, child: const Text('#', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
@@ -926,7 +927,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
     final days = item.daysHeld;
 
     final backgroundColor = isDarkMode
-        ? (index % 2 == 0 ? const Color(0xFF1C1C1E) : const Color(0xFF2C2C2E))
+        ? (index % 2 == 0 ? AppConstants.darkBackground : AppConstants.darkCardBg)
         : (index % 2 == 0 ? CupertinoColors.white : CupertinoColors.systemGrey6);
 
     final showDivider = _shouldShowDivider(index);
@@ -937,7 +938,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
           color: backgroundColor,
           child: Row(
             children: [
-              Expanded(flex: 7, child: Container(alignment: Alignment.center, child: Text('${index + 1}', style: TextStyle(fontSize: 12, fontWeight: index < 3 ? FontWeight.bold : FontWeight.normal, color: index < 3 ? (isDarkMode ? const Color(0xFFFF9500) : const Color(0xFFFF9500)) : (isDarkMode ? CupertinoColors.white : CupertinoColors.black))))),
+              Expanded(flex: 7, child: Container(alignment: Alignment.center, child: Text('${index + 1}', style: TextStyle(fontSize: 12, fontWeight: index < 3 ? FontWeight.bold : FontWeight.normal, color: index < 3 ? (isDarkMode ? AppConstants.warningOrange : AppConstants.warningOrange) : (isDarkMode ? CupertinoColors.white : CupertinoColors.black))))),
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
               Expanded(flex: 20, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(holding.fundCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center), const SizedBox(height: 2), Text(holding.fundName, style: TextStyle(fontSize: 10, color: isDarkMode ? CupertinoColors.white.withOpacity(0.6) : CupertinoColors.systemGrey), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)]))),
               Container(width: 1, color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
@@ -953,7 +954,7 @@ class _TopPerformersViewState extends State<TopPerformersView> with AutomaticKee
             ],
           ),
         ),
-        if (showDivider) Container(height: 2, color: isDarkMode ? const Color(0xFFFF3B30).withOpacity(0.3) : const Color(0xFFFF3B30).withOpacity(0.5)),
+        if (showDivider) Container(height: 2, color: isDarkMode ? AppConstants.errorRed.withOpacity(0.3) : AppConstants.errorRed.withOpacity(0.5)),
       ],
     );
   }

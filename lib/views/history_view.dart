@@ -5,6 +5,7 @@ import '../services/fund_service.dart';
 import '../utils/view_utils.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class HistoryDialog extends StatefulWidget {
   final String fundCode;
@@ -173,7 +174,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
 
     return GestureDetector(
       onTap: () => Navigator.of(context).pop(),
@@ -195,7 +196,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                      color: isDark ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                     ),
                     child: Row(
@@ -232,7 +233,7 @@ class _HistoryDialogState extends State<HistoryDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey6,
+                      color: isDark ? AppConstants.darkCardBg : CupertinoColors.systemGrey6,
                       border: Border(
                         bottom: BorderSide(
                           color: isDark

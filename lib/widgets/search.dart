@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class Search extends StatelessWidget {
   final TextEditingController controller;
@@ -20,9 +21,9 @@ class Search extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final frostedBgColor = isDarkMode
-        ? const Color(0xFF1C1C1E).withOpacity(0.75)
+        ? AppConstants.darkBackground.withOpacity(0.75)
         : CupertinoColors.white.withOpacity(0.75);
     const blurSigma = 12.0;
 

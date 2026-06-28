@@ -107,6 +107,76 @@ class StockQuoteService {
     return rawCode;
   }
 
+  /// Convert a `sh`/`sz`/`hk` prefixed stock code to EastMoney `secid` format.
+  /// `sh600519` → `1.600519`, `sz000001` → `0.000001`, `hk00700` → `116.00700`
+  static String toEastMoneySecid(String prefixedCode) {
+    if (prefixedCode.startsWith('sh')) return '1.${prefixedCode.substring(2)}';
+    if (prefixedCode.startsWith('sz')) return '0.${prefixedCode.substring(2)}';
+    if (prefixedCode.startsWith('hk')) return '116.${prefixedCode.substring(2)}';
+    return prefixedCode;
+  }
+
+  /// Fetch real-time stock info from EastMoney push API.
+  /// Returns a decoded map or null on failure.
+  static Future<Map<String, dynamic>?> fetchStockInfo(String code, String name) async {
+    try {
+      final secid = toEastMoneySecid(code);
+      final url = Uri.parse(
+        'https://push2.eastmoney.com/api/qt/stock/get'
+        '?secid=$secid'
+        '&ut=b2884a393a59ad64002292a3e90d46a5'
+        '&fields=f43,f57,f58,f169,f170,f46,f44,f51,f168,f47,f164,f163,f116,f60,f45,f52,f50,f48,f167,f117,f71,f161,f49,f530',
+      );
+      final res = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body)['data'];
+      if (data == null) return null;
+      return {
+        'name': data['f57'] ?? name,
+        'code': data['f58'] ?? '',
+        'price': (data['f43'] ?? 0).toDouble() / 100,
+        'change': (data['f169'] ?? 0).toDouble() / 100,
+        'changePercent': (data['f170'] ?? 0).toDouble() / 100,
+        'high': (data['f44'] ?? 0).toDouble() / 100,
+        'low': (data['f45'] ?? 0).toDouble() / 100,
+        'open': (data['f46'] ?? 0).toDouble() / 100,
+        'prevClose': (data['f60'] ?? 0).toDouble() / 100,
+        'volume': (data['f47'] ?? 0).toInt(),
+        'amount': (data['f48'] ?? 0).toDouble(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetch historical K-line data from EastMoney API.
+  static Future<List<String>?> fetchKlineData(String code) async {
+    try {
+      final secid = toEastMoneySecid(code);
+      final url = Uri.parse(
+        'https://push2his.eastmoney.com/api/qt/stock/kline/get'
+        '?secid=$secid'
+        '&klt=101'
+        '&fqt=1'
+        '&beg=0'
+        '&end=20500101'
+        '&lmt=100'
+        '&fields1=f1,f2,f3,f4,f5,f6'
+        '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
+        '&ut=b2884a393a59ad64002292a3e90d46a5',
+      );
+      final res = await HttpClientProvider.client.get(url).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body)['data'];
+      if (data != null && data['klines'] != null) {
+        return List<String>.from(data['klines']);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fallback market cap style when API data is unavailable.
   ///
   /// Returns '未知' instead of guessing based on exchange/board because

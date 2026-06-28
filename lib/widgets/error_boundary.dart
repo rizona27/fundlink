@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import '../services/data_manager.dart';
 import '../models/log_entry.dart';
+import '../constants/app_constants.dart';
 
 class ErrorBoundary extends StatefulWidget {
   final Widget child;
@@ -101,7 +102,7 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
               widget.errorMessage ?? '加载中...',
               style: TextStyle(
                 fontSize: 14,
-                color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                color: AppConstants.isDark(context)
                     ? CupertinoColors.white.withOpacity(0.6)
                     : CupertinoColors.systemGrey,
               ),
@@ -111,8 +112,11 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       );
     }
     
-    if (widget.errorBuilder != null && _error != null && _stackTrace != null) {
-      return widget.errorBuilder!(_error!, _stackTrace!);
+    final errorBuilder = widget.errorBuilder;
+    final error = _error;
+    final stackTrace = _stackTrace;
+    if (errorBuilder != null && error != null && stackTrace != null) {
+      return errorBuilder(error, stackTrace);
     }
 
     return _DefaultErrorWidget(
@@ -205,7 +209,7 @@ class _DefaultErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     
     return Center(
       child: Padding(

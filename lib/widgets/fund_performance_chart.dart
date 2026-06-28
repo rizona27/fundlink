@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../utils/permission_gate.dart';
 import '../widgets/toast.dart';
 import 'glass_button.dart';
+import '../constants/app_constants.dart';
 
 class FundPerformanceChart extends StatefulWidget {
   final List<NetWorthPoint> fundPoints;
@@ -652,7 +653,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final rangeReturn = _calculateRangeReturn();
     final Color fundLineColor = rangeReturn >= 0
         ? CupertinoColors.systemRed
@@ -666,7 +667,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+          color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Center(child: Text('暂无数据')),
@@ -788,7 +789,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+        color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -866,7 +867,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
           RepaintBoundary(
             key: _chartContainerKey,
             child: Container(
-              color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+              color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
               padding: const EdgeInsets.all(8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -880,7 +881,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? CupertinoColors.white : const Color(0xFF1C1C1E),
+                        color: isDark ? CupertinoColors.white : AppConstants.darkBackground,
                       ),
                     ),
                   ),
@@ -1042,7 +1043,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
                               LineChartBarData(
                                 spots: customFundSpots,
                                 isCurved: true,
-                                color: const Color(0xFF00BCD4), 
+                                color: AppConstants.tealAccent, 
                                 barWidth: 1.5,
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(show: false),
@@ -1302,7 +1303,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
 
   Widget _buildExportButton(bool isDark) {
     final bgColor = isDark
-        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        ? AppConstants.darkCardBg.withValues(alpha: 0.85)
         : CupertinoColors.white.withValues(alpha: 0.85);
 
     return Container(
@@ -1424,7 +1425,7 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
         height: 32,
         decoration: BoxDecoration(
           color: isDark
-              ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+              ? AppConstants.darkCardBg.withValues(alpha: 0.85)
               : CupertinoColors.white.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
@@ -1547,9 +1548,9 @@ class _FundPerformanceChartState extends State<FundPerformanceChart> {
       child: Container(
         width: 16, height: 16,
         decoration: BoxDecoration(
-          color: isOn ? const Color(0xFF00BCD4) : Colors.transparent,
+          color: isOn ? AppConstants.tealAccent : Colors.transparent,
           border: Border.all(
-            color: isOn ? const Color(0xFF00BCD4) : (isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3),
+            color: isOn ? AppConstants.tealAccent : (isDark ? CupertinoColors.systemGrey : CupertinoColors.systemGrey3),
             width: isOn ? 0 : 1,
           ),
           borderRadius: BorderRadius.circular(3),
@@ -1710,7 +1711,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final minYear = _minDate.year;
     final maxYear = _maxDate.year;
     final years = List.generate(maxYear - minYear + 1, (i) => minYear + i);
@@ -1730,7 +1731,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
     if (dayStart > dayEnd) dayStart = dayEnd;
     final days = List.generate(dayEnd - dayStart + 1, (i) => dayStart + i);
 
-    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final panelBgColor = isDarkMode ? AppConstants.darkBackground : CupertinoColors.white;
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
     final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
       background: isDarkMode

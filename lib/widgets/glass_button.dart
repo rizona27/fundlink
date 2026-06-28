@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class GlassButton extends StatelessWidget {
   final String label;
@@ -33,9 +34,9 @@ class GlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withValues(alpha: 0.85)
+        ? AppConstants.darkCardBg.withValues(alpha: 0.85)
         : CupertinoColors.white.withValues(alpha: 0.85);
 
     Color? effectiveBgColor;

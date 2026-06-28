@@ -17,6 +17,7 @@ import '../widgets/top_holdings_widget.dart';
 import '../widgets/stock_detail_dialog.dart';
 import '../widgets/error_boundary.dart';
 import 'history_view.dart';
+import '../constants/app_constants.dart';
 
 class FundDetailPage extends StatefulWidget {
   final FundHolding holding;
@@ -285,7 +286,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
 
     return CupertinoPageScaffold(
       child: SafeArea(
@@ -450,7 +451,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+        color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -582,7 +583,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
         height: 36,
         decoration: BoxDecoration(
           color: isDark
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              ? AppConstants.darkCardBg.withOpacity(0.85)
               : CupertinoColors.white.withOpacity(0.85),
           shape: BoxShape.circle,
           boxShadow: [
@@ -616,7 +617,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+          color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import '../models/transaction_record.dart';
 import '../services/data_manager.dart';
+import '../constants/app_constants.dart';
 
 class TransactionHistoryDialog extends StatefulWidget {
   final String clientId;
@@ -44,18 +45,18 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
 
   Color _getTypeColor(TransactionType type) {
     return type == TransactionType.buy 
-        ? const Color(0xFF34C759)
-        : const Color(0xFFFF3B30);
+        ? AppConstants.successGreen
+        : AppConstants.errorRed;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white;
-    final textColor = isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
+    final isDarkMode = AppConstants.isDark(context);
+    final bgColor = isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : AppConstants.darkBackground;
     final secondaryTextColor = isDarkMode 
         ? CupertinoColors.white.withOpacity(0.6)
-        : const Color(0xFF8E8E93);
+        : AppConstants.systemGray;
 
     return Center(
       child: Container(
@@ -69,7 +70,7 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                  color: isDarkMode ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
@@ -167,7 +168,7 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.systemGrey6,
+        color: isDarkMode ? AppConstants.darkBackground : CupertinoColors.systemGrey6,
         borderRadius: BorderRadius.circular(10),
         border: tx.isPending 
             ? Border.all(color: CupertinoColors.systemOrange.withOpacity(0.3), width: 1)
@@ -198,13 +199,13 @@ class _TransactionHistoryDialogState extends State<TransactionHistoryDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD60A).withOpacity(0.15),
+                    color: AppConstants.attentionYellow.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Icon(
                     CupertinoIcons.star_fill,
                     size: 12,
-                    color: Color(0xFFFFD60A),
+                    color: AppConstants.attentionYellow,
                   ),
                 ),
               ],

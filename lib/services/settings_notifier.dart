@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../services/database_repository.dart';
-import '../widgets/theme_switch.dart' show ThemeMode;
+import '../utils/view_utils.dart';
+import '../constants/app_constants.dart' show ThemeMode;
 
 /// Manages user settings (privacy, theme, display preferences) with ChangeNotifier.
 class SettingsNotifier extends ChangeNotifier {
@@ -83,11 +84,7 @@ class SettingsNotifier extends ChangeNotifier {
 
   String obscuredName(String name) {
     if (!_isPrivacyMode || name.isEmpty) return name;
-
-    final firstChar = name[0];
-    if (name.length == 1) return name;
-
-    return '$firstChar${'*' * (name.length - 1)}';
+    return ViewUtils.obscuredName(name);
   }
 
   String _themeModeToString(ThemeMode mode) {

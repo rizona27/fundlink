@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/fund_holding.dart';
 import '../services/data_manager.dart';
+import '../constants/app_constants.dart';
 import '../views/fund_detail_view.dart';
 import '../widgets/transaction_history_dialog.dart';
 import '../utils/animation_config.dart';
@@ -159,12 +160,14 @@ class _FundCardState extends State<FundCard> {
 
   Color _getCardBackgroundColor(bool isDarkMode) {
     return isDarkMode
-        ? const Color(0xFF1C1C1E)
+        ? AppConstants.darkBackground
         : CupertinoColors.white;
   }
 
-  Color _getPrimaryTextColor(bool isDarkMode) => isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
-  Color _getSecondaryTextColor(bool isDarkMode) => isDarkMode ? CupertinoColors.white.withOpacity(0.5) : const Color(0xFF8E8E93);
+  Color _getPrimaryTextColor(bool isDarkMode) =>
+      isDarkMode ? CupertinoColors.white : AppConstants.darkBackground;
+  Color _getSecondaryTextColor(bool isDarkMode) =>
+      isDarkMode ? CupertinoColors.white.withOpacity(0.5) : AppConstants.systemGray;
 
   List<BoxShadow> _getBoxShadow(bool isDarkMode) {
     if (isDarkMode) {
@@ -229,6 +232,7 @@ class _FundCardState extends State<FundCard> {
   }
 
   String get _reportContent {
+    if (_dataManager == null) return '';
     final profit = widget.holding.profit;
     final dataManager = _dataManager!;
     final annualizedReturn = dataManager.calculateProfit(widget.holding).annualized;
@@ -290,14 +294,14 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final profit = widget.holding.profit;
     final absoluteReturn = widget.holding.profitRate;
     final annualizedReturn = _annualizedReturn;
     final bool hasNoData = !widget.holding.isValid || widget.holding.currentNav <= 0;
     final isPinned = widget.holding.isPinned;
 
-    final dataManager = _dataManager!;
+    final dataManager = _dataManager ?? DataManagerProvider.of(context);
     final displayClientName = dataManager.obscuredName(widget.holding.clientName);
 
     return GestureDetector(
@@ -383,18 +387,18 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                             ),
                             if (isPinned) ...[
                               const SizedBox(width: 4),
-                              const Icon(CupertinoIcons.pin_fill, size: 12, color: Color(0xFFFF9500)),
+                              const Icon(CupertinoIcons.pin_fill, size: 12, color: AppConstants.warningOrange),
                             ],
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
                       if (hasNoData)
-                        const Text('净值待加载', style: TextStyle(fontSize: 11, color: Color(0xFFFF9500)))
+                        const Text('净值待加载', style: TextStyle(fontSize: 11, color: AppConstants.warningOrange))
                       else
                         Text(
                           '${widget.holding.currentNav.toStringAsFixed(4)}(${_formatDate(widget.holding.navDate)})',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF007AFF)),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.primaryBlue),
                         ),
                     ],
                   ),
@@ -484,7 +488,7 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minSize: 0,
                         onPressed: _onNavigateToDetail,
-                        child: const Text('基金详情', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
+                        child: const Text('基金详情', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppConstants.primaryBlue)),
                       ),
                       const SizedBox(width: 8),
                       CupertinoButton(
@@ -492,7 +496,7 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                         minSize: 0,
                         onPressed: () => _onViewTransactionHistory(),
                         child: const Text('交易记录',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF34C759))),
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppConstants.successGreen)),
                       ),
                       const Spacer(),
                       Row(
@@ -503,14 +507,14 @@ ${widget.holding.fundName} | ${widget.holding.fundCode}
                             onPressed: widget.holding.clientId.isEmpty ? null : _onCopyClientId,
                             child: Text('复制客户号',
                                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
-                                    color: widget.holding.clientId.isEmpty ? CupertinoColors.systemGrey : const Color(0xFF007AFF).withOpacity(0.8))),
+                                    color: widget.holding.clientId.isEmpty ? CupertinoColors.systemGrey : AppConstants.primaryBlue.withOpacity(0.8))),
                           ),
                           const SizedBox(width: 8),
                           CupertinoButton(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             minSize: 0,
                             onPressed: _onGenerateReport,
-                            child: const Text('报告', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF007AFF))),
+                            child: const Text('报告', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppConstants.primaryBlue)),
                           ),
                         ],
                       ),

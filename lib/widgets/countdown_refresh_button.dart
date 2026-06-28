@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class CountdownRefreshButton extends StatefulWidget {
   final VoidCallback onRefresh;
@@ -74,26 +75,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     });
   }
   
-  bool _checkIsTradingTime() {
-    final now = DateTime.now();
-    final weekday = now.weekday;
-    
-    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
-      return false;
-    }
-    
-    final hour = now.hour;
-    final minute = now.minute;
-    final currentTime = hour * 60 + minute;
-    
-    final morningStart = 9 * 60 + 30;
-    final morningEnd = 11 * 60 + 30;
-    final afternoonStart = 13 * 60;
-    final afternoonEnd = 15 * 60;
-    
-    return (currentTime >= morningStart && currentTime <= morningEnd) ||
-           (currentTime >= afternoonStart && currentTime <= afternoonEnd);
-  }
+  bool _checkIsTradingTime() => AppConstants.isInTradingHours();
 
   void _restartTimer() {
     if (_isDisposed) return;
@@ -117,7 +99,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
 
   void _showIntervalPickerDialog() {
     if (_isDisposed) return;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
 
     showCupertinoModalPopup(
       context: context,
@@ -206,7 +188,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final interval = widget.refreshIntervalSeconds > 0 ? widget.refreshIntervalSeconds : 60;
 
     double displayProgress;
@@ -225,7 +207,7 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
         height: widget.size,
         decoration: BoxDecoration(
           color: isDarkMode
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+              ? AppConstants.darkCardBg.withOpacity(0.85)
               : CupertinoColors.white.withOpacity(0.85),
           shape: BoxShape.circle,
           boxShadow: [

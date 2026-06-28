@@ -115,7 +115,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   
   Future<void> _onRefresh() async {
     if (widget.onRefresh != null) {
-      widget.onRefresh!();
+      widget.onRefresh?.call();
     }
     await _loadFirstPage();
   }

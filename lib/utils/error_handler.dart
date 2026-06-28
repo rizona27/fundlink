@@ -212,13 +212,6 @@ class ErrorHandler {
     return message;
   }
 
-  static String maskSensitiveData(String data, {int visibleChars = 2}) {
-    if (data.length <= visibleChars) {
-      return '*' * data.length;
-    }
-    return data.substring(0, visibleChars) + '*' * (data.length - visibleChars);
-  }
-
   static String sanitizeInput(String input) {
     String sanitized = input.replaceAll(RegExp(r'<[^>]*>'), '');
     

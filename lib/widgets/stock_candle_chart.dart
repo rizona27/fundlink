@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/app_constants.dart';
+import '../services/stock_quote_service.dart';
 
 class CandleData {
   final String date;
@@ -115,15 +117,7 @@ class StockCandleChartState extends State<StockCandleChart> {
       final begDate = '${startDate.year}${startDate.month.toString().padLeft(2, '0')}${startDate.day.toString().padLeft(2, '0')}';
       final endDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
       
-      String formattedSecid = widget.stockCode;
-      if (widget.stockCode.startsWith('sh')) {
-        formattedSecid = '1.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('sz')) {
-        formattedSecid = '0.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('hk')) {
-        formattedSecid = '116.${widget.stockCode.substring(2)}';
-      }
-      
+      String formattedSecid = StockQuoteService.toEastMoneySecid(widget.stockCode);
       int klt;
       switch (_selectedPeriod) {
         case 'day':
@@ -219,15 +213,7 @@ class StockCandleChartState extends State<StockCandleChart> {
     
     
     try {
-      String formattedSecid = widget.stockCode;
-      if (widget.stockCode.startsWith('sh')) {
-        formattedSecid = '1.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('sz')) {
-        formattedSecid = '0.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('hk')) {
-        formattedSecid = '116.${widget.stockCode.substring(2)}';
-      }
-      
+      String formattedSecid = StockQuoteService.toEastMoneySecid(widget.stockCode);
       int klt;
       int loadCount;
       switch (_selectedPeriod) {
@@ -342,15 +328,7 @@ class StockCandleChartState extends State<StockCandleChart> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      String formattedSecid = widget.stockCode;
-      if (widget.stockCode.startsWith('sh')) {
-        formattedSecid = '1.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('sz')) {
-        formattedSecid = '0.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('hk')) {
-        formattedSecid = '116.${widget.stockCode.substring(2)}';
-      }
-
+      String formattedSecid = StockQuoteService.toEastMoneySecid(widget.stockCode);
       int klt;
       int lmt; 
       int preloadLmt; 
@@ -514,15 +492,7 @@ class StockCandleChartState extends State<StockCandleChart> {
     
 
     try {
-      String formattedSecid = widget.stockCode;
-      if (widget.stockCode.startsWith('sh')) {
-        formattedSecid = '1.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('sz')) {
-        formattedSecid = '0.${widget.stockCode.substring(2)}';
-      } else if (widget.stockCode.startsWith('hk')) {
-        formattedSecid = '116.${widget.stockCode.substring(2)}';
-      }
-
+      String formattedSecid = StockQuoteService.toEastMoneySecid(widget.stockCode);
       int klt;
       int loadCount; 
       
@@ -1151,7 +1121,7 @@ class _CrosshairWithLabelsPainter extends CustomPainter {
     
     final bgPaint = Paint()
       ..color = isDark 
-          ? const Color(0xFF2C2C2E).withOpacity(0.9)
+          ? AppConstants.darkCardBg.withOpacity(0.9)
           : CupertinoColors.white.withOpacity(0.9);
     canvas.drawRRect(dateBgRect, bgPaint);
     

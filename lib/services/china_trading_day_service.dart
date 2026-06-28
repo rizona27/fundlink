@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:world_holidays/world_holidays.dart';
 import 'http_client_provider.dart';
+import '../utils/view_utils.dart';
 
 class ChinaTradingDayService {
   static final ChinaTradingDayService _instance = ChinaTradingDayService._internal();
@@ -16,7 +17,7 @@ class ChinaTradingDayService {
   final Map<String, bool> _cache = {};
   
   Future<bool> isTradingDay(DateTime date) async {
-    final dateKey = _formatDate(date);
+    final dateKey = ViewUtils.formatDate(date);
     if (_cache.containsKey(dateKey)) {
       return _cache[dateKey]!;
     }
@@ -85,7 +86,7 @@ class ChinaTradingDayService {
   /// Sync check using the same cache + world-holiday fallback as getNextTradingDaySync.
   /// Accurate for Chinese holidays without requiring an async API call.
   bool isTradingDaySync(DateTime date) {
-    final dateKey = _formatDate(date);
+    final dateKey = ViewUtils.formatDate(date);
     if (_cache.containsKey(dateKey)) {
       return _cache[dateKey]!;
     }
@@ -127,7 +128,7 @@ class ChinaTradingDayService {
   
   Future<bool?> _checkByApi(DateTime date) async {
     try {
-      final dateString = _formatDate(date);
+      final dateString = ViewUtils.formatDate(date);
       final url = 'https://timor.tech/api/holiday/info/$dateString';
       
       final response = await HttpClientProvider.client.get(
@@ -177,7 +178,4 @@ class ChinaTradingDayService {
            date.weekday <= DateTime.friday;
   }
   
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
 }

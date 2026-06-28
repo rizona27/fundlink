@@ -11,6 +11,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
+import '../constants/app_constants.dart';
 
 enum SortCycleType {
   fundReturns,
@@ -61,7 +62,7 @@ extension SortKeyExtension on SortKey {
       case SortKey.none:
         return CupertinoColors.systemGrey;
       case SortKey.latestNav:
-        return const Color(0xFF8B5CF6);
+        return AppConstants.accentPurple;
       case SortKey.navReturn1m:
         return CupertinoColors.systemBlue;
       case SortKey.navReturn3m:
@@ -73,11 +74,11 @@ extension SortKeyExtension on SortKey {
       case SortKey.amount:
         return const Color(0xFF4A90D9);
       case SortKey.profit:
-        return const Color(0xFF34C759);
+        return AppConstants.successGreen;
       case SortKey.profitRate:
-        return const Color(0xFFFF9500);
+        return AppConstants.warningOrange;
       case SortKey.days:
-        return const Color(0xFFD46B6B);
+        return AppConstants.lossRed;
     }
   }
 
@@ -497,7 +498,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       // cache and skip the API; only truly stale funds reach the network.
       if (widget.onRefresh != null) {
         // External callback manages its own completion toast.
-        widget.onRefresh!();
+        widget.onRefresh?.call();
       } else {
         await widget.dataManager!.refreshAllHoldings(widget.fundService!, null);
         if (mounted) {
@@ -550,25 +551,25 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   Color _getBackgroundColor(double progress, bool isDarkMode) {
     if (progress >= 0.95) {
       return isDarkMode
-          ? const Color(0xFF1C1C1E).withOpacity(0.95)
-          : const Color(0xFFF2F2F7).withOpacity(0.95);
+          ? AppConstants.darkBackground.withOpacity(0.95)
+          : AppConstants.lightBackground.withOpacity(0.95);
     } else if (progress >= 0.5) {
       final opacity = 0.5 + (progress - 0.5) * 0.9;
       return isDarkMode
-          ? const Color(0xFF1C1C1E).withOpacity(opacity)
-          : const Color(0xFFF2F2F7).withOpacity(opacity);
+          ? AppConstants.darkBackground.withOpacity(opacity)
+          : AppConstants.lightBackground.withOpacity(opacity);
     } else {
       return isDarkMode
-          ? const Color(0xFF1C1C1E).withOpacity(0.5)
-          : const Color(0xFFF2F2F7).withOpacity(0.5);
+          ? AppConstants.darkBackground.withOpacity(0.5)
+          : AppConstants.lightBackground.withOpacity(0.5);
     }
   }
 
   Widget _wrapWithGlass(Widget child, {bool enabled = true, bool disabled = false}) {
     if (!enabled) return child;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final bgColor = isDarkMode
-        ? const Color(0xFF2C2C2E).withOpacity(0.85)
+        ? AppConstants.darkCardBg.withOpacity(0.85)
         : CupertinoColors.white.withOpacity(0.85);
     final opacity = disabled ? 0.5 : 1.0;
     return Opacity(
@@ -615,7 +616,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             widget.valuationUpdateTime!,
             style: TextStyle(
               fontSize: 10,
-              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+              color: AppConstants.isDark(context)
                   ? CupertinoColors.white.withOpacity(0.5)
                   : CupertinoColors.systemGrey,
             ),
@@ -625,26 +626,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     );
   }
   
-  bool _checkIsTradingTime() {
-    final now = DateTime.now();
-    final weekday = now.weekday;
-    
-    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
-      return false;
-    }
-    
-    final hour = now.hour;
-    final minute = now.minute;
-    final currentTime = hour * 60 + minute;
-    
-    final morningStart = 9 * 60 + 30;
-    final morningEnd = 11 * 60 + 30;
-    final afternoonStart = 13 * 60;
-    final afternoonEnd = 15 * 60;
-    
-    return (currentTime >= morningStart && currentTime <= morningEnd) ||
-           (currentTime >= afternoonStart && currentTime <= afternoonEnd);
-  }
+  bool _checkIsTradingTime() => AppConstants.isInTradingHours();
 
   Widget _buildLeftForMenuStyle() {
     final children = <Widget>[];
@@ -759,7 +741,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             widget.valuationUpdateTime!,
             style: TextStyle(
               fontSize: 10,
-              color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+              color: AppConstants.isDark(context)
                   ? CupertinoColors.white.withOpacity(0.5)
                   : CupertinoColors.systemGrey,
             ),
@@ -844,14 +826,14 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildRefreshButton() {
     final hasData = _hasData;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return GestureDetector(
       onTap: hasData ? _onRefresh : null,
       onLongPress: hasData ? _onLongPressRefresh : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -870,13 +852,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildResetButton() {
     final hasData = _hasData;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return GestureDetector(
       onTap: hasData ? widget.onReset : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -893,13 +875,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildFilterButton() {
     final hasData = _hasData;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return GestureDetector(
       onTap: hasData ? widget.onFilter : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -915,13 +897,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Widget _buildSearchButton() {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return GestureDetector(
       onTap: () => _setSearchVisible(!_currentSearchVisible),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -942,13 +924,13 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
 
   Widget _buildExpandCollapseButton() {
     final hasData = _hasData;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return GestureDetector(
       onTap: hasData ? widget.onToggleExpandAll : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
+          color: isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -968,8 +950,8 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   }
 
   Widget _buildSortButton({bool disabled = false}) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDarkMode ? const Color(0xFF2C2C2E).withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85);
+    final isDarkMode = AppConstants.isDark(context);
+    final bgColor = isDarkMode ? AppConstants.darkCardBg.withOpacity(0.85) : CupertinoColors.white.withOpacity(0.85);
     final textColor = widget.sortKey == SortKey.none
         ? (isDarkMode ? CupertinoColors.white : CupertinoColors.label)
         : widget.sortKey.color;
@@ -1128,7 +1110,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       isClosed = true;
       scrollListener?.call();
       if (menuKey?.currentState != null) {
-        menuKey!.currentState!.close();
+        menuKey?.currentState?.close();
       } else {
         try {
           overlayEntry?.remove();
@@ -1159,16 +1141,19 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     // Close menu when user scrolls
     if (widget.scrollController != null) {
       final initialOffset = widget.scrollController!.offset;
-      scrollListener = () {
-        widget.scrollController?.removeListener(scrollListener!);
+      final sc = widget.scrollController;
+      VoidCallback? listener;
+      listener = () {
+        sc?.removeListener(listener!);
       };
+      scrollListener = listener;
       void onScroll() {
         if (!isClosed && (widget.scrollController!.offset - initialOffset).abs() > 4.0) {
           scrollListener?.call();
           _closeMenuWithAnimation();
         }
       }
-      widget.scrollController!.addListener(onScroll);
+      widget.scrollController?.addListener(onScroll);
       scrollListener = () {
         widget.scrollController?.removeListener(onScroll);
       };
@@ -1237,7 +1222,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
   @override
   Widget build(BuildContext context) {
     final progress = _hideController.value;
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final bgColor = widget.backgroundColor ?? _getBackgroundColor(progress, isDarkMode);
     final blurAmount = (1 - progress) * 8;
 
@@ -1519,13 +1504,13 @@ class _GlassPopupMenuButtonState extends State<_GlassPopupMenuButton> with Singl
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: CupertinoTheme.brightnessOf(context) == Brightness.dark
-              ? const Color(0xFF2C2C2E).withOpacity(0.85)
+          color: AppConstants.isDark(context)
+              ? AppConstants.darkCardBg.withOpacity(0.85)
               : CupertinoColors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(CupertinoTheme.brightnessOf(context) == Brightness.dark ? 0.2 : 0.1),
+              color: Colors.black.withOpacity(AppConstants.isDark(context) ? 0.2 : 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -1677,13 +1662,13 @@ class _AnimatedButtonGroupState extends State<_AnimatedButtonGroup> with TickerP
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final bgOpacity = isDark
         ? AnimationConfig.menuBackgroundOpacityDark
         : AnimationConfig.menuBackgroundOpacityLight;
     final bgColor = widget.isGlassStyle
         ? (isDark
-            ? const Color(0xFF1C1C1E).withOpacity(bgOpacity)
+            ? AppConstants.darkBackground.withOpacity(bgOpacity)
             : CupertinoColors.white.withOpacity(bgOpacity))
         : Colors.transparent;
     final br = BorderRadius.circular(AnimationConfig.menuBorderRadius);
@@ -1796,13 +1781,13 @@ class _SortMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final bgColor = isGlassStyle
         ? (isDark
-            ? const Color(0xFF3A3A3C).withOpacity(0.45)
-            : const Color(0xFFF2F2F7).withOpacity(0.5))
+            ? AppConstants.darkBorder.withOpacity(0.45)
+            : AppConstants.lightBackground.withOpacity(0.5))
         : (isDark
-            ? const Color(0xFF2C2C2E).withOpacity(0.9)
+            ? AppConstants.darkCardBg.withOpacity(0.9)
             : CupertinoColors.white.withOpacity(0.9));
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
 

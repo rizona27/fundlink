@@ -11,6 +11,7 @@ import '../models/top_holding.dart';
 import '../services/china_trading_day_service.dart';
 import '../services/http_client_provider.dart';
 import '../services/data_manager.dart';
+import '../utils/view_utils.dart';
 
 class FundService {
   final DataManager? _dataManager;
@@ -48,10 +49,6 @@ class FundService {
   String _portfolioCacheKey(List<Map<String, dynamic>> funds) {
     final codes = funds.map((f) => '${f['code']}=${f['cost']}').toList()..sort();
     return codes.join('|');
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   /// Step backwards from [date] (exclusive) to find the most recent trading day.
@@ -235,36 +232,18 @@ class FundService {
     try {
       final url = Uri.parse('https://fund.eastmoney.com/pingzhongdata/$code.js');
 
-      http.Response? response;
-      var retryCount = 0;
-      const maxRetries = 2; 
-      Exception? lastException;
-      
-      while (retryCount <= AppConstants.maxNetworkRetries) {
-        try {
-          response = await HttpClientProvider.client.get(
-            url,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': '*/*',
-            },
-          ).timeout(AppConstants.networkRequestTimeout);
-          
-          if (response.statusCode == 200) {
-            break;
-          }
-        } catch (e) {
-          lastException = e is Exception ? e : Exception(e.toString());
-          retryCount++;
-          
-          if (retryCount <= AppConstants.maxNetworkRetries) {
-            await Future.delayed(Duration(milliseconds: AppConstants.networkRetryDelayBase.inMilliseconds * retryCount));
-          }
-        }
-      }
-      
+      final response = await ViewUtils.retryFetch(() =>
+        HttpClientProvider.client.get(
+          url,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': '*/*',
+          },
+        ).timeout(AppConstants.networkRequestTimeout),
+      );
+
       if (response == null) {
-        throw lastException ?? Exception('请求失败');
+        throw Exception('请求失败');
       }
       
       final statusCode = response.statusCode;
@@ -434,7 +413,7 @@ class FundService {
       final lastDate = cachedPoints.last.date;
       _dataManager?.addLog(
         '基金 $code 使用净值缓存: ${cachedPoints.length}条 '
-        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        '(${ViewUtils.formatDate(firstDate)} ~ ${ViewUtils.formatDate(lastDate)})',
         type: LogType.cache,
       );
       
@@ -480,7 +459,7 @@ class FundService {
       final lastDate = result.last.date;
       _dataManager?.addLog(
         '📦 [缓存保存] 基金 $code | 已保存 ${result.length} 条净值到本地缓存 '
-        '(${_formatDate(firstDate)} ~ ${_formatDate(lastDate)})',
+        '(${ViewUtils.formatDate(firstDate)} ~ ${ViewUtils.formatDate(lastDate)})',
         type: LogType.cache,
       );
     }
@@ -519,7 +498,7 @@ class FundService {
         final newLastDate = newerPoints.last.date;
         _dataManager?.addLog(
           '基金 $code 增量更新净值: +${newerPoints.length}条 '
-          '(${_formatDate(newFirstDate)} ~ ${_formatDate(newLastDate)})',
+          '(${ViewUtils.formatDate(newFirstDate)} ~ ${ViewUtils.formatDate(newLastDate)})',
           type: LogType.network,
         );
       }
@@ -596,39 +575,21 @@ class FundService {
 
   Future<List<TopHolding>> fetchTopHoldingsFromHtml(String code) async {
     final url = Uri.parse('https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=$code&topline=10');
-    
-    http.Response? response;
-    var retryCount = 0;
-    const maxRetries = 2; 
-    Exception? lastException;
-    
-    while (retryCount <= maxRetries) {
-      try {
-        response = await HttpClientProvider.client.get(
-          url,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://fund.eastmoney.com/',
-          },
-        ).timeout(const Duration(seconds: 15));
-        
-        if (response.statusCode == 200) {
-          break;
-        }
-      } catch (e) {
-        lastException = e is Exception ? e : Exception(e.toString());
-        retryCount++;
-        
-        if (retryCount <= maxRetries) {
-          await Future.delayed(Duration(milliseconds: 500 * retryCount));
-        }
-      }
-    }
-    
+
+    final response = await ViewUtils.retryFetch(() =>
+      HttpClientProvider.client.get(
+        url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://fund.eastmoney.com/',
+        },
+      ).timeout(AppConstants.networkRequestTimeout),
+    );
+
     if (response == null) {
-      throw lastException ?? Exception('请求失败');
+      throw Exception('请求失败');
     }
-    
+
     if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
     final htmlString = utf8.decode(response.bodyBytes);
     final document = html_parser.parse(htmlString);

@@ -5,6 +5,7 @@ import '../models/log_entry.dart';
 import '../widgets/toast.dart';
 import '../widgets/glass_button.dart';
 import '../utils/input_formatters.dart';
+import '../constants/app_constants.dart';
 
 class BatchRenameDialog extends StatefulWidget {
   final String clientKey;
@@ -172,8 +173,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final secondaryColor = isDark 
         ? CupertinoColors.white.withOpacity(0.6)
@@ -197,7 +198,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                      color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                     ),
                     child: Row(
@@ -242,7 +243,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -277,7 +278,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         const SizedBox(height: 6),
                         Container(
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: CupertinoTextField(
@@ -311,7 +312,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         const SizedBox(height: 6),
                         Container(
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                            color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: CupertinoTextField(

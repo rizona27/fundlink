@@ -5,6 +5,7 @@ import '../services/fund_service.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
 import 'toast.dart';
+import '../constants/app_constants.dart';
 
 class RefreshButton extends StatefulWidget {
   final DataManager dataManager;
@@ -90,7 +91,7 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
   void _showLoadingOverlay(BuildContext context, {String message = '刷新中...'}) {
     _hideLoadingOverlay();
 
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final overlayColor = isDarkMode
         ? Colors.black.withOpacity(0.7 * _overlayOpacity)
         : Colors.black.withOpacity(0.3 * _overlayOpacity);
@@ -115,7 +116,7 @@ class _RefreshButtonState extends State<RefreshButton> with TickerProviderStateM
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF1C1C1E).withOpacity(0.95)
+                    ? AppConstants.darkBackground.withOpacity(0.95)
                     : CupertinoColors.systemBackground,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [

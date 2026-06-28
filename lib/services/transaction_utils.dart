@@ -5,24 +5,23 @@ import '../services/china_trading_day_service.dart';
 class TransactionUtils {
   TransactionUtils._(); // prevent instantiation
 
+  static final ChinaTradingDayService _tds = ChinaTradingDayService();
+
   static bool isWeekday(DateTime date) {
     final weekday = date.weekday;
     return weekday >= DateTime.monday && weekday <= DateTime.friday;
   }
 
   static Future<bool> isTradingDay(DateTime date) async {
-    final service = ChinaTradingDayService();
-    return await service.isTradingDay(date);
+    return await _tds.isTradingDay(date);
   }
 
   static Future<DateTime> getNextTradingDay({DateTime? from}) async {
-    final service = ChinaTradingDayService();
-    return await service.getNextTradingDay(from: from);
+    return await _tds.getNextTradingDay(from: from);
   }
 
   static Future<DateTime> getPreviousTradingDay({DateTime? from}) async {
-    final service = ChinaTradingDayService();
-    return await service.getPreviousTradingDay(from: from);
+    return await _tds.getPreviousTradingDay(from: from);
   }
 
   static DateTime getNextWeekday(DateTime from) {
@@ -38,15 +37,14 @@ class TransactionUtils {
     final today = DateTime(now.year, now.month, now.day);
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
 
-    final service = ChinaTradingDayService();
-    final isTradeDay = service.isTradingDaySync(tradeDay);
+    final isTradeDay = _tds.isTradingDaySync(tradeDay);
 
     if (tradeDay.isBefore(today)) {
       if (!isTradeDay) {
-        return service.getNextTradingDaySync(from: tradeDay);
+        return _tds.getNextTradingDaySync(from: tradeDay);
       } else {
         if (isAfter1500) {
-          return service.getNextTradingDaySync(from: tradeDay);
+          return _tds.getNextTradingDaySync(from: tradeDay);
         } else {
           return tradeDay;
         }
@@ -56,9 +54,9 @@ class TransactionUtils {
     final effectiveIsAfter1500 = isTradeDay ? isAfter1500 : false;
 
     if (effectiveIsAfter1500) {
-      return service.getNextTradingDaySync(from: tradeDay);
+      return _tds.getNextTradingDaySync(from: tradeDay);
     } else {
-      return isTradeDay ? tradeDay : service.getNextTradingDaySync(from: tradeDay);
+      return isTradeDay ? tradeDay : _tds.getNextTradingDaySync(from: tradeDay);
     }
   }
 
@@ -103,19 +101,18 @@ class TransactionUtils {
     }
 
     final tradeDay = DateTime(tradeDate.year, tradeDate.month, tradeDate.day);
-    final service = ChinaTradingDayService();
-    final isTradeDay = service.isTradingDaySync(tradeDay);
+    final isTradeDay = _tds.isTradingDaySync(tradeDay);
     final effectiveIsAfter1500 = isTradeDay ? isAfter1500 : false;
 
     DateTime actualNavDate;
     if (effectiveIsAfter1500) {
-      actualNavDate = service.getNextTradingDaySync(from: tradeDay);
+      actualNavDate = _tds.getNextTradingDaySync(from: tradeDay);
     } else {
       actualNavDate =
-          isTradeDay ? tradeDay : service.getNextTradingDaySync(from: tradeDay);
+          isTradeDay ? tradeDay : _tds.getNextTradingDaySync(from: tradeDay);
     }
 
-    return service.getNextTradingDaySync(from: actualNavDate);
+    return _tds.getNextTradingDaySync(from: actualNavDate);
   }
 
   static Future<DateTime> calculateConfirmDateAsync(

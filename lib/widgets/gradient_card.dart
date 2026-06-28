@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 class GradientCard extends StatelessWidget {
   final String title;
@@ -37,11 +38,11 @@ class GradientCard extends StatelessWidget {
     if (count == null) return CupertinoColors.label.withOpacity(0.5);
     if (count == 1) return const Color(0xFFD4A84B);
     if (count <= 3) return const Color(0xFFD4844B);
-    return const Color(0xFFD46B6B);
+    return AppConstants.lossRed;
   }
 
   Color _getEndColor() {
-    if (isDarkMode) return const Color(0xFF1C1C1E);
+    if (isDarkMode) return AppConstants.darkBackground;
     return CupertinoColors.white;
   }
 

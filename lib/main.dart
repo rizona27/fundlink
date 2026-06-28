@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' as io;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,7 +20,6 @@ import 'views/splash_view.dart';
 import 'views/summary_view.dart';
 import 'views/top_performers_view.dart';
 import 'widgets/floating_tab_bar.dart';
-import 'widgets/theme_switch.dart' as theme;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -263,9 +262,9 @@ class _MyAppState extends State<MyApp> {
 
   Brightness _getBrightness() {
     final themeMode = _dataManager.themeMode;
-    if (themeMode == theme.ThemeMode.light) {
+    if (themeMode == ThemeMode.light) {
       return Brightness.light;
-    } else if (themeMode == theme.ThemeMode.dark) {
+    } else if (themeMode == ThemeMode.dark) {
       return Brightness.dark;
     } else {
       return WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -295,20 +294,27 @@ class _MyAppState extends State<MyApp> {
         navigatorObservers: [MyApp.routeObserver],
         theme: CupertinoThemeData(
           brightness: currentIsDarkMode ? Brightness.dark : Brightness.light,
-          primaryColor: const Color(0xFF007AFF),
+          primaryColor: AppConstants.primaryBlue,
           primaryContrastingColor: CupertinoColors.white,
-          scaffoldBackgroundColor: currentIsDarkMode 
-              ? const Color(0xFF1C1C1E) 
-              : const Color(0xFFF2F2F7),
+          scaffoldBackgroundColor: AppConstants.bgColor(
+            currentIsDarkMode ? Brightness.dark : Brightness.light,
+          ),
+          barBackgroundColor: currentIsDarkMode
+              ? AppConstants.darkBackground
+              : AppConstants.lightBackground,
           textTheme: CupertinoTextThemeData(
             navTitleTextStyle: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: currentIsDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+              color: currentIsDarkMode
+                  ? CupertinoColors.white
+                  : AppConstants.darkBackground,
             ),
             textStyle: TextStyle(
               fontSize: 17,
-              color: currentIsDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E),
+              color: currentIsDarkMode
+                  ? CupertinoColors.white
+                  : AppConstants.darkBackground,
             ),
           ),
         ),
@@ -367,7 +373,7 @@ class _PermissionDeniedPageState extends State<_PermissionDeniedPage> {
   @override
   Widget build(BuildContext context) {
     return const CupertinoPageScaffold(
-      backgroundColor: Color(0xFFF2F2F7),
+      backgroundColor: AppConstants.lightBackground,
       child: SizedBox.shrink(),
     );
   }

@@ -114,7 +114,7 @@ flutter build macos --release   # macOS
 lib/
 ├── main.dart                              # 应用入口，主题配置与路由
 ├── constants/
-│   └── app_constants.dart                 # 全局常量（API 地址、缓存 TTL、业务规则）
+│   └── app_constants.dart                 # 全局常量（API、缓存、业务规则、统一颜色）
 ├── data/
 │   └── industry_classification.dart        # 600+ 只股票代码→行业精确映射表
 ├── models/

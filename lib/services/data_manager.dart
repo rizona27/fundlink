@@ -20,20 +20,7 @@ import '../services/transaction_utils.dart';
 import '../services/valuation_notifier.dart';
 import '../services/version_check_service.dart';
 import '../utils/smart_cache.dart';
-import '../widgets/theme_switch.dart' show ThemeMode;
-
-extension ThemeModeDisplayName on ThemeMode {
-  String get displayName {
-    switch (this) {
-      case ThemeMode.light:
-        return '浅色';
-      case ThemeMode.dark:
-        return '深色';
-      case ThemeMode.system:
-        return '跟随系统';
-    }
-  }
-}
+import '../constants/app_constants.dart' show ThemeMode, ThemeModeExtension;
 
 class DataManager extends ChangeNotifier {
   final DatabaseRepository? _repository = kIsWeb ? null : DatabaseRepository();

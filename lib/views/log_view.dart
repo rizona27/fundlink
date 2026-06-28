@@ -7,6 +7,7 @@ import '../widgets/adaptive_top_bar.dart';
 import '../utils/animation_config.dart';
 import '../mixins/scroll_to_top_mixin.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class LogView extends StatefulWidget {
   const LogView({super.key});
@@ -183,11 +184,11 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
   Color _getLogTextColor(LogType type, bool isDarkMode) {
     switch (type) {
       case LogType.success:
-        return const Color(0xFF34C759);
+        return AppConstants.successGreen;
       case LogType.error:
-        return const Color(0xFFFF3B30);
+        return AppConstants.errorRed;
       case LogType.warning:
-        return const Color(0xFFFF9500);
+        return AppConstants.warningOrange;
       case LogType.info:
         return isDarkMode ? CupertinoColors.white : CupertinoColors.label;
       case LogType.network:
@@ -211,8 +212,8 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
     final displayedLogs = _displayedLogs;
     final totalCount = _getFilteredLogs().length;
 
@@ -386,7 +387,7 @@ class _LogViewState extends State<LogView> with ScrollToTopMixin {
     required Color textColor,
     required VoidCallback onPressed,
   }) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(

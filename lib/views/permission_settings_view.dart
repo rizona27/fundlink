@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:permission_handler/permission_handler.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class PermissionSettingsView extends StatefulWidget {
   const PermissionSettingsView({super.key});
@@ -55,8 +56,9 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
 
     // Check other permissions
     for (final p in _permissions) {
-      if (p.permission != null) {
-        p.status = await p.permission!.status;
+      final perm = p.permission;
+      if (perm != null) {
+        p.status = await perm.status;
       }
     }
     if (mounted) setState(() => _loading = false);
@@ -72,7 +74,9 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
 
     setState(() => item.requesting = true);
 
-    final status = await item.permission!.request();
+    final perm = item.permission;
+    if (perm == null) return;
+    final status = await perm.request();
     item.status = status;
 
     if (mounted) {
@@ -109,8 +113,8 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return CupertinoPageScaffold(
       backgroundColor: bgColor,
@@ -140,7 +144,7 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? const Color(0xFF2C2C2E)
+                                ? AppConstants.darkCardBg
                                 : CupertinoColors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -154,7 +158,7 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
                                     size: 16,
                                     color: isDark
                                         ? CupertinoColors.systemBlue
-                                        : const Color(0xFF6366F1),
+                                        : AppConstants.accentIndigo,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
@@ -202,7 +206,7 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        color: isDark ? AppConstants.darkCardBg : CupertinoColors.white,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -214,10 +218,10 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
               color: isNetwork
                   ? CupertinoColors.systemBlue.withOpacity(0.15)
                   : granted
-                      ? const Color(0xFF34C759).withOpacity(0.15)
+                      ? AppConstants.successGreen.withOpacity(0.15)
                       : permanent
-                          ? const Color(0xFFFF3B30).withOpacity(0.15)
-                          : const Color(0xFFFF9500).withOpacity(0.15),
+                          ? AppConstants.errorRed.withOpacity(0.15)
+                          : AppConstants.warningOrange.withOpacity(0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -232,10 +236,10 @@ class _PermissionSettingsViewState extends State<PermissionSettingsView> with Wi
               color: isNetwork
                   ? CupertinoColors.systemBlue
                   : granted
-                      ? const Color(0xFF34C759)
+                      ? AppConstants.successGreen
                       : permanent
-                          ? const Color(0xFFFF3B30)
-                          : const Color(0xFFFF9500),
+                          ? AppConstants.errorRed
+                          : AppConstants.warningOrange,
             ),
           ),
           const SizedBox(width: 14),

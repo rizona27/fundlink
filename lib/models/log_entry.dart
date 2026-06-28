@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../constants/app_constants.dart';
 
 enum LogType {
   info,
@@ -31,13 +32,13 @@ extension LogTypeExtension on LogType {
   Color get color {
     switch (this) {
       case LogType.info:
-        return const Color(0xFF007AFF);
+        return AppConstants.primaryBlue;
       case LogType.success:
-        return const Color(0xFF34C759);
+        return AppConstants.successGreen;
       case LogType.error:
-        return const Color(0xFFFF3B30);
+        return AppConstants.errorRed;
       case LogType.warning:
-        return const Color(0xFFFF9500);
+        return AppConstants.warningOrange;
       case LogType.network:
         return const Color(0xFFAF52DE); 
       case LogType.cache:

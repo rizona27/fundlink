@@ -12,6 +12,7 @@ import '../widgets/add_transaction_dialog.dart';
 import '../widgets/adaptive_top_bar.dart';
 import '../widgets/glass_button.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class EditHoldingView extends StatefulWidget {
   final FundHolding holding;
@@ -171,8 +172,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       context: context,
       barrierDismissible: true,
       builder: (context) {
-        final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-        final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+        final isDark = AppConstants.isDark(context);
+        final bgColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
         final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
         final secondaryColor = isDark 
             ? CupertinoColors.white.withOpacity(0.6)
@@ -205,7 +206,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                              color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                             ),
                             child: Row(
@@ -271,7 +272,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                 const SizedBox(height: 6),
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                                    color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: KeyboardListener(
@@ -366,13 +367,13 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-    final cardColor = isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white;
-    final textColor = isDarkMode ? CupertinoColors.white : const Color(0xFF1C1C1E);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
+    final cardColor = isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white;
+    final textColor = isDarkMode ? CupertinoColors.white : AppConstants.darkBackground;
     final secondaryTextColor = isDarkMode 
         ? CupertinoColors.white.withOpacity(0.6)
-        : const Color(0xFF8E8E93);
+        : AppConstants.systemGray;
 
     final holding = _currentHolding ?? widget.holding;
 
@@ -539,8 +540,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDarkMode 
-                            ? const Color(0xFF3A3A3C).withOpacity(0.5)
-                            : const Color(0xFFF2F2F7),
+                            ? AppConstants.darkBorder.withOpacity(0.5)
+                            : AppConstants.lightBackground,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -580,8 +581,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       isPrimary: true,
                       height: 48,
                       borderRadius: 12,
-                      backgroundColorOverride: const Color(0xFFFF3B30).withOpacity(0.15),
-                      textColorOverride: const Color(0xFFFF3B30),
+                      backgroundColorOverride: AppConstants.errorRed.withOpacity(0.15),
+                      textColorOverride: AppConstants.errorRed,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -592,8 +593,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                       isPrimary: true,
                       height: 48,
                       borderRadius: 12,
-                      backgroundColorOverride: const Color(0xFF34C759).withOpacity(0.15),
-                      textColorOverride: const Color(0xFF34C759),
+                      backgroundColorOverride: AppConstants.successGreen.withOpacity(0.15),
+                      textColorOverride: AppConstants.successGreen,
                     ),
                   ),
                 ],
@@ -663,8 +664,8 @@ class _EditHoldingViewState extends State<EditHoldingView> {
 
   Widget _buildTransactionCard(TransactionRecord tx, int index, bool isDarkMode, Color textColor, Color secondaryTextColor) {
     final typeColor = tx.type == TransactionType.buy 
-        ? const Color(0xFFFF3B30) 
-        : const Color(0xFF34C759); 
+        ? AppConstants.errorRed 
+        : AppConstants.successGreen; 
     
     final buyTransactions = _transactions
         .where((t) => t.type == TransactionType.buy)
@@ -682,7 +683,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+        color: isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white,
         borderRadius: BorderRadius.circular(10),
         border: tx.isPending
             ? Border.all(color: CupertinoColors.systemOrange.withOpacity(0.3), width: 1)
@@ -717,13 +718,13 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD60A).withOpacity(0.15),
+                    color: AppConstants.attentionYellow.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Icon(
                     CupertinoIcons.star_fill,
                     size: 12,
-                    color: Color(0xFFFFD60A),
+                    color: AppConstants.attentionYellow,
                   ),
                 ),
               ],
@@ -900,11 +901,11 @@ class _EditHoldingViewState extends State<EditHoldingView> {
             constraints: const BoxConstraints(maxWidth: 400),
             child: StatefulBuilder(
               builder: (context, setDialogState) {
-              final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-              final textColor = isDark ? CupertinoColors.white : const Color(0xFF1C1C1E);
+              final isDark = AppConstants.isDark(context);
+              final textColor = isDark ? CupertinoColors.white : AppConstants.darkBackground;
               final secondaryTextColor = isDark 
                   ? CupertinoColors.white.withOpacity(0.6)
-                  : const Color(0xFF8E8E93);
+                  : AppConstants.systemGray;
               
               return CupertinoPopupSurface(
                 isSurfacePainted: true,
@@ -914,7 +915,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                       ),
                       child: Row(
@@ -950,7 +951,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     ),
                     const Divider(height: 1),
                     Container(
-                      color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white,
+                      color: isDark ? AppConstants.darkCardBg : CupertinoColors.white,
                       constraints: BoxConstraints(
                         maxHeight: MediaQuery.of(context).size.height * 0.5,
                       ),
@@ -975,7 +976,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               inputFormatters: [AmountInputFormatter()],
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                color: isDark ? AppConstants.darkBorder : AppConstants.lightBackground,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               onChanged: (value) {
@@ -995,7 +996,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                 padding: const EdgeInsets.only(top: 6),
                                 child: Text(
                                   '请输入有效的份额',
-                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF3B30)),
+                                  style: const TextStyle(fontSize: 12, color: AppConstants.errorRed),
                                 ),
                               ),
                             const SizedBox(height: 16),
@@ -1016,7 +1017,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               inputFormatters: [AmountInputFormatter()],
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                color: isDark ? AppConstants.darkBorder : AppConstants.lightBackground,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               onChanged: (value) {
@@ -1034,7 +1035,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                                 padding: const EdgeInsets.only(top: 6),
                                 child: Text(
                                   '请输入有效的金额',
-                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF3B30)),
+                                  style: const TextStyle(fontSize: 12, color: AppConstants.errorRed),
                                 ),
                               ),
                             const SizedBox(height: 16),
@@ -1065,7 +1066,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF2F2F7),
+                                  color: isDark ? AppConstants.darkBorder : AppConstants.lightBackground,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Row(
@@ -1090,7 +1091,7 @@ class _EditHoldingViewState extends State<EditHoldingView> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                        color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
                       ),
                       child: Row(
@@ -1217,7 +1218,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final now = DateTime.now();
     final years = List.generate(10, (i) => now.year - 5 + i);
     final months = List.generate(12, (i) => i + 1);
@@ -1226,7 +1227,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
       (i) => i + 1,
     );
 
-    final panelBgColor = isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+    final panelBgColor = isDarkMode ? AppConstants.darkBackground : CupertinoColors.white;
     final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.label;
     final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(
       background: isDarkMode

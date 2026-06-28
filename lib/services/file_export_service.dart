@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:excel/excel.dart' as excel;
 import '../constants/app_constants.dart';
 import 'package:csv/csv.dart';
@@ -17,55 +16,58 @@ import '../models/transaction_record.dart';
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../utils/permission_gate.dart';
-import '../widgets/toast.dart';
+
+/// Result returned by [FileExportService] so callers can handle UI themselves.
+class ExportResult {
+  final bool success;
+  final Uint8List bytes;
+  final String fileName;
+  final String mimeType;
+  final String? savedPath;
+  final String? errorMessage;
+
+  const ExportResult({
+    required this.success,
+    required this.bytes,
+    required this.fileName,
+    required this.mimeType,
+    this.savedPath,
+    this.errorMessage,
+  });
+
+  factory ExportResult.cancelled() {
+    return ExportResult(
+      success: false,
+      bytes: _emptyBytes,
+      fileName: '',
+      mimeType: '',
+    );
+  }
+
+  static final Uint8List _emptyBytes = Uint8List(0);
+}
 
 class FileExportService {
   static DataManager? _dataManager;
-  
+
   static void setDataManager(DataManager manager) {
     _dataManager = manager;
   }
-  
-  static Future<void> exportFullBackup({
+
+  /// Generates export data. Caller handles saving & UI.
+  static Future<ExportResult> exportData({
     required String format,
-    required BuildContext context,
-    bool shareAfterSave = false,
-  }) async {
-    if (_dataManager == null) {
-      throw Exception('DataManager未初始化');
-    }
-    
-    final holdings = _dataManager!.holdings;
-    final transactions = _dataManager!.transactions;
-    
-    if (holdings.isEmpty && transactions.isEmpty) {
-      throw Exception('没有数据可导出');
-    }
-
-    final result = await _generateFullBackup(
-      holdings: holdings,
-      transactions: transactions,
-      format: format,
-    );
-
-    await _saveAndDownloadFile(
-      bytes: result.bytes,
-      fileName: result.fileName,
-      mimeType: result.mimeType,
-      context: context,
-      shareAfterSave: shareAfterSave,
-    );
-  }
-  
-  static Future<void> exportAndDownload({
     required List<FundHolding> holdings,
-    required String format,
     required List<String> selectedFields,
-    required BuildContext context,
-    bool shareAfterSave = false,
   }) async {
     if (holdings.isEmpty) {
-      throw Exception('没有数据可导出');
+      return ExportResult(
+        success: false,
+        bytes: Uint8List(0),
+        fileName: '',
+        mimeType: '',
+        errorMessage: '没有数据可导出',
+      );
     }
 
     final result = await _generateExport(
@@ -73,15 +75,114 @@ class FileExportService {
       format: format,
       selectedFields: selectedFields,
     );
-
-    await _saveAndDownloadFile(
+    return ExportResult(
+      success: true,
       bytes: result.bytes,
       fileName: result.fileName,
       mimeType: result.mimeType,
-      context: context,
-      shareAfterSave: shareAfterSave,
     );
   }
+
+  /// Generates full backup data. Caller handles saving & UI.
+  static Future<ExportResult> exportFullBackupData({required String format}) async {
+    if (_dataManager == null) {
+      return ExportResult(
+        success: false,
+        bytes: Uint8List(0),
+        fileName: '',
+        mimeType: '',
+        errorMessage: 'DataManager未初始化',
+      );
+    }
+
+    final holdings = _dataManager!.holdings;
+    final transactions = _dataManager!.transactions;
+
+    if (holdings.isEmpty && transactions.isEmpty) {
+      return ExportResult(
+        success: false,
+        bytes: Uint8List(0),
+        fileName: '',
+        mimeType: '',
+        errorMessage: '没有数据可导出',
+      );
+    }
+
+    final result = await _generateFullBackup(
+      holdings: holdings,
+      transactions: transactions,
+      format: format,
+    );
+    return ExportResult(
+      success: true,
+      bytes: result.bytes,
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+    );
+  }
+
+  /// Saves file to disk & returns the saved path (or null if cancelled).
+  /// Returns (savedPath, errorMessage).
+  static Future<({String? savedPath, String? error})> saveToDisk({
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+    bool checkStoragePermission = true,
+  }) async {
+    // --- Web path ---
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], mimeType);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+      return (savedPath: null, error: null); // web can't report a path
+    }
+
+    // --- Native path ---
+    if (checkStoragePermission && io.Platform.isAndroid) {
+      final ok = await checkPermission(
+        permission: Permission.storage,
+        featureDescription: '存储空间',
+      );
+      if (!ok) return (savedPath: null, error: null); // user cancelled permission
+    }
+
+    try {
+      final nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+      final extension = fileName.split('.').last;
+      final savedPath = await FileSaver.instance.saveAs(
+        name: nameWithoutExt,
+        bytes: bytes,
+        fileExtension: extension,
+        mimeType: MimeType.other,
+      );
+      return (savedPath: savedPath?.isNotEmpty == true ? savedPath : null, error: null);
+    } catch (e) {
+      return (savedPath: null, error: e.toString());
+    }
+  }
+
+  /// Shares bytes as a temporary file.
+  static Future<String?> shareFile({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    if (kIsWeb) return null;
+    try {
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/$fileName';
+      final file = io.File(filePath);
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(filePath)], text: '分享我的基金持仓数据');
+      return null; // success
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  // ── Internal generators ───────────────────────────────────
 
   static Future<({Uint8List bytes, String fileName, String mimeType})> _generateExport({
     required List<FundHolding> holdings,
@@ -137,8 +238,8 @@ class FileExportService {
   }
 
   static Future<Uint8List> _generateExcelBytes(List<FundHolding> holdings, List<String> selectedFields) async {
-    final excelFile = excel.Excel.createExcel();
-    final sheet = excelFile.sheets['Sheet1'] ?? excelFile['Sheet1'];
+    final ex = excel.Excel.createExcel();
+    final sheet = ex.sheets['Sheet1'] ?? ex['Sheet1'];
 
     for (int i = 0; i < selectedFields.length; i++) {
       final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
@@ -154,76 +255,11 @@ class FileExportService {
       }
     }
 
-    final fileBytes = excelFile.encode();
+    final fileBytes = ex.encode();
     if (fileBytes == null) {
       throw Exception('生成 Excel 文件失败');
     }
     return Uint8List.fromList(fileBytes);
-  }
-
-  static Future<void> _saveAndDownloadFile({
-    required Uint8List bytes,
-    required String fileName,
-    required String mimeType,
-    required BuildContext context,
-    bool shareAfterSave = false,
-  }) async {
-    if (kIsWeb) {
-      final blob = html.Blob([bytes], mimeType);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute("download", fileName)
-        ..click();
-      html.Url.revokeObjectUrl(url);
-      context.showToast('文件已开始下载');
-    } else {
-      final nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-      final extension = fileName.split('.').last;
-
-      // 存储权限检查（旧版 Android 需要）
-      if (io.Platform.isAndroid) {
-        final ok = await checkPermission(
-          context: context,
-          permission: Permission.storage,
-          featureDescription: '存储空间',
-        );
-        if (!ok) return;
-      }
-
-      try {
-        final savedPath = await FileSaver.instance.saveAs(
-          name: nameWithoutExt,
-          bytes: bytes,
-          fileExtension: extension,
-          mimeType: MimeType.other,
-        );
-
-        if (savedPath != null && savedPath.isNotEmpty) {
-          context.showToast('文件已保存: $fileName');
-          _dataManager?.addLog('导出文件成功: $fileName', type: LogType.success);
-        } else {
-          context.showToast('已取消保存');
-          _dataManager?.addLog('导出文件被取消', type: LogType.info);
-        }
-      } catch (e) {
-        context.showToast('保存文件失败: $e');
-        _dataManager?.addLog('导出文件失败: $e', type: LogType.error);
-      }
-
-      if (shareAfterSave && !kIsWeb) {
-        try {
-          final directory = await getTemporaryDirectory();
-          final filePath = '${directory.path}/$fileName';
-          final file = io.File(filePath);
-          await file.writeAsBytes(bytes);
-          await Share.shareXFiles([XFile(filePath)], text: '分享我的基金持仓数据');
-          _dataManager?.addLog('分享导出文件: $fileName', type: LogType.info);
-        } catch (e) {
-          context.showToast('分享失败: $e');
-          _dataManager?.addLog('分享导出文件失败: $e', type: LogType.error);
-        }
-      }
-    }
   }
 
   static String _getFieldLabel(String fieldId) {
@@ -277,7 +313,7 @@ class FileExportService {
       case 'purchaseShares': return holding.totalShares.toStringAsFixed(AppConstants.sharesDecimalPlaces);
       case 'profit': return holding.profit.toStringAsFixed(2);
       case 'profitRate': return holding.profitRate.toStringAsFixed(2);
-      case 'annualizedProfitRate': 
+      case 'annualizedProfitRate':
         if (dataManager != null) {
           return dataManager.calculateProfit(holding).annualized.toStringAsFixed(2);
         }
@@ -325,59 +361,52 @@ class FileExportService {
     ];
   }
 
-  
+  // ── Full backup helpers ────────────────────────────────────
+
   static Future<Uint8List> _generateFullBackupCsvBytes(
-    List<FundHolding> holdings, 
-    List<TransactionRecord> transactions
+    List<FundHolding> holdings,
+    List<TransactionRecord> transactions,
   ) async {
     final rows = <List<String>>[];
-    
     rows.add(['# FundLink Full Backup', 'Version: 1.1.7', 'Export Time: ${DateTime.now().toIso8601String()}']);
     rows.add([]);
-    
     rows.add(['=== HOLDINGS DATA ===']);
     rows.add(_getFullBackupHoldingHeaders());
     for (final h in holdings) {
       rows.add(_getFullBackupHoldingRow(h));
     }
     rows.add([]);
-    
     rows.add(['=== TRANSACTIONS DATA ===']);
     rows.add(_getFullBackupTransactionHeaders());
     for (final tx in transactions) {
       rows.add(_getFullBackupTransactionRow(tx));
     }
-    
     final csvString = const ListToCsvConverter().convert(rows);
     return Uint8List.fromList(utf8.encode(csvString));
   }
 
   static Future<Uint8List> _generateFullBackupExcelBytes(
-    List<FundHolding> holdings, 
-    List<TransactionRecord> transactions
+    List<FundHolding> holdings,
+    List<TransactionRecord> transactions,
   ) async {
-    final excelFile = excel.Excel.createExcel();
-    
-    final holdingsSheet = excelFile['Holdings'];
+    final ex = excel.Excel.createExcel();
+    final holdingsSheet = ex['Holdings'];
     _writeFullBackupHoldingHeadersToSheet(holdingsSheet);
     for (int i = 0; i < holdings.length; i++) {
       _writeFullBackupHoldingRowToSheet(holdingsSheet, holdings[i], i + 1);
     }
-    
-    final transactionsSheet = excelFile['Transactions'];
+    final transactionsSheet = ex['Transactions'];
     _writeFullBackupTransactionHeadersToSheet(transactionsSheet);
     for (int i = 0; i < transactions.length; i++) {
       _writeFullBackupTransactionRowToSheet(transactionsSheet, transactions[i], i + 1);
     }
-    
-    final fileBytes = excelFile.encode();
+    final fileBytes = ex.encode();
     if (fileBytes == null) {
       throw Exception('生成 Excel 文件失败');
     }
     return Uint8List.fromList(fileBytes);
   }
 
-  
   static List<String> _getFullBackupHoldingHeaders() {
     return [
       '客户姓名', '客户号', '基金代码', '基金名称',
@@ -388,10 +417,7 @@ class FileExportService {
 
   static List<String> _getFullBackupHoldingRow(FundHolding h) {
     return [
-      h.clientName,
-      h.clientId,
-      h.fundCode,
-      h.fundName,
+      h.clientName, h.clientId, h.fundCode, h.fundName,
       h.totalShares.toStringAsFixed(AppConstants.sharesDecimalPlaces),
       h.totalCost.toStringAsFixed(2),
       h.averageCost.toStringAsFixed(4),
@@ -412,11 +438,7 @@ class FileExportService {
 
   static List<String> _getFullBackupTransactionRow(TransactionRecord tx) {
     return [
-      tx.id,
-      tx.clientName,
-      tx.clientId,
-      tx.fundCode,
-      tx.fundName,
+      tx.id, tx.clientName, tx.clientId, tx.fundCode, tx.fundName,
       tx.type.displayName,
       tx.amount.toStringAsFixed(AppConstants.amountDecimalPlaces),
       tx.shares.toStringAsFixed(AppConstants.sharesDecimalPlaces),
@@ -431,36 +453,35 @@ class FileExportService {
     ];
   }
 
-  
   static void _writeFullBackupHoldingHeadersToSheet(excel.Sheet sheet) {
     final headers = _getFullBackupHoldingHeaders();
     for (int i = 0; i < headers.length; i++) {
-      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
-      sheet.cell(cellIndex).value = excel.TextCellValue(headers[i]);
+      final ci = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
+      sheet.cell(ci).value = excel.TextCellValue(headers[i]);
     }
   }
 
   static void _writeFullBackupHoldingRowToSheet(excel.Sheet sheet, FundHolding h, int row) {
     final values = _getFullBackupHoldingRow(h);
     for (int i = 0; i < values.length; i++) {
-      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
-      sheet.cell(cellIndex).value = excel.TextCellValue(values[i]);
+      final ci = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
+      sheet.cell(ci).value = excel.TextCellValue(values[i]);
     }
   }
 
   static void _writeFullBackupTransactionHeadersToSheet(excel.Sheet sheet) {
     final headers = _getFullBackupTransactionHeaders();
     for (int i = 0; i < headers.length; i++) {
-      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
-      sheet.cell(cellIndex).value = excel.TextCellValue(headers[i]);
+      final ci = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0);
+      sheet.cell(ci).value = excel.TextCellValue(headers[i]);
     }
   }
 
   static void _writeFullBackupTransactionRowToSheet(excel.Sheet sheet, TransactionRecord tx, int row) {
     final values = _getFullBackupTransactionRow(tx);
     for (int i = 0; i < values.length; i++) {
-      final cellIndex = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
-      sheet.cell(cellIndex).value = excel.TextCellValue(values[i]);
+      final ci = excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row);
+      sheet.cell(ci).value = excel.TextCellValue(values[i]);
     }
   }
 }

@@ -12,6 +12,7 @@ import '../mixins/scroll_to_top_mixin.dart';
 import 'edit_holding_view.dart';
 import '../widgets/batch_rename_dialog.dart';
 import '../utils/animation_config.dart';
+import '../constants/app_constants.dart';
 
 class ManageHoldingsView extends StatefulWidget {
   const ManageHoldingsView({super.key});
@@ -326,8 +327,8 @@ class _ManageHoldingsViewState extends State<ManageHoldingsView> with ScrollToTo
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
     final cardBackgroundColor = isDarkMode
         ? CupertinoColors.systemGrey6.withOpacity(0.5)
         : CupertinoColors.white;

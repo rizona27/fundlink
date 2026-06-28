@@ -86,12 +86,7 @@ class ValuationNotifier extends ChangeNotifier {
       return null;
     }
 
-    final hour = now.hour;
-    final minute = now.minute;
-    final currentTime = hour * 60 + minute;
-    final isTradingTime =
-        (currentTime >= 9 * 60 + 30 && currentTime <= 11 * 60 + 30) ||
-        (currentTime >= 13 * 60 && currentTime <= 15 * 60);
+    final isTradingTime = AppConstants.isInTradingHours();
 
     if (!isTradingTime) {
       final cachedDate = DateTime.parse(cached['cacheTime']);

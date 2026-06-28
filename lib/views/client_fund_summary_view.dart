@@ -11,6 +11,7 @@ import '../services/fund_service.dart';
 import '../services/industry_classifier.dart';
 import '../services/stock_quote_service.dart';
 import '../widgets/adaptive_top_bar.dart';
+import '../constants/app_constants.dart';
 
 class ClientFundSummaryPage extends StatefulWidget {
   final String clientName;
@@ -518,14 +519,14 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-    final cardColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkBackground : AppConstants.lightBackground;
+    final cardColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.black;
     final subTextColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.6)
         : CupertinoColors.systemGrey;
-    final surfaceColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final surfaceColor = isDark ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isWide = screenWidth >= 600;
@@ -755,7 +756,9 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
                     }
                     return;
                   }
-                  final newIndex = response.touchedSection!.touchedSectionIndex;
+                  final touched = response.touchedSection;
+                  if (touched == null) return;
+                  final newIndex = touched.touchedSectionIndex;
                   if (newIndex != _touchedPieIndex) {
                     setState(() => _touchedPieIndex = newIndex);
                   }
@@ -897,7 +900,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
   Color _ratioColor(double r) {
     if (r >= 5) return CupertinoColors.systemRed;
-    if (r >= 2) return const Color(0xFFFF9500);
+    if (r >= 2) return AppConstants.warningOrange;
     return CupertinoColors.systemBlue;
   }
 
@@ -1110,7 +1113,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final fullCode = _quoteService.toFullCode(item.stockCode);
     final q = _stockQuotes[fullCode];
     final marketLabel = q?.marketLabel ?? _marketLabelFromCode(item.stockCode);
-    final surfaceColor = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final surfaceColor = isDark ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

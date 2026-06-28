@@ -14,6 +14,7 @@ import '../constants/app_constants.dart';
 String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
+  'v1.4.1 - 代码整体优化：统一颜色常量、消除重复逻辑、修复空安全问题、架构分层调整',
   'v1.4.0 - 优化了部分已知问题',
   'v1.3.9 - 重构数据中心架构：拆分为门面模式+子通知器，性能优化与漏洞修复',
   'v1.3.8 - 排序切换及顶部菜单栏优化',
@@ -295,7 +296,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   Future<void> _smartNavigate() async {
     if (widget.onSmartNavigate != null) {
-      widget.onSmartNavigate!();
+      widget.onSmartNavigate?.call();
       return;
     }
 
@@ -384,7 +385,7 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
 
     return GestureDetector(
       onTap: _handleUpdateTap,
@@ -392,8 +393,8 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: _isChecking
-              ? (widget.hasUpdate ? const Color(0xFFFF9500).withOpacity(0.5) : const Color(0xFF007AFF).withOpacity(0.5))
-              : (widget.hasUpdate ? const Color(0xFFFF9500) : const Color(0xFF007AFF)),
+              ? (widget.hasUpdate ? AppConstants.warningOrange.withOpacity(0.5) : AppConstants.primaryBlue.withOpacity(0.5))
+              : (widget.hasUpdate ? AppConstants.warningOrange : AppConstants.primaryBlue),
           borderRadius: BorderRadius.circular(12),
         ),
         child: _isChecking
@@ -600,8 +601,8 @@ class _VersionViewState extends State<VersionView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
     double scrollOffset = 0;
 
     return CupertinoPageScaffold(
@@ -678,7 +679,7 @@ class _VersionViewState extends State<VersionView> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF6366F1).withOpacity(0.12),
+                                          color: AppConstants.accentIndigo.withOpacity(0.12),
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
@@ -686,7 +687,7 @@ class _VersionViewState extends State<VersionView> {
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w500,
-                                            color: const Color(0xFF6366F1),
+                                            color: AppConstants.accentIndigo,
                                           ),
                                         ),
                                       ),
@@ -787,8 +788,8 @@ class _VersionViewState extends State<VersionView> {
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFF6366F1),
-                  Color(0xFF8B5CF6),
+                  AppConstants.accentIndigo,
+                  AppConstants.accentPurple,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -818,7 +819,7 @@ class _VersionViewState extends State<VersionView> {
           size: iSize,
           color: isDarkMode
               ? CupertinoColors.white.withOpacity(0.7)
-              : const Color(0xFF6366F1),
+              : AppConstants.accentIndigo,
         ),
         const SizedBox(width: 6),
         Text(
@@ -856,7 +857,7 @@ class _VersionViewState extends State<VersionView> {
           size: 16,
           color: isDarkMode
               ? CupertinoColors.white.withOpacity(0.6)
-              : const Color(0xFF6366F1),
+              : AppConstants.accentIndigo,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -900,7 +901,7 @@ class _VersionViewState extends State<VersionView> {
               color: _isCheckingConnectivity
                   ? (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)
                   : (_nasConnected == true && _githubConnected == true
-                  ? const Color(0xFF34C759)
+                  ? AppConstants.successGreen
                   : (isDarkMode ? CupertinoColors.systemGrey.withOpacity(0.5) : CupertinoColors.systemGrey)),
             ),
           ],
@@ -1001,7 +1002,7 @@ class _VersionViewState extends State<VersionView> {
         Color barColor;
 
         if (failed) {
-          barColor = const Color(0xFFFF3B30);
+          barColor = AppConstants.errorRed;
         } else if (!isActive) {
           barColor = isDarkMode
               ? CupertinoColors.systemGrey.withOpacity(0.3)
@@ -1011,7 +1012,7 @@ class _VersionViewState extends State<VersionView> {
           if (position < 0.5) {
             final t = position * 2;
             barColor = Color.lerp(
-              const Color(0xFFFF9500),
+              AppConstants.warningOrange,
               const Color(0xFFFFCC00),
               t,
             )!;
@@ -1019,7 +1020,7 @@ class _VersionViewState extends State<VersionView> {
             final t = (position - 0.5) * 2;
             barColor = Color.lerp(
               const Color(0xFFFFCC00),
-              const Color(0xFF34C759),
+              AppConstants.successGreen,
               t,
             )!;
           }
@@ -1071,7 +1072,7 @@ class _VersionViewState extends State<VersionView> {
           height: 36,
           decoration: BoxDecoration(
             color: isDarkMode
-                ? const Color(0xFF2C2C2E).withOpacity(0.6)
+                ? AppConstants.darkCardBg.withOpacity(0.6)
                 : CupertinoColors.white.withOpacity(0.8),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
@@ -1124,7 +1125,7 @@ class _VersionViewState extends State<VersionView> {
                   '...更多',
                   style: TextStyle(
                     fontSize: 14,
-                    color: const Color(0xFF007AFF),
+                    color: AppConstants.primaryBlue,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1135,7 +1136,7 @@ class _VersionViewState extends State<VersionView> {
         Container(
           decoration: BoxDecoration(
             color: isDarkMode
-                ? const Color(0xFF2C2C2E).withOpacity(0.6)
+                ? AppConstants.darkCardBg.withOpacity(0.6)
                 : CupertinoColors.white.withOpacity(0.8),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
@@ -1243,7 +1244,7 @@ class _VersionViewState extends State<VersionView> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: isDarkMode
-                          ? const Color(0xFF1C1C1E)
+                          ? AppConstants.darkBackground
                           : CupertinoColors.white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [

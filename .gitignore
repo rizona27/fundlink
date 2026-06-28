@@ -67,4 +67,4 @@ env
 /test
 *.log
 build_all.py
-/__pycache__
+**/__pycache__/

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide ThemeMode;
 import 'package:flutter/rendering.dart';
 import 'package:gal/gal.dart';
+import '../constants/app_constants.dart' show ThemeMode;
 import '../models/log_entry.dart';
 import '../services/data_manager.dart';
 import '../services/ui_state_service.dart';
@@ -22,6 +23,7 @@ import 'pending_transactions_view.dart';
 import 'permission_settings_view.dart';
 import 'version_view.dart';
 import '../widgets/toast.dart';
+import '../constants/app_constants.dart';
 
 class ConfigView extends StatefulWidget {
   const ConfigView({super.key});
@@ -185,8 +187,8 @@ class _ConfigViewState extends State<ConfigView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final isDarkMode = AppConstants.isDark(context);
+    final backgroundColor = isDarkMode ? AppConstants.darkBackground : AppConstants.lightBackground;
 
     return Container(
       color: backgroundColor,
@@ -555,7 +557,7 @@ class _ConfigViewState extends State<ConfigView>
   List<Color> _getIconGradient(String icon) {
     final gradients = {
       '持仓': [const Color(0xFF10B981), const Color(0xFF34D399)],
-      '工具': [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+      '工具': [AppConstants.accentIndigo, AppConstants.accentPurple],
       '设置': [const Color(0xFFF59E0B), const Color(0xFFFBBF24)],
       '关于': [const Color(0xFFEC4899), const Color(0xFFF472B6)],
     };
@@ -608,7 +610,7 @@ class _ConfigViewState extends State<ConfigView>
               size: 16,
               color: isDestructive
                   ? CupertinoColors.systemRed
-                  : (isDarkMode ? CupertinoColors.systemBlue : const Color(0xFF6366F1)),
+                  : (isDarkMode ? CupertinoColors.systemBlue : AppConstants.accentIndigo),
             ),
           ),
           const SizedBox(width: 12),
@@ -686,7 +688,7 @@ class _ConfigViewState extends State<ConfigView>
             child: Icon(
               icon,
               size: 16,
-              color: isDarkMode ? CupertinoColors.systemBlue : const Color(0xFF6366F1),
+              color: isDarkMode ? CupertinoColors.systemBlue : AppConstants.accentIndigo,
             ),
           ),
           const SizedBox(width: 12),
@@ -772,7 +774,7 @@ class _ConfigViewState extends State<ConfigView>
                   : CupertinoColors.systemGrey6,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 16, color: const Color(0xFF6366F1)),
+            child: Icon(icon, size: 16, color: AppConstants.accentIndigo),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -806,7 +808,7 @@ class _ConfigViewState extends State<ConfigView>
           CupertinoSwitch(
             value: value,
             onChanged: onChanged,
-            activeColor: const Color(0xFF6366F1),
+            activeColor: AppConstants.accentIndigo,
             trackColor: isDarkMode
                 ? CupertinoColors.systemGrey5
                 : CupertinoColors.systemGrey4,
@@ -862,7 +864,7 @@ class _ConfigViewState extends State<ConfigView>
             child: const Icon(
               CupertinoIcons.paintbrush_fill,
               size: 16,
-              color: Color(0xFF6366F1),
+              color: AppConstants.accentIndigo,
             ),
           ),
           const SizedBox(width: 12),
@@ -1095,7 +1097,7 @@ class _ConfigViewState extends State<ConfigView>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: hasUpdate ? const Color(0xFF007AFF) : const Color(0xFF34C759),
+        color: hasUpdate ? AppConstants.primaryBlue : AppConstants.successGreen,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -1129,7 +1131,7 @@ class _ConfigViewState extends State<ConfigView>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: versionInfo.hasUpdate ? const Color(0xFF007AFF) : const Color(0xFF34C759),
+              color: versionInfo.hasUpdate ? AppConstants.primaryBlue : AppConstants.successGreen,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

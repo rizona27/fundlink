@@ -703,8 +703,8 @@ class _AddHoldingViewState extends State<AddHoldingView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final secondaryColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.6)
@@ -728,7 +728,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? const Color(0xFF3A3A3C)
+                        ? AppConstants.darkBorder
                         : CupertinoColors.systemGrey6,
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(16)),
@@ -820,9 +820,9 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                       horizontal: 12, vertical: 10),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF007AFF)
+                                        ? AppConstants.primaryBlue
                                             .withValues(alpha: 0.1)
-                                        : const Color(0xFF007AFF)
+                                        : AppConstants.primaryBlue
                                             .withValues(alpha: 0.05),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -836,7 +836,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                               fontWeight: FontWeight.w600,
                                               color: isDark
                                                   ? CupertinoColors.systemBlue
-                                                  : const Color(0xFF007AFF)),
+                                                  : AppConstants.primaryBlue),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
@@ -884,7 +884,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                           horizontal: 12, vertical: 10),
                                       decoration: BoxDecoration(
                                         color: isDark
-                                            ? const Color(0xFF3A3A3C)
+                                            ? AppConstants.darkBorder
                                             : CupertinoColors.systemGrey6,
                                         borderRadius:
                                             BorderRadius.circular(10),
@@ -920,7 +920,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                     height: 38,
                                     decoration: BoxDecoration(
                                       color: isDark
-                                          ? const Color(0xFF3A3A3C)
+                                          ? AppConstants.darkBorder
                                           : CupertinoColors.systemGrey6,
                                       borderRadius:
                                           BorderRadius.circular(10),
@@ -933,7 +933,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: !_isAfter1500
-                                                    ? const Color(0xFF007AFF)
+                                                    ? AppConstants.primaryBlue
                                                     : Colors.transparent,
                                                 borderRadius:
                                                     BorderRadius.circular(10),
@@ -958,7 +958,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: _isAfter1500
-                                                    ? const Color(0xFF007AFF)
+                                                    ? AppConstants.primaryBlue
                                                     : Colors.transparent,
                                                 borderRadius:
                                                     BorderRadius.circular(10),
@@ -1208,7 +1208,7 @@ class _AddHoldingViewState extends State<AddHoldingView> {
   // ─── Reusable field builders ───
 
   Widget _buildLabel(String text, {required bool required}) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1238,13 +1238,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     int? maxLength,
     TextInputType? keyboardType,
   }) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final placeholderColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.5)
         : CupertinoColors.systemGrey;
     final inputBgColor =
-        isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6;
+        isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6;
 
     Color bottomBorderColor;
     if (error) {
@@ -1285,13 +1285,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     required String suffix,
     required ValueChanged<String> onChanged,
   }) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final placeholderColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.5)
         : CupertinoColors.systemGrey;
     final inputBgColor =
-        isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6;
+        isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6;
 
     Color bottomBorderColor;
     if (error) {
@@ -1336,13 +1336,13 @@ class _AddHoldingViewState extends State<AddHoldingView> {
     required String hint,
     required ValueChanged<String> onChanged,
   }) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDark = AppConstants.isDark(context);
     final textColor = isDark ? CupertinoColors.white : CupertinoColors.label;
     final placeholderColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.5)
         : CupertinoColors.systemGrey;
     final inputBgColor =
-        isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6;
+        isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6;
 
     return Container(
       decoration: BoxDecoration(
@@ -1419,7 +1419,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final isDarkMode = AppConstants.isDark(context);
     final now = DateTime.now();
     final years = List.generate(10, (i) => now.year - 5 + i);
     final months = List.generate(12, (i) => i + 1);
@@ -1429,7 +1429,7 @@ class _DatePickerModalState extends State<_DatePickerModal> {
     );
 
     final panelBgColor =
-        isDarkMode ? const Color(0xFF1C1C1E) : CupertinoColors.white;
+        isDarkMode ? AppConstants.darkBackground : CupertinoColors.white;
     final textColor =
         isDarkMode ? CupertinoColors.white : CupertinoColors.label;
     final selectionOverlay = CupertinoPickerDefaultSelectionOverlay(

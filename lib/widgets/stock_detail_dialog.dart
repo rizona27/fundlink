@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'stock_candle_chart.dart';
+import '../constants/app_constants.dart';
+import '../services/stock_quote_service.dart';
 
 class StockDetailDialog extends StatefulWidget {
   final String stockCode;
@@ -54,24 +54,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   }
 
   void _checkTradingTime() {
-    final now = DateTime.now();
-    final weekday = now.weekday; 
-    
-    if (weekday >= 1 && weekday <= 5) {
-      final hour = now.hour;
-      final minute = now.minute;
-      final currentTime = hour * 60 + minute;
-      
-      final morningStart = 9 * 60 + 30;  
-      final morningEnd = 11 * 60 + 30;   
-      final afternoonStart = 13 * 60;     
-      final afternoonEnd = 15 * 60;       
-      
-      _isTradingTime = (currentTime >= morningStart && currentTime <= morningEnd) ||
-                       (currentTime >= afternoonStart && currentTime <= afternoonEnd);
-    } else {
-      _isTradingTime = false;
-    }
+    _isTradingTime = AppConstants.isInTradingHours();
   }
 
   void _startAutoUpdate() {
@@ -123,96 +106,12 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   }
 
   Future<Map<String, dynamic>?> _fetchStockInfo(String secid) async {
-    try {
-      String formattedSecid = secid;
-      if (secid.startsWith('sh')) {
-        formattedSecid = '1.${secid.substring(2)}';
-      } else if (secid.startsWith('sz')) {
-        formattedSecid = '0.${secid.substring(2)}';
-      } else if (secid.startsWith('hk')) {
-        formattedSecid = '116.${secid.substring(2)}';
-      }
-      
-      final url = Uri.parse(
-        'https://push2.eastmoney.com/api/qt/stock/get'
-        '?secid=$formattedSecid'
-        '&ut=b2884a393a59ad64002292a3e90d46a5'
-        '&fields=f43,f57,f58,f169,f170,f46,f44,f51,f168,f47,f164,f163,f116,f60,f45,f52,f50,f48,f167,f117,f71,f161,f49,f530',
-      );
-      
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
-      
-      if (res.statusCode == 200) {
-        final json = jsonDecode(res.body);
-        
-        final data = json['data'];
-        if (data != null) {
-          return {
-            'name': data['f57'] ?? widget.stockName,
-            'code': data['f58'] ?? '',
-            'price': (data['f43'] ?? 0).toDouble() / 100,  
-            'change': (data['f169'] ?? 0).toDouble() / 100,  
-            'changePercent': (data['f170'] ?? 0).toDouble() / 100,  
-            'high': (data['f44'] ?? 0).toDouble() / 100,  
-            'low': (data['f45'] ?? 0).toDouble() / 100,  
-            'open': (data['f46'] ?? 0).toDouble() / 100,  
-            'prevClose': (data['f60'] ?? 0).toDouble() / 100,  
-            'volume': (data['f47'] ?? 0).toInt(),
-            'amount': (data['f48'] ?? 0).toDouble(),
-          };
-        } else {
-          return null;
-        }
-      } else {
-        return null;
-      }
-    } catch (e) {
-      return null;
-    }
+    return StockQuoteService.fetchStockInfo(secid, widget.stockName);
   }
 
   Future<List<String>> _fetchKlineData(String secid) async {
-    try {
-      String formattedSecid = secid;
-      if (secid.startsWith('sh')) {
-        formattedSecid = '1.${secid.substring(2)}';
-      } else if (secid.startsWith('sz')) {
-        formattedSecid = '0.${secid.substring(2)}';
-      } else if (secid.startsWith('hk')) {
-        formattedSecid = '116.${secid.substring(2)}';
-      }
-      
-      final url = Uri.parse(
-        'https://push2his.eastmoney.com/api/qt/stock/kline/get'
-        '?secid=$formattedSecid'
-        '&klt=101'  
-        '&fqt=1'    
-        '&beg=0'    
-        '&end=20500101'  
-        '&lmt=100'  
-        '&fields1=f1,f2,f3,f4,f5,f6'
-        '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61'
-        '&ut=b2884a393a59ad64002292a3e90d46a5',
-      );
-      
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
-      
-      if (res.statusCode == 200) {
-        final json = jsonDecode(res.body);
-        
-        final data = json['data'];
-        if (data != null && data['klines'] != null) {
-          final klines = List<String>.from(data['klines']);
-          return klines;
-        } else {
-          return [];
-        }
-      } else {
-        return [];
-      }
-    } catch (e) {
-      return [];
-    }
+    final result = await StockQuoteService.fetchKlineData(secid);
+    return result ?? [];
   }
 
   String _formatStockCode(String code) {
@@ -228,12 +127,12 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : CupertinoColors.white;
-    final textColor = isDark ? CupertinoColors.white : const Color(0xFF1C1C1E);
+    final isDark = AppConstants.isDark(context);
+    final bgColor = isDark ? AppConstants.darkCardBg : CupertinoColors.white;
+    final textColor = isDark ? CupertinoColors.white : AppConstants.darkBackground;
     final secondaryTextColor = isDark 
         ? CupertinoColors.white.withOpacity(0.6)
-        : const Color(0xFF8E8E93);
+        : AppConstants.systemGray;
 
     return GestureDetector(
       onTap: () {
@@ -253,7 +152,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF3A3A3C) : CupertinoColors.systemGrey6,
+                    color: isDark ? AppConstants.darkBorder : CupertinoColors.systemGrey6,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   ),
                   child: Row(
@@ -321,7 +220,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
                                   Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+                                      color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: isDark
@@ -357,7 +256,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+          color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isDark
@@ -371,13 +270,17 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
       );
     }
 
-    final price = _stockInfo!['price'] as double;
-    final change = _stockInfo!['change'] as double;
-    final changePercent = _stockInfo!['changePercent'] as double;
-    final high = _stockInfo!['high'] as double;
-    final low = _stockInfo!['low'] as double;
-    final open = _stockInfo!['open'] as double;
-    final prevClose = _stockInfo!['prevClose'] as double;
+    final info = _stockInfo;
+    if (info == null) {
+      return const Center(child: Text('暂无行情数据'));
+    }
+    final price = info['price'] as double;
+    final change = info['change'] as double;
+    final changePercent = info['changePercent'] as double;
+    final high = info['high'] as double;
+    final low = info['low'] as double;
+    final open = info['open'] as double;
+    final prevClose = info['prevClose'] as double;
 
     Color changeColor;
     if (changePercent > 0) {
@@ -400,7 +303,7 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white,
+        color: isDark ? AppConstants.darkBackground : CupertinoColors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
