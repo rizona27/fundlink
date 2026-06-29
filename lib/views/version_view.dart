@@ -6,13 +6,16 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/adaptive_top_bar.dart';
+import '../widgets/glass_button.dart';
 import '../services/data_manager.dart';
+import '../services/database_helper.dart';
 import '../services/version_check_service.dart';
 import '../constants/app_constants.dart';
 
 String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
+  'v1.4.2 - 新增反馈方式',
   'v1.4.1 - 代码整体优化：统一颜色常量、消除重复逻辑、修复空安全问题、架构分层调整',
   'v1.4.0 - 优化了部分已知问题',
   'v1.3.9 - 重构数据中心架构：拆分为门面模式+子通知器，性能优化与漏洞修复',
@@ -425,12 +428,15 @@ class VersionView extends StatefulWidget {
 class _VersionViewState extends State<VersionView> {
   bool _hasUpdate = false;
 
-  late Color _mailColor;
+  late Color _feedbackButtonColor;
+
+  static const int _maxFeedbackSubmissionsPerDay = 2;
+  static const int _feedbackWindowHours = 24;
 
   @override
   void initState() {
     super.initState();
-    _mailColor = HSLColor.fromAHSL(
+    _feedbackButtonColor = HSLColor.fromAHSL(
       1,
       Random().nextDouble() * 360,
       0.7,
@@ -617,14 +623,14 @@ class _VersionViewState extends State<VersionView> {
                                 Icon(
                                   CupertinoIcons.chat_bubble_text_fill,
                                   size: 16,
-                                  color: AppConstants.primaryBlue,
+                                  color: _feedbackButtonColor,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  '意见和反馈',
+                                  '反馈',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: AppConstants.primaryBlue,
+                                    color: _feedbackButtonColor,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -922,33 +928,6 @@ class _VersionViewState extends State<VersionView> {
                   ),
                 ),
               )).toList(),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Mail:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontStyle: FontStyle.italic,
-                        color: _mailColor,
-                      ),
-                    ),
-                    Text(
-                      ' rizona.cn@gmail.com',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontStyle: FontStyle.italic,
-                        color: _mailColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -1074,12 +1053,87 @@ class _VersionViewState extends State<VersionView> {
 
   // ── Feedback dialog ──────────────────────────────────────────
 
-  void _showFeedbackDialog(BuildContext context, bool isDarkMode) {
+  Future<String> _getDeviceFingerprint() async {
+    const fpKey = 'feedback_device_fingerprint';
+    String? fingerprint = await DatabaseHelper.instance.getSetting(fpKey);
+    if (fingerprint == null) {
+      fingerprint = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+      await DatabaseHelper.instance.saveSetting(fpKey, fingerprint);
+    }
+    return fingerprint;
+  }
+
+  Future<bool> _canSubmitFeedback() async {
+    final fingerprint = await _getDeviceFingerprint();
+    final key = 'feedback_submissions_$fingerprint';
+    final raw = await DatabaseHelper.instance.getSetting(key);
+    final List<String> submissions = raw != null
+        ? (jsonDecode(raw) as List<dynamic>).cast<String>()
+        : [];
+
+    final now = DateTime.now();
+    final cutoff = now.subtract(Duration(hours: _feedbackWindowHours));
+
+    final recent = submissions.where((s) {
+      final t = DateTime.tryParse(s);
+      return t != null && t.isAfter(cutoff);
+    }).toList();
+
+    // Persist cleaned list
+    if (recent.length != submissions.length) {
+      await DatabaseHelper.instance.saveSetting(key, jsonEncode(recent));
+    }
+
+    return recent.length < _maxFeedbackSubmissionsPerDay;
+  }
+
+  Future<void> _recordFeedbackSubmission() async {
+    final fingerprint = await _getDeviceFingerprint();
+    final key = 'feedback_submissions_$fingerprint';
+    final raw = await DatabaseHelper.instance.getSetting(key);
+    final List<String> submissions = raw != null
+        ? (jsonDecode(raw) as List<dynamic>).cast<String>()
+        : [];
+    submissions.add(DateTime.now().toIso8601String());
+    await DatabaseHelper.instance.saveSetting(key, jsonEncode(submissions));
+  }
+
+  Future<int> _getRemainingSubmissionCount() async {
+    final fingerprint = await _getDeviceFingerprint();
+    final key = 'feedback_submissions_$fingerprint';
+    final raw = await DatabaseHelper.instance.getSetting(key);
+    final List<String> submissions = raw != null
+        ? (jsonDecode(raw) as List<dynamic>).cast<String>()
+        : [];
+
+    final now = DateTime.now();
+    final cutoff = now.subtract(Duration(hours: _feedbackWindowHours));
+
+    final recentCount = submissions.where((s) {
+      final t = DateTime.tryParse(s);
+      return t != null && t.isAfter(cutoff);
+    }).length;
+
+    // Persist cleaned list
+    if (recentCount != submissions.length) {
+      final recent = submissions.where((s) {
+        final t = DateTime.tryParse(s);
+        return t != null && t.isAfter(cutoff);
+      }).toList();
+      await DatabaseHelper.instance.saveSetting(key, jsonEncode(recent));
+    }
+
+    return _maxFeedbackSubmissionsPerDay - recentCount;
+  }
+
+  void _showFeedbackDialog(BuildContext context, bool isDarkMode) async {
+    final initialRemaining = await _getRemainingSubmissionCount();
     final nameController = TextEditingController();
     final contentController = TextEditingController();
     final contactValueController = TextEditingController();
-    String? contactType;
     bool isSubmitting = false;
+    int remainingCount = initialRemaining;
+    bool isLimitReached = initialRemaining <= 0;
 
     showGeneralDialog(
       context: context,
@@ -1090,286 +1144,305 @@ class _VersionViewState extends State<VersionView> {
       pageBuilder: (context, animation, secondaryAnimation) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                constraints: const BoxConstraints(maxWidth: 500),
-                child: Material(
-                  color: Colors.transparent,
+            return GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {}, // absorb taps on the dialog itself
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: isDarkMode
-                          ? AppConstants.darkBackground
-                          : CupertinoColors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDarkMode
+                              ? AppConstants.darkBackground
+                              : CupertinoColors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // ── Title bar ──
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: isDarkMode
-                                    ? CupertinoColors.white.withOpacity(0.1)
-                                    : CupertinoColors.systemGrey.withOpacity(0.2),
-                                width: 1,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // ── Title bar ──
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: isDarkMode
+                                        ? CupertinoColors.white.withOpacity(0.1)
+                                        : CupertinoColors.systemGrey.withOpacity(0.2),
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '反馈',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDarkMode
+                                          ? CupertinoColors.white
+                                          : CupertinoColors.label,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => Navigator.of(context).pop(),
+                                    child: Icon(
+                                      CupertinoIcons.xmark_circle_fill,
+                                      size: 24,
+                                      color: isDarkMode
+                                          ? CupertinoColors.white.withOpacity(0.6)
+                                          : CupertinoColors.systemGrey,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '意见和反馈',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDarkMode
-                                      ? CupertinoColors.white
-                                      : CupertinoColors.label,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.of(context).pop(),
-                                child: Icon(
-                                  CupertinoIcons.xmark_circle_fill,
-                                  size: 24,
-                                  color: isDarkMode
-                                      ? CupertinoColors.white.withOpacity(0.6)
-                                      : CupertinoColors.systemGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // ── Form body ──
-                        Flexible(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // ── Name field (required) ──
-                                Text(
-                                  '您的称呼 *',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDarkMode
-                                        ? CupertinoColors.white.withOpacity(0.8)
-                                        : CupertinoColors.label,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                CupertinoTextField(
-                                  controller: nameController,
-                                  placeholder: '请输入您的称呼',
-                                  padding: const EdgeInsets.all(12),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDarkMode
-                                        ? AppConstants.darkCardBg
-                                        : CupertinoColors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isDarkMode
-                                          ? CupertinoColors.white.withOpacity(0.2)
-                                          : CupertinoColors.systemGrey.withOpacity(0.3),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // ── Content field (required) ──
-                                Text(
-                                  '意见/建议内容 *',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDarkMode
-                                        ? CupertinoColors.white.withOpacity(0.8)
-                                        : CupertinoColors.label,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                CupertinoTextField(
-                                  controller: contentController,
-                                  placeholder: '请输入您的意见或建议（最多300字）',
-                                  maxLines: 4,
-                                  maxLength: 300,
-                                  padding: const EdgeInsets.all(12),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDarkMode
-                                        ? AppConstants.darkCardBg
-                                        : CupertinoColors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isDarkMode
-                                          ? CupertinoColors.white.withOpacity(0.2)
-                                          : CupertinoColors.systemGrey.withOpacity(0.3),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // ── Contact type selector (optional) ──
-                                Text(
-                                  '联系方式（选填）',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDarkMode
-                                        ? CupertinoColors.white.withOpacity(0.8)
-                                        : CupertinoColors.label,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: ['电话', '微信', '其他'].map((type) {
-                                    final isSelected = contactType == type;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setDialogState(() {
-                                            contactType = isSelected ? null : type;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? AppConstants.primaryBlue.withOpacity(0.15)
-                                                : (isDarkMode
-                                                    ? AppConstants.darkCardBg
-                                                    : CupertinoColors.white),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? AppConstants.primaryBlue
-                                                  : (isDarkMode
-                                                      ? CupertinoColors.white.withOpacity(0.2)
-                                                      : CupertinoColors.systemGrey.withOpacity(0.3)),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            type,
+                            // ── Form body ──
+                            Flexible(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // ── Name row (label + input in one row) ──
+                                    Row(
+                                      children: [
+                                        Text.rich(
+                                          TextSpan(
+                                            text: '您的称呼 ',
                                             style: TextStyle(
                                               fontSize: 13,
-                                              color: isSelected
-                                                  ? AppConstants.primaryBlue
-                                                  : (isDarkMode
-                                                      ? CupertinoColors.white.withOpacity(0.7)
-                                                      : CupertinoColors.systemGrey),
-                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                              fontWeight: FontWeight.w500,
+                                              color: isDarkMode
+                                                  ? CupertinoColors.white.withOpacity(0.8)
+                                                  : CupertinoColors.label,
+                                            ),
+                                            children: const [
+                                              TextSpan(
+                                                text: '*',
+                                                style: TextStyle(color: CupertinoColors.systemRed),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: CupertinoTextField(
+                                            controller: nameController,
+                                            placeholder: '请输入您的称呼',
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isDarkMode
+                                                  ? AppConstants.darkCardBg
+                                                  : CupertinoColors.white,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: isDarkMode
+                                                    ? CupertinoColors.white.withOpacity(0.2)
+                                                    : CupertinoColors.systemGrey.withOpacity(0.3),
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                                const SizedBox(height: 8),
-
-                                // ── Contact value field (optional) ──
-                                CupertinoTextField(
-                                  controller: contactValueController,
-                                  placeholder: contactType != null
-                                      ? '请输入${contactType}号码（最多20个字符）'
-                                      : '请先选择联系方式类型',
-                                  maxLength: 20,
-                                  enabled: contactType != null,
-                                  padding: const EdgeInsets.all(12),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: contactType != null
-                                        ? (isDarkMode ? AppConstants.darkCardBg : CupertinoColors.white)
-                                        : (isDarkMode
-                                            ? AppConstants.darkCardBg.withOpacity(0.4)
-                                            : CupertinoColors.white.withOpacity(0.5)),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isDarkMode
-                                          ? CupertinoColors.white.withOpacity(0.2)
-                                          : CupertinoColors.systemGrey.withOpacity(0.3),
+                                      ],
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
+                                    const SizedBox(height: 16),
 
-                                // ── Submit button ──
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: CupertinoButton(
-                                    onPressed: isSubmitting
-                                        ? null
-                                        : () async {
-                                            if (nameController.text.trim().isEmpty) {
-                                              _showFeedbackToast(context, '请填写您的称呼', isDarkMode);
-                                              return;
-                                            }
-                                            if (contentController.text.trim().isEmpty) {
-                                              _showFeedbackToast(context, '请填写意见内容', isDarkMode);
-                                              return;
-                                            }
-                                            setDialogState(() => isSubmitting = true);
-                                            try {
-                                              await _submitFeedback(
-                                                nameController.text.trim(),
-                                                contentController.text.trim(),
-                                                contactType,
-                                                contactValueController.text.trim(),
-                                              );
-                                              if (context.mounted) {
-                                                Navigator.of(context).pop();
-                                                _showFeedbackToast(context, '感谢您的反馈！', isDarkMode);
-                                              }
-                                            } catch (e) {
-                                              setDialogState(() => isSubmitting = false);
-                                              if (context.mounted) {
-                                                _showFeedbackToast(context, '提交失败，请稍后再试', isDarkMode);
-                                              }
-                                            }
-                                          },
-                                    color: AppConstants.primaryBlue,
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: isSubmitting
-                                        ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                                        : const Text(
-                                            '提交反馈',
+                                    // ── Content field (required) ──
+                                    Text.rich(
+                                      TextSpan(
+                                        text: '内容 ',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDarkMode
+                                              ? CupertinoColors.white.withOpacity(0.8)
+                                              : CupertinoColors.label,
+                                        ),
+                                        children: const [
+                                          TextSpan(
+                                            text: '*',
+                                            style: TextStyle(color: CupertinoColors.systemRed),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    CupertinoTextField(
+                                      controller: contentController,
+                                      placeholder: '请输入您的意见或建议（最多300字）',
+                                      maxLines: 4,
+                                      maxLength: 300,
+                                      padding: const EdgeInsets.all(12),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDarkMode
+                                            ? AppConstants.darkCardBg
+                                            : CupertinoColors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isDarkMode
+                                              ? CupertinoColors.white.withOpacity(0.2)
+                                              : CupertinoColors.systemGrey.withOpacity(0.3),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    // ── Contact row (label + input) ──
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '联系方式',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDarkMode
+                                                ? CupertinoColors.white.withOpacity(0.8)
+                                                : CupertinoColors.label,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: CupertinoTextField(
+                                            controller: contactValueController,
+                                            placeholder: '手机/微信/邮箱等',
+                                            maxLength: 60,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                             style: TextStyle(
-                                              color: CupertinoColors.white,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 16,
+                                              fontSize: 14,
+                                              color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isDarkMode
+                                                  ? AppConstants.darkCardBg
+                                                  : CupertinoColors.white,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: isDarkMode
+                                                    ? CupertinoColors.white.withOpacity(0.2)
+                                                    : CupertinoColors.systemGrey.withOpacity(0.3),
+                                              ),
                                             ),
                                           ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+
+                                    // ── Email line ──
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          final uri = Uri.parse('mailto:rizona.cn@gmail.com');
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri);
+                                          }
+                                        },
+                                        child: Text.rich(
+                                          TextSpan(
+                                            children: [
+                                              TextSpan(
+                                                text: 'Mailto:',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: _feedbackButtonColor,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: 'rizona.cn@gmail.com',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  fontStyle: FontStyle.italic,
+                                                  color: _feedbackButtonColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    // ── Submit button (GlassButton) ──
+                                    Center(
+                                      child: GlassButton(
+                                      label: isSubmitting
+                                          ? '提交中...'
+                                          : isLimitReached
+                                              ? '感谢您的反馈，请改日提交'
+                                              : '提交($remainingCount/$_maxFeedbackSubmissionsPerDay)',
+                                      onPressed: (isSubmitting || isLimitReached)
+                                          ? null
+                                          : () async {
+                                              if (nameController.text.trim().isEmpty) {
+                                                _showFeedbackToast(context, '请填写您的称呼', isDarkMode);
+                                                return;
+                                              }
+                                              if (contentController.text.trim().isEmpty) {
+                                                _showFeedbackToast(context, '请填写内容', isDarkMode);
+                                                return;
+                                              }
+                                              setDialogState(() => isSubmitting = true);
+                                              try {
+                                                await _submitFeedback(
+                                                  nameController.text.trim(),
+                                                  contentController.text.trim(),
+                                                  contactValueController.text.trim(),
+                                                );
+                                                await _recordFeedbackSubmission();
+                                                setDialogState(() {
+                                                  isSubmitting = false;
+                                                  remainingCount--;
+                                                  if (remainingCount <= 0) {
+                                                    isLimitReached = true;
+                                                  }
+                                                });
+                                                if (context.mounted) {
+                                                  _showFeedbackToast(context, '感谢您的反馈！', isDarkMode);
+                                                }
+                                              } catch (e) {
+                                                setDialogState(() => isSubmitting = false);
+                                                if (context.mounted) {
+                                                  _showFeedbackToast(context, '提交失败，请稍后再试', isDarkMode);
+                                                }
+                                              }
+                                            },
+                                      isPrimary: true,
+                                      minWidth: 0,
+                                      height: 44,
+                                    ),
                                   ),
+                                ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1390,13 +1463,12 @@ class _VersionViewState extends State<VersionView> {
     );
   }
 
-  Future<void> _submitFeedback(String name, String content, String? contactType, String? contactValue) async {
+  Future<void> _submitFeedback(String name, String content, String? contactValue) async {
     final body = <String, dynamic>{
       'name': name,
       'content': content,
     };
-    if (contactType != null && contactValue != null && contactValue.isNotEmpty) {
-      body['contact_type'] = contactType;
+    if (contactValue != null && contactValue.isNotEmpty) {
       body['contact_value'] = contactValue;
     }
 

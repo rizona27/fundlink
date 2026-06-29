@@ -67,6 +67,86 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     );
   }
 
+  // ── Mobile layout: original, unchanged ──
+  Widget _buildMobileText(Color textColor, Color muted) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fadeUp(_line1, Text('FundLink',
+            style: TextStyle(fontSize: 44, fontWeight: FontWeight.w400,
+                fontFamily: _enFont, fontFamilyFallback: const ['Serif'],
+                letterSpacing: 8.0, color: textColor))),
+        const SizedBox(height: 6),
+        _fadeUp(_line2, Text('一基暴富',
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w400,
+                fontFamily: _zhFont, fontFamilyFallback: const ['Serif'],
+                letterSpacing: 10.0, color: textColor.withOpacity(0.85)))),
+        const SizedBox(height: 52),
+        _fadeUp(_line3, Text('less is more',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300,
+                letterSpacing: 5.0, color: muted))),
+        const SizedBox(height: 6),
+        _fadeUp(_line4, Text('Finding Abundance Through Subtraction',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w300,
+                color: muted.withOpacity(0.7)))),
+      ],
+    );
+  }
+
+  // ── Desktop layout: centred block, each line shifted with asymmetric spacers ──
+  Widget _buildDesktopText(Color textColor, Color muted) {
+    Widget _staggered(Widget child, double leftPad, double rightPad) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(width: leftPad),
+          child,
+          SizedBox(width: rightPad),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // FundLink — pushed slightly left of centre
+        _staggered(
+          _fadeUp(_line1, Text('FundLink',
+              style: TextStyle(fontSize: 44, fontWeight: FontWeight.w400,
+                  fontFamily: _enFont, fontFamilyFallback: const ['Serif'],
+                  letterSpacing: 8.0, color: textColor))),
+          0, 80,
+        ),
+        const SizedBox(height: 6),
+        // 一基暴富 — pushed slightly right of centre
+        _staggered(
+          _fadeUp(_line2, Text('一基暴富',
+              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w400,
+                  fontFamily: _zhFont, fontFamilyFallback: const ['Serif'],
+                  letterSpacing: 10.0, color: textColor.withOpacity(0.85)))),
+          70, 0,
+        ),
+        const SizedBox(height: 52),
+        // less is more — slightly left
+        _staggered(
+          _fadeUp(_line3, Text('less is more',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300,
+                  letterSpacing: 5.0, color: muted))),
+          0, 50,
+        ),
+        const SizedBox(height: 6),
+        // Subtitle — slightly right
+        _staggered(
+          _fadeUp(_line4, Text('Finding Abundance Through Subtraction',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w300,
+                  color: muted.withOpacity(0.7)))),
+          40, 0,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -89,35 +169,23 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // ── Main content — placed at golden-ratio vertical position ──
-              Positioned(
-                top: _goldenTop(screen.height),
-                left: _sideMargin(screen.width),
-                right: _sideMargin(screen.width),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _fadeUp(_line1, Text('FundLink',
-                        style: TextStyle(fontSize: 44, fontWeight: FontWeight.w400,
-                            fontFamily: _enFont, fontFamilyFallback: const ['Serif'],
-                            letterSpacing: 8.0, color: textColor))),
-                    const SizedBox(height: 6),
-                    _fadeUp(_line2, Text('一基暴富',
-                        style: TextStyle(fontSize: 30, fontWeight: FontWeight.w400,
-                            fontFamily: _zhFont, fontFamilyFallback: const ['Serif'],
-                            letterSpacing: 10.0, color: textColor.withOpacity(0.85)))),
-                    const SizedBox(height: 52),
-                    _fadeUp(_line3, Text('less is more',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300,
-                            letterSpacing: 5.0, color: muted))),
-                    const SizedBox(height: 6),
-                    _fadeUp(_line4, Text('Finding Abundance Through Subtraction',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w300,
-                            color: muted.withOpacity(0.7)))),
-                  ],
+              // ── Main content — golden-ratio vertical placement ──
+              // Mobile (< 600 px): original left-leaning layout, unchanged.
+              // Desktop (≥ 600 px): centred block with staggered per-line offsets.
+              if (screen.width < 600)
+                Positioned(
+                  top: _goldenTop(screen.height),
+                  left: _sideMargin(screen.width),
+                  right: _sideMargin(screen.width),
+                  child: _buildMobileText(textColor, muted),
+                )
+              else
+                Positioned(
+                  top: _goldenTop(screen.height),
+                  left: 0,
+                  right: 0,
+                  child: _buildDesktopText(textColor, muted),
                 ),
-              ),
               // ── Footer ──
               Positioned(
                 bottom: 48,
