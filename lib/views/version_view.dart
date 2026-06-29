@@ -238,137 +238,87 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
   Future<void> _handleUpdateTap() async {
     if (_isChecking) return;
 
-    if (mounted) {
-      setState(() {
-        _isChecking = true;
-      });
-    }
+    setState(() => _isChecking = true);
 
     try {
+      // 如果没有缓存版本信息，先检查版本
       final dataManager = DataManagerProvider.of(context);
-      final versionInfo = dataManager.latestVersionInfo;
+      var versionInfo = dataManager.latestVersionInfo;
 
-      if (versionInfo != null) {
-        await _showUpdateDialog(versionInfo);
-      } else {
+      if (versionInfo == null) {
         final packageInfo = await PackageInfo.fromPlatform();
         final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-
-        if (mounted) {
-          showCupertinoDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => const CupertinoAlertDialog(
-              content: Row(
-                children: [
-                  CupertinoActivityIndicator(),
-                  SizedBox(width: 16),
-                  Text('检查版本中...'),
-                ],
-              ),
-            ),
-          );
-        }
-
-        final newVersionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
-
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-
-        if (newVersionInfo != null && mounted) {
-          dataManager.setLatestVersionInfo(newVersionInfo);
-          await _showUpdateDialog(newVersionInfo);
-        } else {
-          await _smartNavigate();
+        versionInfo = await VersionCheckService.checkLatestVersion(currentVersion);
+        if (versionInfo != null && mounted) {
+          dataManager.setLatestVersionInfo(versionInfo);
         }
       }
-    } catch (e) {
-      if (mounted) {
-        await _smartNavigate();
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isChecking = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _smartNavigate() async {
-    if (widget.onSmartNavigate != null) {
-      widget.onSmartNavigate?.call();
-      return;
+    } catch (_) {
+      // 即使版本检查失败仍显示导航弹窗
     }
 
-    final url = Uri.parse(AppConstants.nasBackendUrl);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  Future<void> _showUpdateDialog(VersionInfo versionInfo) async {
+    setState(() => _isChecking = false);
     if (!mounted) return;
 
-    if (!versionInfo.hasUpdate) {
-      final shouldOpen = await showCupertinoDialog<bool>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('当前已是最新版本'),
-          content: Text('Version: ${versionInfo.version} \n\n是否仍要打开下载页面？'),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('取消'),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('打开'),
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-          ],
-        ),
-      );
+    // 显示导航选择弹窗
+    await _showNavigateDialog();
+  }
 
-      if (shouldOpen == true && mounted) {
-        await _smartNavigate();
-      }
+  Future<void> _showNavigateDialog() async {
+    final dataManager = DataManagerProvider.of(context);
+    final versionInfo = dataManager.latestVersionInfo;
+    final hasUpdate = versionInfo?.hasUpdate ?? false;
+    final latestVersion = versionInfo?.version ?? '';
+    final releaseNotes = versionInfo?.releaseNotes ?? '';
+
+    String title;
+    String subtitle;
+    if (versionInfo == null) {
+      title = 'FundLink';
+      subtitle = '是否访问站点？';
+    } else if (hasUpdate) {
+      title = '发现新版本 v$latestVersion';
+      subtitle = releaseNotes.isNotEmpty
+          ? '更新内容：$releaseNotes\n\n是否访问站点去更新？'
+          : '是否访问站点去更新？';
     } else {
-      final shouldOpen = await showCupertinoDialog<bool>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('发现新版本'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('最新版本: ${versionInfo.version}'),
-              const SizedBox(height: 8),
-              if (versionInfo.releaseNotes.isNotEmpty)
-                Text('更新内容:\n${versionInfo.releaseNotes}'),
-              const SizedBox(height: 8),
-              const Text('是否前往下载页面？'),
-            ],
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('稍后'),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('前往下载'),
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldOpen == true && mounted) {
-        await _smartNavigate();
-      }
+      title = '已是最新版本 v$latestVersion';
+      subtitle = '是否还要继续访问？';
     }
+
+    await showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 12),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.of(context).pop();
+              launchUrl(Uri.parse(AppConstants.nasBackendUrl),
+                  mode: LaunchMode.externalApplication);
+            },
+            child: const Text('主页'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.of(context).pop();
+              launchUrl(Uri.parse(AppConstants.githubReleasePageUrl),
+                  mode: LaunchMode.externalApplication);
+            },
+            child: const Text('GitHub'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openProjectUrl() async {
@@ -387,32 +337,44 @@ class _VersionUpdateButtonState extends State<_VersionUpdateButton> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = AppConstants.isDark(context);
+    final versionLabel = AppConstants.appVersionWithPrefix;
 
     return GestureDetector(
       onTap: _handleUpdateTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: AnimatedContainer(
+        duration: AppConstants.defaultAnimationDuration,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: _isChecking
-              ? (widget.hasUpdate ? AppConstants.warningOrange.withOpacity(0.5) : AppConstants.primaryBlue.withOpacity(0.5))
-              : (widget.hasUpdate ? AppConstants.warningOrange : AppConstants.primaryBlue),
+              ? (widget.hasUpdate ? AppConstants.primaryBlue.withOpacity(0.5) : AppConstants.successGreen.withOpacity(0.5))
+              : (widget.hasUpdate ? AppConstants.primaryBlue : AppConstants.successGreen),
           borderRadius: BorderRadius.circular(12),
         ),
         child: _isChecking
             ? const SizedBox(
-          width: 14,
-          height: 14,
-          child: CupertinoActivityIndicator(radius: 7),
-        )
-            : Text(
-          widget.hasUpdate ? 'Update' : 'Homepage',
-          style: TextStyle(
-            color: CupertinoColors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+                width: 14,
+                height: 14,
+                child: CupertinoActivityIndicator(radius: 7),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.hasUpdate ? CupertinoIcons.rocket_fill : CupertinoIcons.checkmark_shield_fill,
+                    size: 10,
+                    color: CupertinoColors.white,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    widget.hasUpdate ? '$versionLabel 更新' : '$versionLabel 最新',
+                    style: const TextStyle(
+                      color: CupertinoColors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -468,9 +430,10 @@ class _VersionViewState extends State<VersionView> {
   }
 
   Future<void> _handleUpdateTap() async {
-    final state = context.findAncestorStateOfType<_VersionUpdateButtonState>();
-    if (state != null) {
-      await state._handleUpdateTap();
+    // 直接打开 NAS 主页
+    final url = Uri.parse(AppConstants.nasBackendUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -567,16 +530,6 @@ class _VersionViewState extends State<VersionView> {
                                         ),
                                       ),
                                       const SizedBox(width: 12),
-                                      Text(
-                                        APP_VERSION,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDarkMode
-                                              ? CupertinoColors.white.withOpacity(0.5)
-                                              : CupertinoColors.systemGrey,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
                                       _VersionUpdateButton(
                                         onSmartNavigate: _handleUpdateTap,
                                         hasUpdate: _hasUpdate,
