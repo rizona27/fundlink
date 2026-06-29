@@ -392,7 +392,7 @@ class _VersionViewState extends State<VersionView> {
 
   late Color _feedbackButtonColor;
 
-  static const int _maxFeedbackSubmissionsPerDay = 2;
+  static const int _maxFeedbackSubmissionsPerDay = 5;
   static const int _feedbackWindowHours = 24;
 
   @override
@@ -1025,7 +1025,7 @@ class _VersionViewState extends State<VersionView> {
         : [];
 
     final now = DateTime.now();
-    final cutoff = now.subtract(Duration(hours: _feedbackWindowHours));
+    final cutoff = DateTime(now.year, now.month, now.day); // 每天凌晨重置
 
     final recent = submissions.where((s) {
       final t = DateTime.tryParse(s);
@@ -1060,7 +1060,7 @@ class _VersionViewState extends State<VersionView> {
         : [];
 
     final now = DateTime.now();
-    final cutoff = now.subtract(Duration(hours: _feedbackWindowHours));
+    final cutoff = DateTime(now.year, now.month, now.day); // 每天凌晨重置
 
     final recentCount = submissions.where((s) {
       final t = DateTime.tryParse(s);
@@ -1100,11 +1100,11 @@ class _VersionViewState extends State<VersionView> {
             return GestureDetector(
               onTap: () => FocusScope.of(context).unfocus(),
               child: Center(
-                child: GestureDetector(
-                  onTap: () {}, // absorb taps on the dialog itself
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    constraints: const BoxConstraints(maxWidth: 500),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: GestureDetector(
+                    onTap: () {}, // absorb taps inside dialog
                     child: Material(
                       color: Colors.transparent,
                       child: Container(
@@ -1310,7 +1310,7 @@ class _VersionViewState extends State<VersionView> {
                                         onTap: () async {
                                           final uri = Uri.parse('mailto:rizona.cn@gmail.com');
                                           if (await canLaunchUrl(uri)) {
-                                            await launchUrl(uri);
+                                            await launchUrl(uri, mode: LaunchMode.platformDefault);
                                           }
                                         },
                                         child: Text.rich(
@@ -1367,16 +1367,11 @@ class _VersionViewState extends State<VersionView> {
                                                   contactValueController.text.trim(),
                                                 );
                                                 await _recordFeedbackSubmission();
-                                                setDialogState(() {
-                                                  isSubmitting = false;
-                                                  remainingCount--;
-                                                  if (remainingCount <= 0) {
-                                                    isLimitReached = true;
-                                                  }
-                                                });
+                                                // Close the feedback dialog first
                                                 if (context.mounted) {
-                                                  _showFeedbackToast(context, '感谢您的反馈！', isDarkMode);
+                                                  Navigator.of(context).pop();
                                                 }
+                                                _showFeedbackToast(context, '感谢您的反馈！', isDarkMode);
                                               } catch (e) {
                                                 setDialogState(() => isSubmitting = false);
                                                 if (context.mounted) {
@@ -1420,6 +1415,7 @@ class _VersionViewState extends State<VersionView> {
     final body = <String, dynamic>{
       'name': name,
       'content': content,
+      'platform': AppConstants.userAgentApp,
     };
     if (contactValue != null && contactValue.isNotEmpty) {
       body['contact_value'] = contactValue;
