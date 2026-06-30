@@ -393,8 +393,7 @@ class _VersionViewState extends State<VersionView> {
 
   late Color _feedbackButtonColor;
 
-  static const int _maxFeedbackSubmissionsPerDay = 5;
-  static const int _feedbackWindowHours = 24;
+  static const int _maxFeedbackSubmissionsPerDay = 2;
 
   @override
   void initState() {
@@ -818,7 +817,7 @@ class _VersionViewState extends State<VersionView> {
                   '...更多',
                   style: TextStyle(
                     fontSize: 14,
-                    color: AppConstants.primaryBlue,
+                    color: _feedbackButtonColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1098,18 +1097,29 @@ class _VersionViewState extends State<VersionView> {
       pageBuilder: (context, animation, secondaryAnimation) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return GestureDetector(
-              onTap: () => FocusScope.of(context).unfocus(),
-              child: Center(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: GestureDetector(
-                    onTap: () {}, // absorb taps inside dialog
-                    child: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        decoration: BoxDecoration(
+            return Stack(
+                children: [
+                  // 全屏背景点击/滑动收起键盘
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    onVerticalDragStart: (_) => FocusScope.of(context).unfocus(),
+                  ),
+                  // 弹窗内容（点击空白区域收起键盘）
+                  Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      child: GestureDetector(
+                        onTap: () => FocusScope.of(context).unfocus(),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 20),
+                          constraints: const BoxConstraints(maxWidth: 500),
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: Container(
+                            decoration: BoxDecoration(
                           color: isDarkMode
                               ? AppConstants.darkBackground
                               : CupertinoColors.white,
@@ -1167,6 +1177,7 @@ class _VersionViewState extends State<VersionView> {
                             // ── Form body ──
                             Flexible(
                               child: SingleChildScrollView(
+                                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                                 padding: const EdgeInsets.all(20),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1302,44 +1313,36 @@ class _VersionViewState extends State<VersionView> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: 12),
 
-                                    // ── Email line ──
+                                    // ── Email display (read-only, no tap) ──
                                     Align(
                                       alignment: Alignment.center,
-                                      child: GestureDetector(
-                                        onTap: () async {
-                                          final uri = Uri.parse('mailto:rizona.cn@gmail.com');
-                                          if (await canLaunchUrl(uri)) {
-                                            await launchUrl(uri, mode: LaunchMode.platformDefault);
-                                          }
-                                        },
-                                        child: Text.rich(
-                                          TextSpan(
-                                            children: [
-                                              TextSpan(
-                                                text: 'Mailto:',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: _feedbackButtonColor,
-                                                ),
+                                      child: Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: 'Mailto: ',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: _feedbackButtonColor,
                                               ),
-                                              TextSpan(
-                                                text: 'rizona.cn@gmail.com',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w500,
-                                                  fontStyle: FontStyle.italic,
-                                                  color: _feedbackButtonColor,
-                                                ),
+                                            ),
+                                            TextSpan(
+                                              text: 'rizona.cn@gmail.com',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                fontStyle: FontStyle.italic,
+                                                color: _feedbackButtonColor,
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 8),
 
                                     // ── Submit button (GlassButton) ──
                                     Center(
@@ -1396,9 +1399,11 @@ class _VersionViewState extends State<VersionView> {
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ],
         );
+      },
+    );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return FadeTransition(
@@ -1416,7 +1421,7 @@ class _VersionViewState extends State<VersionView> {
     final body = <String, dynamic>{
       'name': name,
       'content': content,
-      'platform': AppConstants.userAgentApp,
+      'platform': '${AppConstants.userAgentApp} (${Platform.isAndroid ? 'Android' : Platform.isIOS ? 'iOS' : Platform.isMacOS ? 'macOS' : Platform.isWindows ? 'Windows' : 'Unknown'})',
     };
     if (contactValue != null && contactValue.isNotEmpty) {
       body['contact_value'] = contactValue;
