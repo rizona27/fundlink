@@ -466,33 +466,57 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
     final small = ((dist['小盘占比'] ?? 0) * 100).round();
     final valuePct = ((dist['价值占比'] ?? 0) * 100).round();
     final growthPct = ((dist['成长占比'] ?? 0) * 100).round();
+    final balancedPct = ((dist['均衡占比'] ?? 0) * 100).round();
 
     final topIndustries = _getTopIndustries(count: _topIndustriesCount);
+    final fundCount = widget.holdings.length;
+    final totalInv = _totalInvestment;
     final buf = StringBuffer();
 
-    // Market cap style — neutral, data-driven
+    // 1. Portfolio overview
+    final totalYi = totalInv / 100000000;
+    if (totalYi >= 0.01) {
+      buf.write('该客户共持有$fundCount只基金（总投入${totalYi.toStringAsFixed(2)}亿），');
+    } else {
+      buf.write('该客户共持有$fundCount只基金（总投入${(totalInv / 10000).toStringAsFixed(0)}万），');
+    }
+
+    // 2. Market cap style with detailed breakdown
     if (large >= mid && large >= small) {
-      buf.write('组合大盘股占比较高（$large%），');
+      buf.write('重仓股整体偏向大盘风格（大盘占$large%');
+      if (mid > 0) buf.write('，中盘占$mid%');
+      if (small > 0) buf.write('，小盘占$small%');
+      buf.write('），');
     } else if (mid >= large && mid >= small) {
-      buf.write('组合中盘股占比较高（$mid%），');
+      buf.write('重仓股以中盘为主（中盘占$mid%');
+      if (large > 0) buf.write('，大盘占$large%');
+      if (small > 0) buf.write('，小盘占$small%');
+      buf.write('），');
     } else {
-      buf.write('组合小盘股占比较高（$small%），');
+      buf.write('重仓股偏小盘风格（小盘占$small%');
+      if (mid > 0) buf.write('，中盘占$mid%');
+      if (large > 0) buf.write('，大盘占$large%');
+      buf.write('），');
     }
 
-    // Value style — neutral, data-driven
+    // 3. Value / Growth style
     if (growthPct >= 40) {
-      buf.write('成长型股票权重$growthPct%，估值水平相对较高；');
+      buf.write('成长型股票权重较高（$growthPct%），估值水平相对偏高，进攻性较强；');
     } else if (valuePct >= 40) {
-      buf.write('价值型股票权重$valuePct%，估值水平相对较低；');
+      buf.write('价值型股票权重较高（$valuePct%），估值水平相对偏低，防御性较好；');
     } else {
-      buf.write('成长与价值风格分布较为均衡；');
+      if (balancedPct > 0) {
+        buf.write('成长（$growthPct%）与价值（$valuePct%）风格较为均衡，兼具攻守特性；');
+      } else {
+        buf.write('成长（$growthPct%）与价值（$valuePct%）风格分布适中；');
+      }
     }
 
-    // Industry
+    // 4. Top industries
     if (topIndustries.isNotEmpty) {
       final visible = topIndustries.where((e) => e.key != '其他').toList();
       if (visible.isNotEmpty) {
-        buf.write('前三大行业为${visible[0].key}（${visible[0].value.toStringAsFixed(1)}%）');
+        buf.write('前三大重仓行业为${visible[0].key}（${visible[0].value.toStringAsFixed(1)}%）');
         for (int i = 1; i < visible.length; i++) {
           buf.write('、${visible[i].key}（${visible[i].value.toStringAsFixed(1)}%）');
         }
@@ -504,10 +528,25 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       buf.write('行业分布较为分散。');
     }
 
-    // Overlap — factual note
+    // 5. Top weighted stocks
+    final top3Stocks = _weightedHoldings.take(3).toList();
+    if (top3Stocks.isNotEmpty) {
+      buf.write('前三大重仓个股为');
+      for (int i = 0; i < top3Stocks.length; i++) {
+        if (i > 0) buf.write('、');
+        buf.write('${top3Stocks[i].stockName}（${top3Stocks[i].weightedRatio.toStringAsFixed(2)}%）');
+      }
+      buf.write('。');
+    }
+
+    // 6. Concentration / overlap assessment
     final overlapCount = _getOverlapStockCount();
     if (overlapCount > 3) {
-      buf.write('有$overlapCount只股票被多只基金同时重仓。');
+      buf.write('有$overlapCount只股票被多只基金同时重仓，存在一定的持仓集中风险，建议关注分散度。');
+    } else if (overlapCount > 0) {
+      buf.write('有$overlapCount只股票被多只基金重仓，持仓重叠度较低，分散性较好。');
+    } else {
+      buf.write('各基金重仓股无重叠，持仓分散度较高。');
     }
 
     return buf.toString();
@@ -580,7 +619,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
 
                     // Module 2: Weighted top holdings
                     _buildSectionCard(
-                      title: '重仓统计（购买权重）',
+                      title: '重仓统计（前5大重仓股）',
                       icon: CupertinoIcons.star_circle,
                       isDark: isDark, cardColor: cardColor,
                       textColor: textColor, subTextColor: subTextColor,
@@ -748,19 +787,21 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
               borderData: FlBorderData(show: false),
               pieTouchData: PieTouchData(
                 touchCallback: (FlTouchEvent event, PieTouchResponse? response) {
-                  if (!event.isInterestedForInteractions ||
-                      response == null ||
-                      response.touchedSection == null) {
-                    if (_touchedPieIndex != -1) {
-                      setState(() => _touchedPieIndex = -1);
+                  // Only handle on tap-down to implement toggle behavior.
+                  // On mobile: tap segment → highlight, tap same → unhighlight,
+                  // tap different → switch, tap outside → clear.
+                  if (event is FlTapDownEvent || event is FlLongPressStart) {
+                    if (response == null || response.touchedSection == null) {
+                      if (_touchedPieIndex != -1) {
+                        setState(() => _touchedPieIndex = -1);
+                      }
+                      return;
                     }
-                    return;
-                  }
-                  final touched = response.touchedSection;
-                  if (touched == null) return;
-                  final newIndex = touched.touchedSectionIndex;
-                  if (newIndex != _touchedPieIndex) {
-                    setState(() => _touchedPieIndex = newIndex);
+                    final touched = response.touchedSection;
+                    if (touched == null) return;
+                    final newIndex = touched.touchedSectionIndex;
+                    setState(() =>
+                        _touchedPieIndex = newIndex == _touchedPieIndex ? -1 : newIndex);
                   }
                 },
               ),
@@ -792,13 +833,13 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
   // ---------------------------------------------------------------------------
 
   Widget _buildWeightedHoldingsTable(bool isDark, Color textColor, Color subTextColor) {
-    final top = _weightedHoldings.take(10).toList();
+    final top = _weightedHoldings.take(5).toList();
     if (top.isEmpty) return Text('暂无重仓股数据', style: TextStyle(fontSize: 13, color: subTextColor));
 
     final screenWidth = MediaQuery.of(context).size.width;
     final useTwoCols = screenWidth > 440;
-    final left = top.take(5).toList();
-    final right = top.skip(5).take(5).toList();
+    final left = top.take(3).toList();
+    final right = top.skip(3).take(2).toList();
 
     Widget buildRow(int idx, WeightedHolding wh) {
       final fullCode = _quoteService.toFullCode(wh.stockCode);
@@ -870,7 +911,7 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(child: buildColumn(left, 0)),
         const SizedBox(width: 12),
-        Expanded(child: buildColumn(right, 5)),
+        Expanded(child: buildColumn(right, 3)),
       ]);
     }
 
@@ -1007,33 +1048,90 @@ class _ClientFundSummaryPageState extends State<ClientFundSummaryPage> {
       ),
       const SizedBox(width: 6),
       Expanded(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            height: 22,
-            child: Row(children: active.map((seg) {
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final totalWidth = constraints.maxWidth;
+            // Minimum width per segment to show text fully (~54px for "大盘 67%")
+            const minSegmentWidth = 54.0;
+
+            // Calculate raw pixel widths based on proportion
+            final rawWidths = active.map((seg) {
               final fraction = total > 0 ? seg.value / total : 0;
-              final flex = (fraction * 1000).round().clamp(1, 1000);
-              final pct = (seg.value * 100).round();
-              return Expanded(
-                flex: flex,
-                child: Container(
-                  color: seg.color.withValues(alpha: 0.75),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${seg.label} $pct%',
-                    style: TextStyle(
-                      fontSize: fs - 2,
-                      fontWeight: FontWeight.w600,
-                      color: _contrastTextColor(seg.color),
+              return fraction * totalWidth;
+            }).toList();
+
+            // Ensure each segment has at least minSegmentWidth
+            // If any segment needs boosting, reduce from larger segments proportionally
+            final adjustedWidths = List<double>.filled(active.length, 0);
+            double boostNeeded = 0;
+            double reducibleTotal = 0;
+            final boolsNeeded = <int>[];
+            final reducibleIndices = <int>[];
+
+            for (int i = 0; i < rawWidths.length; i++) {
+              if (rawWidths[i] < minSegmentWidth) {
+                boostNeeded += minSegmentWidth - rawWidths[i];
+                adjustedWidths[i] = minSegmentWidth;
+                boolsNeeded.add(i);
+              } else {
+                reducibleIndices.add(i);
+                reducibleTotal += rawWidths[i];
+              }
+            }
+
+            if (boostNeeded > 0 && reducibleIndices.isNotEmpty) {
+              // Reduce from larger segments proportionally
+              final availableForReduction = reducibleTotal - reducibleIndices.length * minSegmentWidth;
+              if (availableForReduction > 0) {
+                final scaleFactor = (reducibleTotal - boostNeeded.clamp(0, availableForReduction)) / reducibleTotal;
+                for (final i in reducibleIndices) {
+                  adjustedWidths[i] = (rawWidths[i] * scaleFactor).clamp(minSegmentWidth, totalWidth);
+                }
+              }
+            } else if (boostNeeded <= 0) {
+              // No boosting needed, use raw widths
+              for (int i = 0; i < rawWidths.length; i++) {
+                adjustedWidths[i] = rawWidths[i];
+              }
+            }
+
+            // If total adjusted exceeds totalWidth, scale everything down proportionally
+            final adjustedTotal = adjustedWidths.fold(0.0, (s, w) => s + w);
+            if (adjustedTotal > totalWidth && totalWidth > 0) {
+              final scale = totalWidth / adjustedTotal;
+              for (int i = 0; i < adjustedWidths.length; i++) {
+                adjustedWidths[i] *= scale;
+              }
+            }
+
+            final pcts = active.map((seg) => (seg.value * 100).round()).toList();
+
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              clipBehavior: Clip.antiAlias,
+              child: Container(
+                height: 22,
+                child: Row(children: List.generate(active.length, (i) {
+                  final seg = active[i];
+                  return Container(
+                    width: adjustedWidths[i].clamp(1, totalWidth),
+                    color: seg.color.withValues(alpha: 0.75),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${seg.label} ${pcts[i]}%',
+                      style: TextStyle(
+                        fontSize: fs - 2,
+                        fontWeight: FontWeight.w600,
+                        color: _contrastTextColor(seg.color),
+                      ),
+                      maxLines: 1,
+                      softWrap: false,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              );
-            }).toList()),
-          ),
+                  );
+                })),
+              ),
+            );
+          },
         ),
       ),
     ]);

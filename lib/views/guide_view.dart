@@ -33,12 +33,42 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
   /// Current search keyword for filtering guide items.
   String _searchKeyword = '';
 
+  /// GlobalKeys for section and item widgets, used to scroll-into-view on expand.
+  final Map<String, GlobalKey> _sectionKeys = {};
+  final Map<String, GlobalKey> _itemKeys = {};
+
+  GlobalKey _getSectionKey(String key) {
+    return _sectionKeys.putIfAbsent(key, () => GlobalKey());
+  }
+
+  GlobalKey _getItemKey(String itemKey) {
+    return _itemKeys.putIfAbsent(itemKey, () => GlobalKey());
+  }
+
+  void _scrollToKey(GlobalKey key) {
+    // Delay to let the expand animation start, then scroll into view.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: AnimationConfig.durationMedium,
+          curve: AnimationConfig.curveEaseInOutCubic,
+          alignment: 0.0,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+      }
+    });
+  }
+
   void _toggleSection(String key) {
     setState(() {
       if (_activeSection == key) {
         _activeSection = null;
       } else {
         _activeSection = key;
+        // Scroll the section header + expanded content into view
+        _scrollToKey(_getSectionKey(key));
       }
     });
   }
@@ -49,6 +79,8 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
         _expandedItems.remove(itemKey);
       } else {
         _expandedItems.add(itemKey);
+        // Scroll the expanded item into view
+        _scrollToKey(_getItemKey(itemKey));
       }
     });
   }
@@ -544,6 +576,7 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
     final isExpanded = _activeSection == key;
 
     return Container(
+      key: _getSectionKey(key),
       decoration: BoxDecoration(
         color: isDark
             ? CupertinoColors.systemGrey6.withOpacity(0.25)
@@ -771,6 +804,7 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
         children: [
           // Title row — always visible, tappable
           GestureDetector(
+            key: _getItemKey(itemKey),
             onTap: () => _toggleItem(itemKey),
             behavior: HitTestBehavior.opaque,
             child: Padding(
