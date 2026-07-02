@@ -46,18 +46,22 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
   }
 
   void _scrollToKey(GlobalKey key) {
-    // Delay to let the expand animation start, then scroll into view.
+    // Wait for the AnimatedCrossFade size animation to complete (300ms),
+    // then scroll the expanded content into view. Using addPostFrameCallback
+    // alone fires on the first frame when the widget is still near-zero height.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = key.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: AnimationConfig.durationMedium,
-          curve: AnimationConfig.curveEaseInOutCubic,
-          alignment: 0.0,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        );
-      }
+      Future.delayed(AnimationConfig.durationMedium + const Duration(milliseconds: 50), () {
+        final ctx = key.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: AnimationConfig.durationMedium,
+            curve: AnimationConfig.curveEaseInOutCubic,
+            alignment: 0.0,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          );
+        }
+      });
     });
   }
 
@@ -786,6 +790,7 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
     final bool isItemExpanded = _expandedItems.contains(itemKey);
 
     return Container(
+      key: _getItemKey(itemKey),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isDark
@@ -804,7 +809,6 @@ class _GuideViewState extends State<GuideView> with ScrollToTopMixin {
         children: [
           // Title row — always visible, tappable
           GestureDetector(
-            key: _getItemKey(itemKey),
             onTap: () => _toggleItem(itemKey),
             behavior: HitTestBehavior.opaque,
             child: Padding(

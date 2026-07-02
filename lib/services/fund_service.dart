@@ -757,38 +757,57 @@ class FundService {
       return cached;
     }
 
-    try {
-      final url = Uri.parse(AppConstants.apiPortfolioAnalysis);
-      debugPrint('[FundService] POST $url (${funds.length} funds)');
-      final response = await HttpClientProvider.client
-          .post(url,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'funds': funds}))
-          .timeout(const Duration(seconds: 60));
+    // Retry logic: up to 3 attempts with increasing backoff
+    const maxRetries = 3;
+    const baseDelay = Duration(milliseconds: 800);
+    Object? lastError;
 
-      debugPrint('[FundService] 后端响应 HTTP ${response.statusCode}');
-      if (response.statusCode != 200) {
-        final snippet = response.body.length > 200
-            ? '${response.body.substring(0, 200)}...'
-            : response.body;
-        debugPrint('[FundService] 后端返回非200: $snippet');
-        // Return stale cache if available even if expired
-        return cached;
-      }
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final url = Uri.parse(AppConstants.apiPortfolioAnalysis);
+        if (attempt > 0) {
+          debugPrint('[FundService] 后端组合分析 重试 $attempt/$maxRetries');
+        }
+        debugPrint('[FundService] POST $url (${funds.length} funds)');
+        final response = await HttpClientProvider.client
+            .post(url,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'funds': funds}))
+            .timeout(const Duration(seconds: 60));
 
-      final body = jsonDecode(response.body);
-      final result = body['data'] as Map<String, dynamic>?;
-      if (result != null) {
-        _portfolioCache[cacheKey] = result;
-        _portfolioCacheTimestamps[cacheKey] = DateTime.now();
+        debugPrint('[FundService] 后端响应 HTTP ${response.statusCode}');
+        if (response.statusCode != 200) {
+          final snippet = response.body.length > 200
+              ? '${response.body.substring(0, 200)}...'
+              : response.body;
+          debugPrint('[FundService] 后端返回非200: $snippet');
+          lastError = 'HTTP ${response.statusCode}';
+          // Wait before retry, unless this was the last attempt
+          if (attempt < maxRetries - 1) {
+            await Future.delayed(baseDelay * (attempt + 1));
+          }
+          continue;
+        }
+
+        final body = jsonDecode(response.body);
+        final result = body['data'] as Map<String, dynamic>?;
+        if (result != null) {
+          _portfolioCache[cacheKey] = result;
+          _portfolioCacheTimestamps[cacheKey] = DateTime.now();
+        }
+        return result;
+      } catch (e) {
+        lastError = e;
+        debugPrint('[FundService] 后端组合分析失败 (尝试 ${attempt + 1}/$maxRetries): $e');
+        if (attempt < maxRetries - 1) {
+          await Future.delayed(baseDelay * (attempt + 1));
+        }
       }
-      return result;
-    } catch (e) {
-      debugPrint('[FundService] 后端组合分析失败: $e');
-      _dataManager?.addLog('后端组合分析失败: $e', type: LogType.warning);
-      // Return stale cache on error if available
-      return cached;
     }
+
+    // All retries exhausted — return stale cache if available
+    _dataManager?.addLog('后端组合分析失败（已重试${maxRetries}次）: $lastError', type: LogType.warning);
+    return cached;
   }
 
   Future<Map<String, double>> fetchStockQuotes(List<String> stockCodes) async {

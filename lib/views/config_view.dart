@@ -45,6 +45,35 @@ class _ConfigViewState extends State<ConfigView>
   bool _isAppSettingsExpanded = false;
   bool _isAboutExpanded = false;
 
+  /// Scroll controller for the main ListView, also used for auto-scroll on section expand.
+  final ScrollController _scrollController = ScrollController();
+
+  /// GlobalKeys for section widgets, used to scroll-into-view on expand.
+  final Map<String, GlobalKey> _sectionKeys = {};
+
+  GlobalKey _getSectionKey(String key) {
+    return _sectionKeys.putIfAbsent(key, () => GlobalKey());
+  }
+
+  void _scrollToKey(GlobalKey key) {
+    // Wait for AnimatedSize animation to complete (400ms),
+    // then scroll the expanded section into view.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(AnimationConfig.durationMedium + const Duration(milliseconds: 50), () {
+        final ctx = key.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: AnimationConfig.durationMedium,
+            curve: AnimationConfig.curveEaseInOutCubic,
+            alignment: 0.0,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          );
+        }
+      });
+    });
+  }
+
   // Gradient animation — driven by an AnimationController (vsync-aware,
   // auto-pauses when the widget is off-screen or the tab isn't visible).
   late final AnimationController _gradientController;
@@ -137,6 +166,10 @@ class _ConfigViewState extends State<ConfigView>
       }
     });
     _saveSectionState('section_${key}_expanded', !currentValue);
+    // Auto-scroll to the section when it's being expanded (not collapsed)
+    if (!currentValue) {
+      _scrollToKey(_getSectionKey(key));
+    }
   }
 
   @override
@@ -168,6 +201,7 @@ class _ConfigViewState extends State<ConfigView>
     WidgetsBinding.instance.removeObserver(this);
     _animationTimer?.cancel();
     _gradientController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -185,6 +219,7 @@ class _ConfigViewState extends State<ConfigView>
         color: backgroundColor.withOpacity(_backgroundOpacity),
         child: SafeArea(
           child: ListView(
+            controller: _scrollController,
             padding: const EdgeInsets.all(16),
             children: [
               _buildHoldingsManagementSection(isDarkMode),
@@ -209,6 +244,7 @@ class _ConfigViewState extends State<ConfigView>
     return _buildSection(
       title: '数据同步',
       icon: '工具',
+      sectionKey: 'common',
       isDarkMode: isDarkMode,
       isExpanded: _isCommonToolsExpanded,
       onToggle: () => _toggleSection('common', _isCommonToolsExpanded),
@@ -268,6 +304,7 @@ class _ConfigViewState extends State<ConfigView>
     return _buildSection(
       title: '偏好设置',
       icon: '设置',
+      sectionKey: 'app',
       isDarkMode: isDarkMode,
       isExpanded: _isAppSettingsExpanded,
       onToggle: () => _toggleSection('app', _isAppSettingsExpanded),
@@ -317,6 +354,7 @@ class _ConfigViewState extends State<ConfigView>
     return _buildSection(
       title: '持仓管理',
       icon: '持仓',
+      sectionKey: 'holdings',
       isDarkMode: isDarkMode,
       isExpanded: _isHoldingsManagementExpanded,
       onToggle: () => _toggleSection('holdings', _isHoldingsManagementExpanded),
@@ -378,6 +416,7 @@ class _ConfigViewState extends State<ConfigView>
     return _buildSection(
       title: '关于程序',
       icon: '关于',
+      sectionKey: 'about',
       isDarkMode: isDarkMode,
       isExpanded: _isAboutExpanded,
       onToggle: () => _toggleSection('about', _isAboutExpanded),
@@ -459,8 +498,10 @@ class _ConfigViewState extends State<ConfigView>
     required List<Widget> children,
     required bool isExpanded,
     required VoidCallback onToggle,
+    required String sectionKey,
   }) {
     return Container(
+      key: _getSectionKey(sectionKey),
       decoration: BoxDecoration(
         color: isDarkMode
             ? CupertinoColors.systemGrey6.withOpacity(0.4)
