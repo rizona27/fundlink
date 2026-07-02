@@ -31,17 +31,32 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     with SingleTickerProviderStateMixin {
   late Timer _timer;
   int _remainingSeconds = 0;
-  late DateTime _lastRefreshTime;
   bool _isDisposed = false;
+
+  /// Shared across rebuilds so the countdown survives parent widget rebuilds.
+  static DateTime _lastRefreshTime = DateTime.now();
 
   static const List<int> intervalOptions = [60, 180, 300];
 
   @override
   void initState() {
     super.initState();
-    _lastRefreshTime = DateTime.now();
-    _remainingSeconds = widget.refreshIntervalSeconds;
+    // Keep the existing _lastRefreshTime if it's recent; only reset if stale
+    // (more than one full interval past, meaning a genuine fresh start).
+    final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;
+    if (elapsed > widget.refreshIntervalSeconds + 30) {
+      _lastRefreshTime = DateTime.now();
+    }
+    _remainingSeconds = _computeRemaining();
     _startTimer();
+  }
+
+  int _computeRemaining() {
+    final isTradingTime = widget.isTradingTime ?? _checkIsTradingTime();
+    if (!isTradingTime) return _remainingSeconds;
+    final elapsed = DateTime.now().difference(_lastRefreshTime).inSeconds;
+    final remaining = widget.refreshIntervalSeconds - elapsed;
+    return remaining > 0 ? remaining : 0;
   }
 
   void _startTimer() {
@@ -81,9 +96,11 @@ class _CountdownRefreshButtonState extends State<CountdownRefreshButton>
     if (_isDisposed) return;
     _timer.cancel();
     _lastRefreshTime = DateTime.now();
-    setState(() {
-      _remainingSeconds = widget.refreshIntervalSeconds;
-    });
+    if (mounted) {
+      setState(() {
+        _remainingSeconds = widget.refreshIntervalSeconds;
+      });
+    }
     _startTimer();
   }
 

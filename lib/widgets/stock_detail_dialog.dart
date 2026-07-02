@@ -58,10 +58,24 @@ class _StockDetailDialogState extends State<StockDetailDialog> with TickerProvid
   }
 
   void _startAutoUpdate() {
+    _updateTimer?.cancel();
+    // Only poll during trading hours; outside trading hours there is
+    // nothing new to fetch, so skip the 5-second timer entirely.
+    if (!_isTradingTime) return;
+
     _updateTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) {
-        _loadStockData(refreshOnly: true);
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+      // Double-check trading time on each tick — stop polling once
+      // the market closes while the dialog is still open.
+      if (!AppConstants.isInTradingHours()) {
+        timer.cancel();
+        _updateTimer = null;
+        return;
+      }
+      _loadStockData(refreshOnly: true);
     });
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,8 +157,10 @@ class DataManager extends ChangeNotifier {
           .toList(),
     );
 
-    // Forward sub-notifier notifications
-    logNotifier.addListener(_onSubNotifierChanged);
+    // Forward sub-notifier notifications — but NOT logNotifier changes,
+    // since log entries don't affect any UI state visible in main views.
+    // Log viewers listen to logNotifier directly.
+    // logNotifier.addListener(_onSubNotifierChanged);  // removed: too noisy
     settingsNotifier.addListener(_onSubNotifierChanged);
     valuationNotifier.addListener(_onSubNotifierChanged);
 
@@ -497,6 +500,9 @@ class DataManager extends ChangeNotifier {
   Map<String, dynamic>? getValuation(String fundCode) =>
       valuationNotifier.getValuation(fundCode);
 
+  bool hasValuationRecord(String fundCode) =>
+      valuationNotifier.hasValuationRecord(fundCode);
+
   Future<void> updateValuationCache(
           String fundCode, Map<String, dynamic> valuation) async =>
       valuationNotifier.updateValuationCache(fundCode, valuation);
@@ -724,8 +730,11 @@ class DataManager extends ChangeNotifier {
     final affectedPairs = <String>{};
     final enhancedList = <TransactionRecord>[];
 
-    // Phase A: validate and prepare (fast, in-memory)
-    for (final transaction in transactions) {
+    final total = transactions.length;
+
+    // Phase A: validate and prepare (0 → 0.35) — fast ticks
+    for (int idx = 0; idx < transactions.length; idx++) {
+      final transaction = transactions[idx];
       if (transaction.amount <= 0) continue;
       if (!transaction.isPending && transaction.shares <= 0) continue;
 
@@ -739,39 +748,32 @@ class DataManager extends ChangeNotifier {
       enhancedList.add(enhancedTransaction);
       affectedPairs.add('${enhancedTransaction.clientId}_${enhancedTransaction.fundCode}');
       successCount++;
+
+      onProgress?.call(0.35 * ((idx + 1) / total));
     }
+    onProgress?.call(0.35);
 
-    onProgress?.call(0.25);
-
-    // Phase B: batch insert into DB (single DB transaction)
+    // Phase B: batch insert into DB (0.35 → 0.50)
     if (!kIsWeb && enhancedList.isNotEmpty) {
       await _repository!.batchInsertTransactions(enhancedList);
     }
-
-    // Single list append instead of O(n²) per-row copies
     _transactions = [..._transactions, ...enhancedList];
-
     for (final tx in enhancedList) {
       _clearRelatedCaches(tx.clientId, tx.fundCode);
     }
-
     onProgress?.call(0.50);
 
-    // Phase C: rebuild each affected holding once
+    // Phase C: rebuild each affected holding (0.50 → 0.90)
     final pairs = affectedPairs.toList();
     for (int i = 0; i < pairs.length; i++) {
       final parts = pairs[i].split('_');
       await _rebuildHolding(parts[0], parts[1]);
-      if (pairs.length > 3 && i % ((pairs.length / 4).ceil()) == 0) {
-        onProgress?.call(0.50 + 0.40 * (i / pairs.length));
-      }
+      onProgress?.call(0.50 + 0.40 * ((i + 1) / pairs.length));
     }
-
     onProgress?.call(0.90);
 
-    // Phase D: save once and notify once
+    // Phase D: save once and notify once (0.90 → 1.0)
     await saveData();
-
     onProgress?.call(1.0);
     return successCount;
   }
@@ -1170,13 +1172,16 @@ class DataManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress, {bool forceRefresh = false}) async {
+  Future<void> refreshAllHoldings(FundService fundService, void Function(int, int)? onProgress, {bool forceRefresh = false, int? navToleranceTradingDays}) async {
     final total = _holdings.length;
 
     // For short-press refresh (forceRefresh=false), allow a generous NAV
     // date tolerance so weekly-updating funds are not re-fetched every time.
     // Long-press (forceRefresh=true) bypasses the cache entirely.
-    const navToleranceTradingDays = 3;
+    // Callers can also override the tolerance explicitly (e.g. after-hours
+    // valuation refresh uses 0 to detect just-published NAVs).
+    final tolerance = navToleranceTradingDays ??
+        (forceRefresh ? 0 : 3);
 
     const batchSize = 5;
     for (int batchStart = 0; batchStart < total; batchStart += batchSize) {
@@ -1187,7 +1192,7 @@ class DataManager extends ChangeNotifier {
         final fetched = await fundService.fetchFundInfo(
           holding.fundCode,
           forceRefresh: forceRefresh,
-          navToleranceTradingDays: forceRefresh ? 0 : navToleranceTradingDays,
+          navToleranceTradingDays: tolerance,
         );
         if (fetched['isValid'] == true) {
           final index = _holdings.indexWhere((h) => h.id == holding.id);
@@ -1276,6 +1281,8 @@ class DataManager extends ChangeNotifier {
 
   Future<void> togglePrivacyMode() async {
     await settingsNotifier.togglePrivacyMode();
+    // settingsNotifier.togglePrivacyMode() calls notifyListeners() which
+    // cascades to DataManager via _onSubNotifierChanged — no extra notify needed.
     await logNotifier.addLog(
         '隐私模式: ${settingsNotifier.isPrivacyMode ? "开启" : "关闭"}',
         type: LogType.info);

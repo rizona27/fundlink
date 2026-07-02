@@ -155,6 +155,17 @@ class AppConstants {
            (t >= tradingAfternoonStart && t <= tradingAfternoonEnd);
   }
 
+  /// Returns true after 15:00 on a trading day (market is closed for the day).
+  /// During the midday break (11:30–13:00) this returns false because the
+  /// afternoon session is still ahead and valuation estimates are still live.
+  static bool isAfterMarketClose() {
+    final now = DateTime.now();
+    final w = now.weekday;
+    if (w == DateTime.saturday || w == DateTime.sunday) return true; // weekend = always after close
+    final t = now.hour * 60 + now.minute;
+    return t > tradingAfternoonEnd; // after 15:00
+  }
+
   // ─── Decimal precision: input & display ───
   //
   // 金额（amount/totalCost/totalValue/profit）：整数 10 位，小数 2 位

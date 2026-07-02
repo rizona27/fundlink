@@ -5,6 +5,7 @@ import '../constants/app_constants.dart';
 import '../mixins/scroll_to_top_mixin.dart';
 import '../models/fund_holding.dart';
 import '../models/log_entry.dart';
+import '../models/net_worth_point.dart';
 import '../services/data_manager.dart';
 import '../services/fund_service.dart';
 import '../services/ui_state_service.dart';
@@ -47,8 +48,8 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   Timer? _valuationTimer;
   Timer? _marketStatusTimer;
   bool _isPageVisible = true;
-  DateTime? _lastValuationRefreshTime;
-  
+  bool _lastMarketOpenState = false; // Track transitions to avoid unnecessary setState
+
   bool get _isMarketOpen => AppConstants.isInTradingHours();
   
   bool _shouldPauseAutoRefresh() => !AppConstants.isInTradingHours();
@@ -90,7 +91,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
             _cachedSortedFundCodes = null;
           });
         } else {
-          // Settings/valuation/log changes only — no need to invalidate sort cache
+          // Settings/valuation changes — no need to invalidate sort cache
           setState(() {});
         }
       }
@@ -107,6 +108,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     Future.microtask(() {
       if (mounted) {
+        _loadNavTrendsForNavOnlyFunds();
         setState(() {});
       }
     });
@@ -201,13 +203,12 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     
     if (state == AppLifecycleState.resumed) {
       _isPageVisible = true;
-      _startMarketStatusTimer(); 
+      _startMarketStatusTimer();
       _restartValuationTimer();
       if (_dataManager.isValuationRefreshInProgress) {
         setState(() {});
-      } else {
-        _checkAndRefreshStaleValuation();
       }
+      // Don't force-refresh on resume — let the countdown timer trigger it.
     } else if (state == AppLifecycleState.paused) {
       _isPageVisible = false;
       _stopValuationTimer();
@@ -265,19 +266,25 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
   
   void _startMarketStatusTimer() {
     _stopMarketStatusTimer();
+    _lastMarketOpenState = !_shouldPauseAutoRefresh();
     _marketStatusTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (!_isPageVisible || !mounted) return;
-      
+
       final shouldPause = _shouldPauseAutoRefresh();
-      
+
       if (_showValuationRefresh && _valuationTimer == null && !shouldPause) {
         _restartValuationTimer();
       }
       else if (shouldPause && _valuationTimer != null) {
         _stopValuationTimer();
       }
-      
-      setState(() {});
+
+      // Only rebuild when market open/close state actually transitions
+      final isOpen = !shouldPause;
+      if (isOpen != _lastMarketOpenState) {
+        _lastMarketOpenState = isOpen;
+        setState(() {});
+      }
     });
   }
   
@@ -366,30 +373,6 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     }
   }
 
-  Future<void> _checkAndRefreshStaleValuation() async {
-    if (!_showValuationRefresh || _dataManager.isValuationRefreshInProgress) return;
-    
-    if (_shouldPauseAutoRefresh()) {
-      return;
-    }
-    
-    if (_lastValuationRefreshTime != null &&
-        DateTime.now().difference(_lastValuationRefreshTime!).inSeconds < 5) {
-      return;
-    }
-    bool needRefresh = false;
-    for (var holding in _dataManager.holdings) {
-      final cached = _dataManager.getValuation(holding.fundCode);
-      if (cached == null) {
-        needRefresh = true;
-        break;
-      }
-    }
-    if (needRefresh) {
-      await _onValuationRefresh(silent: true);
-    }
-  }
-
   Future<void> _onValuationRefresh({bool silent = false}) async {
     if (_dataManager.isValuationRefreshInProgress) {
       if (!silent && mounted) {
@@ -399,14 +382,25 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     }
 
     if (!silent && mounted && !_isMarketOpen) {
-      context.showToast('当前为非交易时间，仅能获取收市后估值');
+      context.showToast('当前为非交易时间，净值更新后刷新');
     }
 
-    _lastValuationRefreshTime = DateTime.now();
     _stopValuationTimer();
 
     try {
       await _dataManager.refreshAllValuations(_fundService, silent: silent);
+      // After valuation refresh, also refresh NAV trends for funds without
+      // valuation API so blue 「净」labels have fresh data.
+      await _loadNavTrendsForNavOnlyFunds();
+
+      // After market close, also refresh fund-holding NAV data so
+      // _isNavPublishedForHolding() can detect just-published NAVs and
+      // switch from grey 「估」to green 「净」.
+      if (AppConstants.isAfterMarketClose()) {
+        await _dataManager.refreshAllHoldings(_fundService, null,
+            forceRefresh: false, navToleranceTradingDays: 0);
+      }
+
       if (mounted && _sortKey == SortKey.latestNav) {
         setState(() {
           _cachedSortedFundCodes = null;
@@ -430,8 +424,17 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (!mounted) return;
     try {
       await _dataManager.refreshAllHoldings(_fundService, null);
+      // After refreshing NAV data, also refresh valuations so the display
+      // can immediately switch from grey 「估」to green 「净」when the NAV
+      // has been published.
+      if (!_dataManager.isValuationRefreshInProgress) {
+        await _dataManager.refreshAllValuations(_fundService, silent: true);
+        await _loadNavTrendsForNavOnlyFunds();
+      }
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _cachedSortedFundCodes = null;
+        });
         context.showToast('基金数据刷新完成');
         await _dataManager.addLog('手动刷新基金数据完成', type: LogType.success);
       }
@@ -447,8 +450,16 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     if (!mounted) return;
     try {
       await _dataManager.refreshAllHoldings(_fundService, null, forceRefresh: true);
+      // After force-refreshing NAV data, also refresh valuations so both
+      // data sources are current and the green 「净」detection works.
+      if (!_dataManager.isValuationRefreshInProgress) {
+        await _dataManager.refreshAllValuations(_fundService, silent: true);
+        await _loadNavTrendsForNavOnlyFunds();
+      }
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _cachedSortedFundCodes = null;
+        });
         context.showToast('强制刷新完成');
         await _dataManager.addLog('强制刷新所有基金数据完成', type: LogType.success);
       }
@@ -478,6 +489,283 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
     return CupertinoColors.systemGrey;
   }
 
+  /// Builds the trailing widget for the "查估值" sort mode.
+  ///
+  /// Three labels:
+  ///   灰「估」— has valuation API, showing intraday estimate %.
+  ///   绿「净」— has valuation API, after hours AND jzrq indicates
+  ///            the latest closed trading day's NAV has been published.
+  ///   蓝「净」— no valuation API (weekly / closed-period funds), showing
+  ///            growth % from the last two NAV trend points.
+  Widget? _buildValuationTrailing(String fundCode, FundHolding holding, bool isDark) {
+    final cache = _dataManager.getValuation(fundCode);
+    final hasRecord = _dataManager.hasValuationRecord(fundCode);
+
+    // Only funds that have NEVER had valuation data go to blue 「净」.
+    if (cache == null && !hasRecord) {
+      return _buildNavOnlyTrailing(holding, isDark);
+    }
+
+    // Fund has (or had) valuation data but the cache is currently empty
+    // (TTL expired, or not yet refreshed).  Show grey 「估」placeholder
+    // rather than incorrectly routing to blue 「净」.
+    final gszzl = cache?['gszzl'] as double?;
+    final jzrq = cache?['jzrq'] as String?;
+
+    if (gszzl == null) {
+      // Valuation cache stale.  If after close and NAV is published,
+      // show green 净; otherwise grey 估.
+      if (AppConstants.isAfterMarketClose() && _isNavPublishedForHolding(holding)) {
+        final navChange = _getGreenNavChangeFromHolding(fundCode, holding);
+        if (navChange != null) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildBadge('净', const Color(0xFF34C759), isDark),
+              const SizedBox(width: 4),
+              Text(
+                '${navChange >= 0 ? '+' : ''}${navChange.toStringAsFixed(2)}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  height: 1.2,
+                  color: _getChangeColor(navChange),
+                ),
+              ),
+            ],
+          );
+        }
+      }
+      return _buildStaleValuationTrailing(holding, isDark);
+    }
+
+    final bool isAfterClose = AppConstants.isAfterMarketClose();
+
+    // Green 「净」when: after the market is fully closed for the day (after
+    // 15:00) AND the fund's official NAV has been published for the latest
+    // trading day.  During the midday break (11:30–13:00) valuation estimates
+    // are still live from the API, so we stay on grey 「估」.
+    //
+    // We deliberately ignore the valuation API's jzrq here — it may not
+    // update after hours even when the NAV has been published.
+    // holding.navDate (from pingzhongdata.js) is the authoritative source.
+    final bool navPublished = isAfterClose && _isNavPublishedForHolding(holding);
+
+    final double changeValue;
+    final Color badgeColor;
+    final String badgeLabel;
+
+    if (navPublished) {
+      // Green 净: the fund's official NAV has been published today.
+      // Use holding.currentNav (from fund info API, same source as the
+      // fund card) divided by yesterday's NAV from the trend cache to
+      // compute the true daily change.  Fall back to gszzl only when
+      // the trend cache is unavailable.
+      final navChange = _getGreenNavChangeFromHolding(fundCode, holding);
+      changeValue = navChange ?? gszzl;
+      badgeColor = const Color(0xFF34C759);
+      badgeLabel = '净';
+    } else {
+      changeValue = gszzl;
+      badgeColor = CupertinoColors.systemGrey;
+      badgeLabel = '估';
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBadge(badgeLabel, badgeColor, isDark),
+        const SizedBox(width: 4),
+        Text(
+          '${changeValue >= 0 ? '+' : ''}${changeValue.toStringAsFixed(2)}%',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+            color: _getChangeColor(changeValue),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Returns true when today's NAV has actually been published.
+  ///
+  /// On a trading day after ~20:00 (fund companies typically publish by then):
+  ///   → true only when holding.navDate == today
+  /// On a weekend:
+  ///   → true only when holding.navDate == Friday
+  /// Before 20:00 on a trading day:
+  ///   → always false (today's NAV hasn't been published yet, even though
+  ///     yesterday's NAV exists — showing yesterday as green 净 is misleading
+  ///     because the user expects green to mean "today's NAV is out")
+  bool _isNavPublishedForHolding(FundHolding holding) {
+    final now = DateTime.now();
+    final navDay = DateTime(holding.navDate.year, holding.navDate.month, holding.navDate.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final weekday = now.weekday;
+    final hour = now.hour;
+
+    // After 20:00 on a trading day: expect today's NAV
+    if (weekday <= DateTime.friday && hour >= 20) {
+      return !navDay.isBefore(today);
+    }
+
+    // Weekend: expect Friday's NAV
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      final friday = today.subtract(Duration(days: weekday - DateTime.friday));
+      return !navDay.isBefore(friday);
+    }
+
+    // Before 20:00 on a trading day (or Monday before 20:00):
+    // today's NAV hasn't been published yet — stay grey 估.
+    return false;
+  }
+
+
+  /// Builds a translucent capsule badge for valuation/net-value labels.
+  Widget _buildBadge(String label, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+          letterSpacing: 0.2,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  /// Returns the NAV trend growth % for [fundCode] from the last two NAV
+  /// points in the in-memory cache. Returns null if trend data is unavailable
+  /// or insufficient.
+  double? _getNavTrendChange(String fundCode) {
+    final points = _fundService.getNavFromCacheSync(fundCode);
+    if (points == null || points.length < 2) return null;
+    final newest = points.last.nav;
+    final previous = points[points.length - 2].nav;
+    if (previous <= 0) return null;
+    return (newest - previous) / previous * 100;
+  }
+
+  /// Computes the green-「净」NAV daily change using [holding.currentNav] as
+  /// today's published NAV and the last point in the trend cache as the prior
+  /// trading day's NAV.  This matches the data shown in the fund card and
+  /// historical NAV views (both sourced from pingzhongdata.js via fetchFundInfo),
+  /// NOT the valuation API.
+  double? _getGreenNavChangeFromHolding(String fundCode, FundHolding holding) {
+    final todayNav = holding.currentNav;
+    if (todayNav <= 0) return null;
+
+    // Get yesterday's NAV from the trend cache.
+    // The last point in the trend cache is typically yesterday's (or today's
+    // if recently updated).  We need the point before today's NAV date.
+    final points = _fundService.getNavFromCacheSync(fundCode);
+    if (points == null || points.isEmpty) return null;
+
+    // Find the data point whose date matches holding.navDate (today).
+    // Its previous point is yesterday's NAV.
+    final navDay = DateTime(holding.navDate.year, holding.navDate.month, holding.navDate.day);
+    for (int i = points.length - 1; i >= 0; i--) {
+      final pDay = DateTime(points[i].date.year, points[i].date.month, points[i].date.day);
+      if (pDay.isAtSameMomentAs(navDay) && i > 0) {
+        final prevNav = points[i - 1].nav;
+        if (prevNav > 0) return (todayNav - prevNav) / prevNav * 100;
+        break;
+      }
+    }
+
+    // Fallback: today's point not yet in trend cache — use last point as
+    // previous day and holding.currentNav as today.
+    final prevNav = points.last.nav;
+    if (prevNav > 0) return (todayNav - prevNav) / prevNav * 100;
+
+    return null;
+  }
+
+  /// Triggers a background refresh of the NAV trend cache for [fundCode] so
+  /// that the next render picks up today's just-published NAV.
+  /// Builds a grey 「估」placeholder for funds that have a valuation record
+  /// but whose cache is currently stale (TTL expired).  These are NOT blue-净
+  /// funds — they just need a refresh.
+  Widget? _buildStaleValuationTrailing(FundHolding holding, bool isDark) {
+    // Try NAV trend data as a stand-in
+    final navChange = _getNavTrendChange(holding.fundCode);
+    final changeValue = navChange;
+    if (changeValue == null) return null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBadge('估', CupertinoColors.systemGrey, isDark),
+        const SizedBox(width: 4),
+        Text(
+          '${changeValue >= 0 ? '+' : ''}${changeValue.toStringAsFixed(2)}%',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+            color: _getChangeColor(changeValue),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds a trailing widget for funds without valuation API data (weekly /
+  /// closed-period funds), showing the growth % from the last two NAV trend
+  /// points.  Trend data is loaded by [_loadNavTrendsForNavOnlyFunds] after
+  /// each valuation refresh.
+  Widget? _buildNavOnlyTrailing(FundHolding holding, bool isDark) {
+    final navChange = _getNavTrendChange(holding.fundCode);
+    if (navChange == null) return null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBadge('净', CupertinoColors.systemBlue, isDark),
+        const SizedBox(width: 4),
+        Text(
+          '${navChange >= 0 ? '+' : ''}${navChange.toStringAsFixed(2)}%',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+            color: _getChangeColor(navChange),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Loads NAV trend data for funds that have no valuation API (blue-「净」).
+  /// Called once per calendar day after the valuation refresh completes.
+  /// Loads NAV trend data for ALL funds after each valuation refresh.
+  /// This keeps the trend cache in sync with the valuation cache so that
+  /// green-「净」funds always have fresh trend data to compute the true
+  /// NAV daily change.
+  Future<void> _loadNavTrendsForNavOnlyFunds() async {
+    final codes = _dataManager.holdings.map((h) => h.fundCode).toSet().toList();
+    if (codes.isEmpty) return;
+
+    final futures = codes.map((c) =>
+        _fundService.fetchNetWorthTrend(c).catchError((_) => <NetWorthPoint>[]));
+    await Future.wait(futures);
+
+    if (mounted) {
+      _cachedSortedFundCodes = null;
+      setState(() {});
+    }
+  }
+
   Map<String, List<FundHolding>> get _filteredGroupedFunds {
     final allHoldings = _dataManager.holdings;
     if (_searchText.isEmpty) {
@@ -502,6 +790,86 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       map.putIfAbsent(holding.fundCode, () => []).add(holding);
     }
     return map;
+  }
+
+  /// Compares two fund codes for the "查估值" sort mode.
+  ///
+  /// Funds are sorted into three tiers:
+  ///   1. Valuation (gszzl) available, NAV not yet updated → 「估」label
+  ///   2. Valuation (gszzl) available, NAV updated (green 「净」)
+  ///   3. No valuation API, growth from trend cache (blue 「净」)
+  /// Within each tier, sorted by the respective change %.
+  int _compareForLatestNav(String codeA, String codeB,
+      List<FundHolding> fundsA, List<FundHolding> fundsB) {
+    final cacheA = _dataManager.getValuation(codeA);
+    final cacheB = _dataManager.getValuation(codeB);
+
+    final holdingA = fundsA.isNotEmpty ? fundsA.first : null;
+    final holdingB = fundsB.isNotEmpty ? fundsB.first : null;
+
+    final tierA = _latestNavTier(codeA, cacheA, holdingA);
+    final tierB = _latestNavTier(codeB, cacheB, holdingB);
+
+    if (tierA != tierB) return tierA.compareTo(tierB);
+
+    // Same tier — sort by the respective change %
+    final valueA = _latestNavSortValue(codeA, cacheA, tierA, holding: holdingA);
+    final valueB = _latestNavSortValue(codeB, cacheB, tierB, holding: holdingB);
+
+    if (valueA != null && valueB != null) {
+      return _sortOrder == SortOrder.ascending
+          ? valueA.compareTo(valueB)
+          : valueB.compareTo(valueA);
+    }
+    if (valueA != null) return -1;
+    if (valueB != null) return 1;
+    return codeA.compareTo(codeB);
+  }
+
+  /// Returns the tier for [fundCode]: 1 =估, 2 =绿净, 3 =蓝净。
+  ///
+  /// Green 「净」(tier 2) is used after hours when the fund's NAV has been
+  /// published for today.  We check both the valuation API's jzrq (fast but
+  /// can lag) and the holding's navDate (updated by refreshAllHoldings via
+  /// pingzhongdata.js, which is typically fresher after ~20:00).
+  int _latestNavTier(String fundCode, Map<String, dynamic>? cache,
+      FundHolding? holding) {
+    // Only truly API-less funds go to blue tier
+    if (cache == null && !_dataManager.hasValuationRecord(fundCode)) return 3;
+
+    // Fund has a valuation record but cache is currently stale.
+    // Don't relegate to blue tier — keep as grey 估.
+    final hasGszzl = cache != null && cache['gszzl'] != null;
+    if (!hasGszzl) return 1; // grey 「估」(stale, needs refresh)
+
+    // During trading hours (including midday break): valuation takes priority
+    if (!AppConstants.isAfterMarketClose()) return 1;
+
+    // After close (after 15:00): check if NAV is published → green 净
+    if (holding != null && _isNavPublishedForHolding(holding)) return 2;
+
+    return 1; // grey 「估」
+  }
+
+  /// Returns the sort value for [fundCode] based on its tier.
+  double? _latestNavSortValue(
+      String fundCode, Map<String, dynamic>? cache, int tier,
+      {FundHolding? holding}) {
+    switch (tier) {
+      case 1: // grey 「估」: sort by gszzl (valuation estimate %)
+        if (cache == null) return null;
+        final gszzl = cache['gszzl'];
+        return gszzl != null ? (gszzl as num).toDouble() : null;
+      case 2: // green 「净」: sort by the actual published NAV daily change
+        if (holding != null && holding.currentNav > 0) {
+          return _getGreenNavChangeFromHolding(fundCode, holding);
+        }
+        return _getNavTrendChange(fundCode);
+      case 3: // blue 「净」: sort by NAV trend growth
+        return _getNavTrendChange(fundCode);
+      default:
+        return null;
+    }
   }
 
   List<String>? _cachedSortedFundCodes;
@@ -532,18 +900,15 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
       final fundsA = _filteredGroupedFunds[a]!;
       final fundsB = _filteredGroupedFunds[b]!;
 
-      double? valueA, valueB;
       if (_sortKey == SortKey.latestNav) {
-        final cacheA = _dataManager.getValuation(a);
-        final cacheB = _dataManager.getValuation(b);
-        valueA = cacheA != null ? cacheA['gszzl'] as double : null;
-        valueB = cacheB != null ? cacheB['gszzl'] as double : null;
-      } else {
-        final firstA = fundsA.first;
-        final firstB = fundsB.first;
-        valueA = _sortKey.getValue(firstA);
-        valueB = _sortKey.getValue(firstB);
+        return _compareForLatestNav(a, b, fundsA, fundsB);
       }
+
+      double? valueA, valueB;
+      final firstA = fundsA.first;
+      final firstB = fundsB.first;
+      valueA = _sortKey.getValue(firstA);
+      valueB = _sortKey.getValue(firstB);
 
       if (valueA == null && valueB == null) return a.compareTo(b);
       if (valueA == null) return 1;
@@ -937,49 +1302,7 @@ class _SummaryViewState extends State<SummaryView> with WidgetsBindingObserver, 
                       Widget? trailing;
                       if (_sortKey != SortKey.none) {
                         if (_sortKey == SortKey.latestNav) {
-                          final cache = _dataManager.getValuation(fundCode);
-                          if (cache != null) {
-                            final gsz = (cache['gsz'] as num?)?.toDouble();
-                            final gszzl = (cache['gszzl'] as num?)?.toDouble();
-                            if (gsz != null && gszzl != null) {
-                              final changeColor = _getChangeColor(gszzl);
-                              trailing = Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${gszzl >= 0 ? '+' : ''}${gszzl.toStringAsFixed(2)}%',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      height: 1.2,
-                                      color: changeColor,
-                                    ),
-                                  ),
-                                  Text(
-                                    ' (${gsz.toStringAsFixed(4)})',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.normal,
-                                      height: 1.2,
-                                      color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            } else {
-                              trailing = Text(
-                                '--% (--)',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.2,
-                                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
-                                ),
-                              );
-                            }
-                          } else {
-                            trailing = const SizedBox.shrink();
-                          }
+                          trailing = _buildValuationTrailing(fundCode, first, isDark);
                         } else {
                           final sortValue = _sortKey.getValue(first);
                           final valueStr = sortValue != null

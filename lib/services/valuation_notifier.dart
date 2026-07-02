@@ -74,6 +74,12 @@ class ValuationNotifier extends ChangeNotifier {
 
   // ─── Cache access ───
 
+  /// Returns true if this fund has ever had a valuation record cached,
+  /// regardless of whether it is currently fresh.
+  bool hasValuationRecord(String fundCode) {
+    return _fValCache.containsKey(fundCode);
+  }
+
   Map<String, dynamic>? getValuation(String fundCode) {
     final cached = _fValCache[fundCode];
     if (cached == null) return null;
@@ -81,32 +87,42 @@ class ValuationNotifier extends ChangeNotifier {
     if (cacheTime == null) return null;
 
     final now = DateTime.now();
-    if (now.difference(cacheTime).inSeconds >
-        AppConstants.valuationCacheValidSeconds) {
+    final secondsSinceCache = now.difference(cacheTime).inSeconds;
+    final isTradingTime = AppConstants.isInTradingHours();
+
+    Map<String, dynamic> baseResult() {
+      return {
+        'gsz': cached['gsz'],
+        'gszzl': cached['gszzl'],
+        'gztime': cached['gztime'],
+        if (cached.containsKey('dwjz')) 'dwjz': cached['dwjz'],
+        if (cached.containsKey('jzrq')) 'jzrq': cached['jzrq'],
+      };
+    }
+
+    // During trading hours: respect TTL strictly so the estimate stays fresh.
+    if (isTradingTime &&
+        secondsSinceCache > AppConstants.valuationCacheValidSeconds) {
       return null;
     }
 
-    final isTradingTime = AppConstants.isInTradingHours();
-
+    // After hours: today's cached valuation is still meaningful even if the
+    // TTL has passed, because no new intraday estimate will appear until the
+    // next trading session.  Only require the cache to be from today.
     if (!isTradingTime) {
-      final cachedDate = DateTime.parse(cached['cacheTime']);
-      final todayOnly = DateTime(now.year, now.month, now.day);
-      final cachedDateOnly =
-          DateTime(cachedDate.year, cachedDate.month, cachedDate.day);
-      if (cachedDateOnly.isAtSameMomentAs(todayOnly)) {
-        return {
-          'gsz': cached['gsz'],
-          'gszzl': cached['gszzl'],
-          'gztime': cached['gztime'],
-        };
+      final cachedDate = DateTime(
+        cacheTime.year, cacheTime.month, cacheTime.day,
+      );
+      final today = DateTime(now.year, now.month, now.day);
+      if (cachedDate.isAtSameMomentAs(today)) {
+        return baseResult();
       }
+      // Cache is from a previous day and stale — return null so the caller
+      // knows a refresh is needed.
+      return null;
     }
 
-    return {
-      'gsz': cached['gsz'],
-      'gszzl': cached['gszzl'],
-      'gztime': cached['gztime'],
-    };
+    return baseResult();
   }
 
   Future<void> updateValuationCache(
@@ -115,6 +131,8 @@ class ValuationNotifier extends ChangeNotifier {
       'gsz': valuation['gsz'],
       'gszzl': valuation['gszzl'],
       'gztime': valuation['gztime'],
+      'dwjz': valuation['dwjz'],
+      'jzrq': valuation['jzrq'],
       'cacheTime': DateTime.now().toIso8601String(),
     };
     await saveValuationCache();
@@ -201,6 +219,8 @@ class ValuationNotifier extends ChangeNotifier {
                   'gsz': valuation['gsz'],
                   'gszzl': valuation['gszzl'] ?? 0.0,
                   'gztime': valuation['gztime'] ?? '',
+                  'dwjz': valuation['dwjz'] ?? 0.0,
+                  'jzrq': valuation['jzrq'] ?? '',
                 });
                 if (valuation['gztime'] != null &&
                     valuation['gztime'].toString().isNotEmpty) {

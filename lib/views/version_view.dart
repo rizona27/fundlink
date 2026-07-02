@@ -16,6 +16,7 @@ import '../constants/app_constants.dart';
 String APP_VERSION = AppConstants.appVersionWithPrefix;
 
 const List<String> UPDATE_LOGS = [
+  'v1.4.3 - 新增估值/净值智能显示，优化导入流程与进度反馈，增加操作说明模块',
   'v1.4.2 - 新增反馈方式',
   'v1.4.1 - 代码整体优化：统一颜色常量、消除重复逻辑、修复空安全问题、架构分层调整',
   'v1.4.0 - 优化了部分已知问题',

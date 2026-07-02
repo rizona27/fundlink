@@ -599,9 +599,11 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
     final isTradingTime = _checkIsTradingTime();
     
     return Row(
+      key: const ValueKey('valuationWidget'),
       mainAxisSize: MainAxisSize.min,
       children: [
         CountdownRefreshButton(
+          key: const ValueKey('valuationRefresh'),
           onRefresh: _onValuationRefresh,
           refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
           isRefreshing: widget.isValuationRefreshing,
@@ -753,6 +755,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
       final isTradingTime = _checkIsTradingTime();
       
       children.add(CountdownRefreshButton(
+        key: const ValueKey('valuationRefresh'),
         onRefresh: _onValuationRefresh,
         refreshIntervalSeconds: widget.valuationRefreshIntervalSeconds!,
         isRefreshing: widget.isValuationRefreshing,
@@ -868,7 +871,7 @@ class _AdaptiveTopBarState extends State<AdaptiveTopBar> with TickerProviderStat
             ),
           ],
         ),
-        child: Icon(CupertinoIcons.delete, size: widget.iconSize, color: hasData ? widget.iconColor : CupertinoColors.systemGrey3),
+        child: Icon(CupertinoIcons.arrow_counterclockwise, size: widget.iconSize, color: hasData ? widget.iconColor : CupertinoColors.systemGrey3),
       ),
     );
   }

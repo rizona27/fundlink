@@ -19,7 +19,7 @@ class FundService {
   final Map<String, Future<Map<String, dynamic>>> _activeRequests = {};
   final Map<String, Map<String, dynamic>> _cache = {};
 
-  final Map<String, List<NetWorthPoint>> _navCache = {};
+  static final Map<String, List<NetWorthPoint>> _navCache = {};
 
   // Portfolio analysis cache — keyed by a hash of fund composition so that
   // re-opening the same client's summary view is instant.
@@ -406,7 +406,7 @@ class FundService {
 
   Future<List<NetWorthPoint>> fetchNetWorthTrend(String code) async {
     _dataManager?.addLog('获取基金 $code 净值趋势', type: LogType.network);
-    
+
     final cachedPoints = await loadNavFromCache(code);
     if (cachedPoints != null && cachedPoints.isNotEmpty) {
       final firstDate = cachedPoints.first.date;
@@ -416,12 +416,27 @@ class FundService {
         '(${ViewUtils.formatDate(firstDate)} ~ ${ViewUtils.formatDate(lastDate)})',
         type: LogType.cache,
       );
-      
+
+      // Fire-and-forget incremental update to keep cache fresh.
       _incrementalUpdateNav(code, cachedPoints);
-      
+
+      // If the last cached point is before today, we may be missing a
+      // just-published NAV.  Re-fetch from API so green-净 labels get
+      // today's point to compute the correct daily change.
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final lastPointDay = DateTime(lastDate.year, lastDate.month, lastDate.day);
+      if (lastPointDay.isBefore(today)) {
+        _dataManager?.addLog(
+          '基金 $code 缓存缺少今日净值，从API重新获取',
+          type: LogType.cache,
+        );
+        return await _fetchNetWorthFromAPI(code);
+      }
+
       return cachedPoints;
     }
-    
+
     return await _fetchNetWorthFromAPI(code);
   }
   
@@ -443,14 +458,17 @@ class FundService {
     final List<dynamic> trendList = jsonDecode(trendArrayStr);
     
     final allPoints = trendList.map((item) => NetWorthPoint.fromJson(item)).toList();
-    
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    final cutoffDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
-    
+
+    // Only exclude points whose date is strictly in the future (tomorrow+).
+    // Today's NAV may already be published after ~20:00 — keeping it allows
+    // green-净 labels to compute the correct daily change.
+    final now = DateTime.now();
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
     final confirmedPoints = allPoints.where((point) {
-      return point.date.isBefore(cutoffDate) || point.date.isAtSameMomentAs(cutoffDate);
+      return !point.date.isAfter(todayEnd);
     }).toList();
-    
+
     final result = confirmedPoints.isEmpty ? allPoints : confirmedPoints;
     
     if (result.isNotEmpty) {
@@ -1005,6 +1023,12 @@ class FundService {
   }
   
   Future<List<NetWorthPoint>?> loadNavFromCache(String code) async {
+    return _navCache[code];
+  }
+
+  /// Synchronous read of the in-memory NAV trend cache.
+  /// Returns null if not yet loaded for this fund.
+  List<NetWorthPoint>? getNavFromCacheSync(String code) {
     return _navCache[code];
   }
   

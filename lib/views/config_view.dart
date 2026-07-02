@@ -13,6 +13,7 @@ import '../utils/animation_config.dart';
 import '../widgets/theme_switch.dart';
 import 'add_holding_view.dart';
 import 'export_holding_view.dart';
+import 'guide_view.dart';
 import 'import_holding_view.dart';
 import 'license_view.dart';
 import 'log_view.dart';
@@ -33,7 +34,7 @@ class ConfigView extends StatefulWidget {
 }
 
 class _ConfigViewState extends State<ConfigView>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late DataManager _dataManager;
   Brightness? _lastBrightness;
   Timer? _animationTimer;
@@ -44,8 +45,9 @@ class _ConfigViewState extends State<ConfigView>
   bool _isAppSettingsExpanded = false;
   bool _isAboutExpanded = false;
 
-  Timer? _gradientTimer;
-  double _gradientOffset = 0.0;
+  // Gradient animation — driven by an AnimationController (vsync-aware,
+  // auto-pauses when the widget is off-screen or the tab isn't visible).
+  late final AnimationController _gradientController;
   static const List<Color> _gradientColors = [
     Color(0xFFD4A5A5),
     Color(0xFFE8B89D),
@@ -62,47 +64,32 @@ class _ConfigViewState extends State<ConfigView>
   @override
   void initState() {
     super.initState();
+    // Use a Ticker-based approach instead of a raw Timer so the animation
+    // stops automatically when the widget is not visible and doesn't burn
+    // CPU on every frame.  The controller loops forever; we sample its value
+    // on each tick and derive a slowly-moving offset that drives the shader.
+    _gradientController = AnimationController(
+      duration: const Duration(seconds: 30),
+      vsync: this,
+    )..repeat();
+
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         _dataManager = DataManagerProvider.of(context);
         _lastBrightness = CupertinoTheme.brightnessOf(context);
 
         await _loadSectionStates();
-        _startGradientAnimation();
       }
-    });
-  }
-
-  void _startGradientAnimation() {
-    _gradientTimer?.cancel();
-    WidgetsBinding.instance.addObserver(this);
-    _gradientTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _gradientOffset = (_gradientOffset + 0.004) % 1.0;
-      });
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _gradientTimer?.cancel();
-      _gradientTimer = null;
-    } else if (state == AppLifecycleState.resumed && _gradientTimer == null) {
-      _gradientTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() {
-          _gradientOffset = (_gradientOffset + 0.004) % 1.0;
-        });
-      });
-    }
+    // No-op: AnimationController auto-pauses when the app is backgrounded
+    // via the TickerProvider, so we don't need to manually cancel/restart.
+    // Keeping the observer registration for other potential uses.
   }
 
   bool get _allSectionsCollapsed =>
@@ -180,7 +167,7 @@ class _ConfigViewState extends State<ConfigView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _animationTimer?.cancel();
-    _gradientTimer?.cancel();
+    _gradientController.dispose();
     super.dispose();
   }
 
@@ -419,6 +406,19 @@ class _ConfigViewState extends State<ConfigView>
             Navigator.push(
               context,
               CupertinoPageRoute(builder: (context) => const LogView()),
+            );
+          },
+        ),
+        _buildDivider(isDarkMode),
+        _buildMenuItem(
+          icon: CupertinoIcons.question_circle,
+          title: '操作说明',
+          subtitle: '功能操作提示',
+          isDarkMode: isDarkMode,
+          onTap: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(builder: (context) => const GuideView()),
             );
           },
         ),
@@ -969,16 +969,23 @@ class _ConfigViewState extends State<ConfigView>
                 opacity: isCollapsed ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 600),
                 curve: Curves.easeInOut,
-                child: ShaderMask(
-                  shaderCallback: (bounds) {
-                    return LinearGradient(
-                      colors: _gradientColors,
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      transform: GradientRotation(_gradientOffset * 2 * 3.14159),
-                    ).createShader(bounds);
+                child: AnimatedBuilder(
+                  animation: _gradientController,
+                  builder: (context, child) {
+                    final offset = (_gradientController.value * 5.0) % 1.0;
+                    return ShaderMask(
+                      shaderCallback: (bounds) {
+                        return LinearGradient(
+                          colors: _gradientColors,
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          transform: GradientRotation(offset * 2 * 3.14159),
+                        ).createShader(bounds);
+                      },
+                      child: child,
+                    );
                   },
-                  child: Text(
+                  child: const Text(
                     'Happiness around the corner.',
                     style: TextStyle(
                       fontSize: 12,

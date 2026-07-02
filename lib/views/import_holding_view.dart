@@ -13,10 +13,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:uuid/uuid.dart';
 import '../constants/app_constants.dart';
+import '../models/client_mapping.dart';
 import '../models/log_entry.dart';
 import '../models/transaction_record.dart';
-import '../models/client_mapping.dart';
 import '../services/client_mapping_service.dart';
 import '../services/data_manager.dart';
 import '../services/file_import_service.dart';
@@ -52,6 +53,12 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   final ClientMappingService _mappingService = ClientMappingService();
   
   ImportFileType _detectedFileType = ImportFileType.unknown;
+
+  // Mapping file state
+  int _mappingClientIdIndex = -1;
+  int _mappingClientNameIndex = -1;
+  int _mappingNewCount = 0;
+  int _mappingSkipCount = 0;
 
   final List<FieldConfig> _fieldConfigs = [
     FieldConfig(id: 'clientName', label: '客户姓名', required: true, mappedIndex: -1, hint: '客户姓名/客户名/姓名'),
@@ -220,6 +227,7 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Widget _buildStepIndicator(bool isDarkMode) {
+    final isMapping = _detectedFileType == ImportFileType.mapping;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
@@ -227,9 +235,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         children: [
           _stepCircle(1, '选择文件', isDarkMode),
           _stepLine(1, isDarkMode),
-          _stepCircle(2, '字段映射', isDarkMode),
+          _stepCircle(2, isMapping ? '映射预览' : '字段映射', isDarkMode),
           _stepLine(2, isDarkMode),
-          _stepCircle(3, '导入确认', isDarkMode),
+          _stepCircle(3, isMapping ? '开始导入' : '导入确认', isDarkMode),
         ],
       ),
     );
@@ -283,6 +291,18 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
   }
 
   Widget _buildStepContent(bool isDarkMode) {
+    if (_detectedFileType == ImportFileType.mapping) {
+      switch (_currentStep) {
+        case 1:
+          return _buildUploadStep(isDarkMode);
+        case 2:
+          return _buildMappingPreviewStep(isDarkMode);
+        case 3:
+          return _buildMappingConfirmStep(isDarkMode);
+        default:
+          return const SizedBox();
+      }
+    }
     switch (_currentStep) {
       case 1:
         return _buildUploadStep(isDarkMode);
@@ -902,6 +922,434 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
     }
 
     setState(() => _currentStep = 3);
+  }
+
+  /// Simple field config for mapping column selection.
+  static const List<Map<String, String>> _mappingFieldConfigs = [
+    {'id': 'clientId', 'label': '客户号', 'hint': '客户号/客户编号/核心客户号'},
+    {'id': 'clientName', 'label': '客户姓名', 'hint': '客户姓名/客户名/姓名'},
+  ];
+
+  /// Step 2 for mapping files: column mapping with picker, same pattern as
+  /// holdings import.
+  Widget _buildMappingPreviewStep(bool isDarkMode) {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? CupertinoColors.systemGrey6.withOpacity(0.4)
+                : CupertinoColors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.arrow_2_squarepath, size: 16, color: AppConstants.secondaryText),
+                    SizedBox(width: 8),
+                    Text(
+                      '请将字段映射到文件中的对应列',
+                      style: TextStyle(fontSize: 13, color: CupertinoColors.label),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 0),
+              for (int i = 0; i < _mappingFieldConfigs.length; i++)
+                _buildMappingFieldItem(_mappingFieldConfigs[i], isDarkMode, i == _mappingFieldConfigs.length - 1),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GlassButton(
+                        label: '上一步',
+                        onPressed: () => setState(() => _currentStep = 1),
+                        isPrimary: false,
+                        height: 44,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GlassButton(
+                        label: '下一步',
+                        onPressed: _mappingClientIdIndex >= 0 && _mappingClientNameIndex >= 0
+                            ? () {
+                                _prepareMappingPreview();
+                                setState(() => _currentStep = 3);
+                                _startMappingImport();
+                              }
+                            : null,
+                        isPrimary: true,
+                        height: 44,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMappingFieldItem(Map<String, String> field, bool isDarkMode, bool isLast) {
+    final fieldId = field['id']!;
+    final currentIndex = fieldId == 'clientId' ? _mappingClientIdIndex : _mappingClientNameIndex;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 100,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 4,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppConstants.lossRed,
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            field['label']!,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            field['hint']!,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDarkMode
+                                  ? CupertinoColors.white.withOpacity(0.5)
+                                  : CupertinoColors.systemGrey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _showMappingFieldPicker(fieldId),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDarkMode
+                          ? CupertinoColors.systemGrey6.withOpacity(0.3)
+                          : CupertinoColors.systemGrey6,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: currentIndex >= 0
+                            ? AppConstants.secondaryText.withOpacity(0.3)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          currentIndex >= 0 ? _headers[currentIndex] : '选择列',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: currentIndex >= 0
+                                ? (isDarkMode ? CupertinoColors.white : AppConstants.secondaryText)
+                                : (isDarkMode ? CupertinoColors.white.withOpacity(0.8) : CupertinoColors.systemGrey),
+                          ),
+                        ),
+                        Icon(CupertinoIcons.chevron_down, size: 14,
+                            color: isDarkMode ? CupertinoColors.white.withOpacity(0.7) : CupertinoColors.systemGrey),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isLast) const Divider(height: 0),
+      ],
+    );
+  }
+
+  void _showMappingFieldPicker(String fieldId) {
+    final currentIndex = fieldId == 'clientId' ? _mappingClientIdIndex : _mappingClientNameIndex;
+    var tempIndex = currentIndex;
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) {
+        final isDarkMode = AppConstants.isDark(context);
+        final textColor = isDarkMode ? CupertinoColors.white : CupertinoColors.black;
+
+        return Container(
+          height: 350,
+          color: CupertinoTheme.of(context).scaffoldBackgroundColor,
+          child: Column(
+            children: [
+              Expanded(
+                child: CupertinoPicker(
+                  itemExtent: 44,
+                  scrollController: FixedExtentScrollController(
+                    initialItem: tempIndex >= 0 ? tempIndex + 1 : 0,
+                  ),
+                  onSelectedItemChanged: (index) {
+                    tempIndex = index == 0 ? -1 : index - 1;
+                    setState(() {
+                      if (fieldId == 'clientId') {
+                        _mappingClientIdIndex = tempIndex;
+                      } else {
+                        _mappingClientNameIndex = tempIndex;
+                      }
+                    });
+                  },
+                  children: [
+                    Center(child: Text('不映射', style: TextStyle(color: textColor))),
+                    ..._headers.map((h) => Center(child: Text(h, style: TextStyle(color: textColor)))),
+                  ],
+                ),
+              ),
+              Container(height: 0.5, color: CupertinoColors.separator),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GlassButton(
+                        label: '取消',
+                        onPressed: () {
+                          setState(() {
+                            if (fieldId == 'clientId') {
+                              _mappingClientIdIndex = currentIndex;
+                            } else {
+                              _mappingClientNameIndex = currentIndex;
+                            }
+                          });
+                          Navigator.pop(context);
+                        },
+                        isPrimary: false,
+                        height: 44,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GlassButton(
+                        label: '确定',
+                        onPressed: () => Navigator.pop(context),
+                        isPrimary: true,
+                        height: 44,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Step 3 for mapping files: import progress and result.
+  Widget _buildMappingConfirmStep(bool isDarkMode) {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? CupertinoColors.systemGrey6.withOpacity(0.4)
+                : CupertinoColors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _isImporting
+                              ? CupertinoIcons.arrow_down_circle
+                              : CupertinoIcons.checkmark_circle_fill,
+                          size: 24,
+                          color: _isImporting
+                              ? AppConstants.secondaryText
+                              : AppConstants.tertiaryText,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _isImporting ? '正在导入...' : '导入完成',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: isDarkMode ? CupertinoColors.white : CupertinoColors.label,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppConstants.secondaryText.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildMappingStat(
+                            _isImporting ? '$_mappingNewCount' : '${_importResult?.successCount ?? 0}',
+                            '新增',
+                            AppConstants.secondaryText,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 40,
+                            color: isDarkMode
+                                ? CupertinoColors.white.withOpacity(0.2)
+                                : CupertinoColors.systemGrey4,
+                          ),
+                          _buildMappingStat(
+                            _isImporting ? '$_mappingSkipCount' : '${_importResult?.skipCount ?? 0}',
+                            '跳过',
+                            AppConstants.lossRed.withOpacity(0.6),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 40,
+                            color: isDarkMode
+                                ? CupertinoColors.white.withOpacity(0.2)
+                                : CupertinoColors.systemGrey4,
+                          ),
+                          _buildMappingStat(
+                            _isImporting ? '--' : '${_importResult?.failCount ?? 0}',
+                            '失败',
+                            _importResult != null && _importResult!.failCount > 0
+                                ? AppConstants.lossRed
+                                : AppConstants.tertiaryText,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Progress bar
+                    if (_isImporting) ...[
+                      Stack(
+                        children: [
+                          Container(
+                            height: 4,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: isDarkMode
+                                  ? CupertinoColors.systemGrey5
+                                  : CupertinoColors.systemGrey4,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: _importProgress,
+                              child: Container(
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: AppConstants.secondaryText,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${(_importProgress * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDarkMode
+                              ? CupertinoColors.white.withOpacity(0.7)
+                              : CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (!_isImporting)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Center(
+                    child: GlassButton(
+                      label: '完成',
+                      onPressed: () => Navigator.of(context).pop(),
+                      isPrimary: true,
+                      width: 200,
+                      height: 44,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMappingStat(String value, String label, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+        ),
+      ],
+    );
   }
 
   Widget _buildConfirmStep(bool isDarkMode) {
@@ -1856,7 +2304,9 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       debugPrint('[Import] 检测到文件类型: $_detectedFileType');
 
       if (_detectedFileType == ImportFileType.mapping) {
-        await _processMappingFile();
+        _autoDetectMappingColumns();
+        _prepareMappingPreview();
+        setState(() => _currentStep = 2);
         return;
       }
 
@@ -1965,112 +2415,156 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
 
     return ImportFileType.holding;
   }
-  
-  Future<void> _processMappingFile() async {
-    try {
-      debugPrint('[Import] 开始处理映射索引文件，共${_rawData.length}条记录');
 
-      int success = 0;
-      int fail = 0;
-      int skip = 0;
+  /// Auto-detect client ID and client name column indices for mapping files.
+  void _autoDetectMappingColumns() {
+    _mappingClientIdIndex = -1;
+    _mappingClientNameIndex = -1;
 
-      // Pre-load existing mappings once
-      final existingMappings = await _mappingService.getAllMappings();
-      final existingMap = <String, ClientMapping>{};
-      for (final m in existingMappings) {
-        existingMap[m.clientId] = m;
+    for (int i = 0; i < _headers.length; i++) {
+      final header = _headers[i].trim().toLowerCase();
+
+      if (_mappingClientIdIndex == -1 &&
+          (header.contains('客户号') ||
+           header.contains('核心客户号') ||
+           header.contains('用户号') ||
+           header.contains('核心用户号') ||
+           header.contains('客户代码') ||
+           header.contains('clientid') ||
+           header.contains('client_id') ||
+           header.contains('user_id') ||
+           header.contains('userid'))) {
+        _mappingClientIdIndex = i;
       }
 
-      int clientIdIndex = -1;
-      int clientNameIndex = -1;
-
-      for (int i = 0; i < _headers.length; i++) {
-        final header = _headers[i].trim().toLowerCase();
-
-        if (clientIdIndex == -1 &&
-            (header.contains('客户号') || 
-             header.contains('核心客户号') || 
-             header.contains('用户号') || 
-             header.contains('核心用户号') || 
-             header.contains('客户代码') ||
-             header.contains('clientid') ||
-             header.contains('client_id') ||
-             header.contains('user_id') ||
-             header.contains('userid'))) {
-          clientIdIndex = i;
-        }
-        
-        if (clientNameIndex == -1 && 
-            (header.contains('客户姓名') || 
-             header.contains('客户名') || 
-             header.contains('姓名') || 
-             header.contains('名字') || 
-             header.contains('核心用户名') ||
-             header.contains('clientname') ||
-             header.contains('client_name') ||
-             header.contains('username') ||
-             header.contains('user_name') ||
-             header == '姓名' ||
-             header == '名字')) {
-          clientNameIndex = i;
-        }
+      if (_mappingClientNameIndex == -1 &&
+          (header.contains('客户姓名') ||
+           header.contains('客户名') ||
+           header.contains('姓名') ||
+           header.contains('名字') ||
+           header.contains('核心用户名') ||
+           header.contains('clientname') ||
+           header.contains('client_name') ||
+           header.contains('username') ||
+           header.contains('user_name') ||
+           header == '姓名' ||
+           header == '名字')) {
+        _mappingClientNameIndex = i;
       }
-      
-      if (clientIdIndex == -1 || clientNameIndex == -1) {
-        throw Exception('无法识别客户号或客户名列');
+    }
+  }
+
+  /// Counts new vs skipped mappings for the preview step.
+  void _prepareMappingPreview() async {
+    _mappingNewCount = 0;
+    _mappingSkipCount = 0;
+
+    final existingMappings = await _mappingService.getAllMappings();
+    final existingMap = <String, String>{};
+    for (final m in existingMappings) {
+      existingMap[m.clientId] = m.clientName;
+    }
+
+    for (final row in _rawData) {
+      if (row.length <= _mappingClientIdIndex ||
+          row.length <= _mappingClientNameIndex) {
+        _mappingSkipCount++;
+        continue;
       }
-      
-      debugPrint('[Import] 客户号列: $_headers[$clientIdIndex], 客户名列: $_headers[$clientNameIndex]');
-      
-      for (final row in _rawData) {
-        try {
-          if (row.length <= clientIdIndex || row.length <= clientNameIndex) {
-            fail++;
-            continue;
-          }
-          
-          final clientId = row[clientIdIndex]?.toString().trim();
-          final clientName = row[clientNameIndex]?.toString().trim();
+      final clientId = row[_mappingClientIdIndex]?.toString().trim() ?? '';
+      final clientName = row[_mappingClientNameIndex]?.toString().trim() ?? '';
+      if (clientId.isEmpty || clientName.isEmpty) {
+        _mappingSkipCount++;
+        continue;
+      }
+      if (existingMap.containsKey(clientId)) {
+        _mappingSkipCount++;
+      } else {
+        _mappingNewCount++;
+        existingMap[clientId] = clientName; // avoid double-counting duplicates
+      }
+    }
+    setState(() {});
+  }
 
-          if (clientId == null || clientId.isEmpty || clientName == null || clientName.isEmpty) {
-            skip++;
-            continue;
-          }
+  Future<void> _processMappingFile({void Function(double)? onProgress}) async {
+    debugPrint('[Import] 开始处理映射索引文件，共${_rawData.length}条记录');
 
-          final existingMapping = existingMap[clientId];
+    int success = 0;
+    int fail = 0;
+    int skip = 0;
 
-          if (existingMapping != null) {
-            skip++;
-            debugPrint('[Import] 跳过重复映射: $clientId -> ${existingMapping.clientName} (文件中为 $clientName)');
-          } else {
-            await _mappingService.addMapping(clientId, clientName);
-            success++;
-            debugPrint('[Import] 新增映射: $clientId -> $clientName');
-          }
-        } catch (e) {
+    // Pre-load existing mappings once
+    final existingMappings = await _mappingService.getAllMappings();
+    final existingMap = <String, ClientMapping>{};
+    for (final m in existingMappings) {
+      existingMap[m.clientId] = m;
+    }
+
+    final total = _rawData.length;
+    for (int i = 0; i < total; i++) {
+      final row = _rawData[i];
+      try {
+        if (row.length <= _mappingClientIdIndex ||
+            row.length <= _mappingClientNameIndex) {
           fail++;
-          debugPrint('[Import] 导入映射失败: $e');
+          continue;
         }
+
+        final clientId = row[_mappingClientIdIndex]?.toString().trim();
+        final clientName = row[_mappingClientNameIndex]?.toString().trim();
+
+        if (clientId == null || clientId.isEmpty ||
+            clientName == null || clientName.isEmpty) {
+          skip++;
+          continue;
+        }
+
+        final existingMapping = existingMap[clientId];
+
+        if (existingMapping != null) {
+          skip++;
+        } else {
+          await _mappingService.addMapping(clientId, clientName);
+          success++;
+          existingMap[clientId] = ClientMapping(
+            id: const Uuid().v4(),
+            clientId: clientId,
+            clientName: clientName,
+          );
+        }
+      } catch (e) {
+        fail++;
+        debugPrint('[Import] 导入映射失败: $e');
       }
 
-      debugPrint('[Import] 映射导入结果: 成功$success, 跳过$skip, 失败$fail');
+      // Report progress every 10 rows or on last row
+      if ((i + 1) % 10 == 0 || i == total - 1) {
+        onProgress?.call((i + 1) / total);
+      }
+    }
 
-      // Sync client names to existing holdings and transactions
-      if (success > 0) {
-        final dataManager = DataManagerProvider.of(context);
-        final changedCount = await dataManager.syncClientNamesFromMappings();
-        debugPrint('[Import] 同步映射到持仓: 更新了 $changedCount 条记录');
-      }
+    debugPrint('[Import] 映射导入结果: 成功$success, 跳过$skip, 失败$fail');
 
-      if (mounted) {
-        context.showToast('映射索引导入完成\n成功: $success, 跳过: $skip, 失败: $fail');
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      debugPrint('[Import] 处理映射文件失败: $e');
-      if (mounted) {
-        context.showToast('映射导入失败: $e');
-      }
+    _mappingSuccess = success;
+    _mappingFail = fail;
+    _mappingSkipCount = skip;
+
+    // Sync client names to existing holdings and transactions
+    if (success > 0) {
+      final dataManager = DataManagerProvider.of(context);
+      await dataManager.syncClientNamesFromMappings();
+    }
+
+    // Show result in the UI (don't pop — caller decides)
+    final dataManager = DataManagerProvider.of(context);
+    dataManager.addLog(
+      '映射导入: 成功$success, 跳过$skip, 失败$fail',
+      type: fail > 0 ? LogType.warning : LogType.success,
+    );
+
+    if (mounted) {
+      setState(() {});
     }
   }
   
@@ -2165,6 +2659,45 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
       }
     }
     return null;
+  }
+
+  /// Import result counts filled by [_processMappingFile] during execution.
+  int _mappingSuccess = 0;
+  int _mappingFail = 0;
+
+  Future<void> _startMappingImport() async {
+    _mappingSuccess = 0;
+    _mappingFail = 0;
+    if (mounted) {
+      setState(() {
+        _isImporting = true;
+        _importProgress = 0;
+      });
+    }
+
+    await _processMappingFile(
+      onProgress: (progress) {
+        if (mounted) {
+          setState(() {
+            _importProgress = progress;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      setState(() {
+        _isImporting = false;
+        _importProgress = 1.0;
+        _importResult = ImportResult(
+          successCount: _mappingSuccess,
+          skipCount: _mappingSkipCount,
+          failCount: _mappingFail,
+          errors: const [],
+          skipReasons: const [],
+        );
+      });
+    }
   }
 
   Future<void> _startImport() async {
@@ -2274,24 +2807,17 @@ class _ImportHoldingViewState extends State<ImportHoldingView> with TickerProvid
         errors.add('第${i + 1}行: $e');
       }
 
-      // Update progress during validation (Phase 1 is fast, just smooth animation)
-      if ((i + 1) % 50 == 0 || i == _validData.length - 1) {
-        final progress = (i + 1) / _validData.length * 0.3;
-        _animationController.animateTo(progress,
-            duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
-      }
+      // Progress driven entirely by Phase 2 (addTransactionsBatch)
     }
 
-    // Phase 2: batch insert all transactions at once
+    // Phase 2: batch insert (0% → 100% via onProgress)
     if (transactionsToImport.isNotEmpty) {
       await dataManager.addTransactionsBatch(
         transactionsToImport,
         onProgress: (progress) {
-          // Map batch progress (0.0-1.0) to overall progress (0.3-1.0)
-          final mappedProgress = 0.3 + progress * 0.7;
           if (mounted) {
-            _animationController.animateTo(mappedProgress,
-                duration: const Duration(milliseconds: 200),
+            _animationController.animateTo(progress,
+                duration: const Duration(milliseconds: 60),
                 curve: Curves.easeOut);
           }
         },

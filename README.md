@@ -116,7 +116,7 @@ lib/
 ├── constants/
 │   └── app_constants.dart                 # 全局常量（API、缓存、业务规则、统一颜色）
 ├── data/
-│   └── industry_classification.dart        # 600+ 只股票代码→行业精确映射表
+│   └── industry_classification.dart       # 600+ 只股票代码→行业精确映射表
 ├── models/
 │   ├── client_mapping.dart                # 客户号↔客户名映射模型
 │   ├── fund_holding.dart                  # 基金持仓模型
@@ -135,7 +135,7 @@ lib/
 │   ├── stock_quote_service.dart           # 腾讯行情 API，批量获取 A 股/港股实时行情
 │   ├── file_import_service.dart           # 智能导入（CSV/Excel，编码检测，模糊匹配）
 │   ├── file_export_service.dart           # 自定义导出（CSV/Excel，20+ 字段可选）
-│   ├── china_trading_day_service.dart      # 中国交易日判断（含节假日与调休）
+│   ├── china_trading_day_service.dart     # 中国交易日判断（含节假日与调休）
 │   ├── industry_classifier.dart           # 行业分类（API→精确映射→关键词 三层降级）
 │   ├── client_mapping_service.dart        # 客户映射词典管理
 │   ├── transaction_utils.dart             # 交易日/确认日/NAV 日期计算
@@ -160,7 +160,7 @@ lib/
 │   ├── splash_view.dart                   # 启动页
 │   ├── summary_view.dart                  # 基金一览（分组/排序/实时估值/搜索）
 │   ├── client_view.dart                   # 客户持仓（拼音排序/置顶/搜索/批量操作）
-│   ├── client_fund_summary_view.dart       # 投资组合深度分析（饼图/风格/行业/重叠）
+│   ├── client_fund_summary_view.dart      # 投资组合深度分析（饼图/风格/行业/重叠）
 │   ├── top_performers_view.dart           # 业绩排名（金额/收益/收益率/天数 多维排序）
 │   ├── fund_detail_view.dart              # 基金详情（净值走势/基准对比/重仓股/K线）
 │   ├── add_holding_view.dart              # 新增持仓（表单/日期选择/重复检测）
@@ -175,7 +175,8 @@ lib/
 │   ├── log_view.dart                      # 系统日志查看
 │   ├── license_view.dart                  # 开源协议（AGPL v3）
 │   ├── permission_settings_view.dart      # 权限许可管理
-│   └── version_view.dart                  # 版本信息与更新日志
+│   ├── version_view.dart                  # 版本信息与更新日志
+│   └── guide_view.dart                    # 操作说明（可搜索/折叠分组/子项展开）
 ├── widgets/
 │   ├── adaptive_top_bar.dart              # 自适应顶栏（刷新/搜索/筛选）
 │   ├── add_transaction_dialog.dart        # 加仓/减仓对话框
