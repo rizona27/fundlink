@@ -114,18 +114,7 @@
 
 ## ☕ 支持本项目
 
-<p align="center">
-  <table align="center">
-    <tr>
-      <td>
-        <img src="assets/icon/wx.png" alt="微信赞赏码" width="150" />
-      </td>
-      <td style="vertical-align: middle; padding-left: 20px;">
-        <b>如果对你有所帮助，可以请我喝杯柠檬水喔～☕</b>
-      </td>
-    </tr>
-  </table>
-</p>
+<img src="assets/icon/wx-support.png" alt="支持本项目" width="470" align="left" />
 
 ---
 
