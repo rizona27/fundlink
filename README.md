@@ -114,7 +114,7 @@
 
 ## ☕ 支持本项目
 
-<img src="assets/icon/wx-support.png" alt="支持本项目" width="470" align="left" />
+<img src="assets/icon/wx-support.png" alt="支持本项目" width="470" style="display: block;" />
 
 ---
 
