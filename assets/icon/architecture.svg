@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="460" viewBox="0 0 1280 460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif">
+  <style>
+    .bg { fill: #FAFBFC; }
+    .card { fill: #FFFFFF; stroke: #E7EAEF; stroke-width: 1; }
+    .core { fill: url(#coreGrad); stroke: #C4D8F0; stroke-width: 1.2; }
+    .cell { fill: #F7F9FC; stroke: #EDF0F4; stroke-width: 1; }
+    .t1 { fill: #1F2328; font-size: 15px; font-weight: 600; }
+    .t1s { fill: #6B7280; font-size: 11px; font-weight: 500; letter-spacing: 2px; }
+    .t2 { fill: #374151; font-size: 13px; font-weight: 600; }
+    .t3 { fill: #6B7280; font-size: 11px; }
+    .pill { fill: #F3F6FA; stroke: #E4E9F0; }
+    .pt { fill: #374151; font-size: 12.5px; font-weight: 500; }
+    .accent { fill: #3E8DDD; }
+    .line { stroke: #C9D4E0; stroke-width: 1.4; fill: none; }
+    .dot { fill: #C9D4E0; }
+    .tagbox { fill: #EFF5FC; stroke: #D7E4F2; }
+    .tag { fill: #3E6FA3; font-size: 11px; font-weight: 600; }
+    .badge { fill: #F2F7F1; stroke: #D9E8D6; }
+    .bt { fill: #4A7A52; font-size: 11.5px; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0D1117; }
+      .card { fill: #161B22; stroke: #2B313B; }
+      .core { fill: url(#coreGradD); stroke: #2B4166; }
+      .cell { fill: #101722; stroke: #232B38; }
+      .t1 { fill: #E6EDF3; }
+      .t1s { fill: #7D8590; }
+      .t2 { fill: #C9D1D9; }
+      .t3 { fill: #8B949E; }
+      .pill { fill: #1A2230; stroke: #2B3648; }
+      .pt { fill: #C9D1D9; }
+      .accent { fill: #6CB2F5; }
+      .line { stroke: #3D4A5C; }
+      .dot { fill: #3D4A5C; }
+      .tagbox { fill: #14202E; stroke: #24384F; }
+      .tag { fill: #7FB7EF; }
+      .badge { fill: #14201A; stroke: #24402C; }
+      .bt { fill: #7DBE8C; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="coreGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F3F8FE"/><stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="coreGradD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131C2B"/><stop offset="1" stop-color="#10151E"/>
+    </linearGradient>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="460" rx="0"/>
+
+  <!-- 顶行 -->
+  <text class="t1s" x="48" y="56">FUNDLINK · ARCHITECTURE</text>
+  <rect class="badge" x="1064" y="36" width="168" height="26" rx="13"/>
+  <text class="bt" x="1148" y="53" text-anchor="middle">隐私优先 · 数据本地</text>
+
+  <!-- ═══ 左列：运行平台 ═══ -->
+  <text class="t2" x="48" y="110">运行平台</text>
+  <g>
+    <rect class="pill" x="48" y="124" width="202" height="36" rx="18"/><text class="pt" x="149" y="147" text-anchor="middle">iOS</text>
+    <rect class="pill" x="48" y="172" width="202" height="36" rx="18"/><text class="pt" x="149" y="195" text-anchor="middle">Android</text>
+    <rect class="pill" x="48" y="220" width="202" height="36" rx="18"/><text class="pt" x="149" y="243" text-anchor="middle">macOS</text>
+    <rect class="pill" x="48" y="268" width="202" height="36" rx="18"/><text class="pt" x="149" y="291" text-anchor="middle">Windows</text>
+    <rect class="pill" x="48" y="316" width="202" height="36" rx="18"/><text class="pt" x="149" y="339" text-anchor="middle">Linux</text>
+    <rect class="pill" x="48" y="364" width="202" height="36" rx="18"/><text class="pt" x="149" y="387" text-anchor="middle">Web</text>
+  </g>
+
+  <!-- ═══ 中列：应用核心 ═══ -->
+  <rect class="core" x="330" y="88" width="500" height="332" rx="16"/>
+  <rect class="accent" x="354" y="112" width="4" height="18" rx="2"/>
+  <text class="t1" x="368" y="126">FundLink 应用核心</text>
+  <text class="t3" x="354" y="152">Flutter · Cupertino 设计语言 · 单一代码库</text>
+
+  <g>
+    <rect class="cell" x="354" y="170" width="220" height="70" rx="10"/>
+    <text class="t2" x="374" y="198">持仓管理</text><text class="t3" x="374" y="220">多客户分组 · 置顶 · 拼音搜索</text>
+    <rect class="cell" x="586" y="170" width="220" height="70" rx="10"/>
+    <text class="t2" x="606" y="198">交易流水</text><text class="t3" x="606" y="220">加权成本 · 待确认 · 自动核销</text>
+    <rect class="cell" x="354" y="252" width="220" height="70" rx="10"/>
+    <text class="t2" x="374" y="280">估值与收益</text><text class="t3" x="374" y="302">盘中估值 · 年化收益 · 多维排序</text>
+    <rect class="cell" x="586" y="252" width="220" height="70" rx="10"/>
+    <text class="t2" x="606" y="280">图表与分析</text><text class="t3" x="606" y="302">业绩走势 · K 线 · 十大重仓</text>
+    <rect class="cell" x="354" y="334" width="220" height="70" rx="10"/>
+    <text class="t2" x="374" y="362">组合穿透</text><text class="t3" x="374" y="384">风格分布 · 行业分布 · 重叠检测</text>
+    <rect class="cell" x="586" y="334" width="220" height="70" rx="10"/>
+    <text class="t2" x="606" y="362">导入导出</text><text class="t3" x="606" y="384">CSV / Excel · 模糊匹配 · 完整备份</text>
+  </g>
+
+  <!-- ═══ 右列 ═══ -->
+  <rect class="card" x="910" y="88" width="322" height="148" rx="14"/>
+  <rect class="accent" x="934" y="112" width="4" height="18" rx="2"/>
+  <text class="t1" x="948" y="126">本地加密存储</text>
+  <text class="t3" x="934" y="154">SQLCipher 全库加密 · SQLite</text>
+  <text class="t3" x="934" y="176">完全离线 · 数据不出设备</text>
+  <text class="t3" x="934" y="198">持仓 / 交易 / 日志 / 设置</text>
+
+  <rect class="card" x="910" y="272" width="322" height="148" rx="14"/>
+  <rect class="accent" x="934" y="296" width="4" height="18" rx="2"/>
+  <text class="t1" x="948" y="310">公开数据源</text>
+  <text class="t3" x="934" y="338">东方财富 · 腾讯行情 · 新浪财经</text>
+  <text class="t3" x="934" y="360">多源冗余 · 接口失效自动降级</text>
+  <text class="t3" x="934" y="382">净值 / 估值 / 行情 · 只读拉取</text>
+
+  <!-- ═══ 连接线 ═══ -->
+  <path class="line" d="M 250 262 L 322 262"/>
+  <circle class="dot" cx="250" cy="262" r="3"/>
+  <rect class="tagbox" x="256" y="234" width="60" height="20" rx="10"/>
+  <text class="tag" x="286" y="248" text-anchor="middle">原生渲染</text>
+
+  <path class="line" d="M 830 162 L 902 162"/>
+  <circle class="dot" cx="830" cy="162" r="3"/>
+  <rect class="tagbox" x="838" y="134" width="60" height="20" rx="10"/>
+  <text class="tag" x="868" y="148" text-anchor="middle">本地读写</text>
+
+  <path class="line" d="M 830 346 L 902 346"/>
+  <circle class="dot" cx="830" cy="346" r="3"/>
+  <rect class="tagbox" x="838" y="318" width="60" height="20" rx="10"/>
+  <text class="tag" x="868" y="332" text-anchor="middle">只读拉取</text>
+</svg>
