@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Flutter-%3E%3D3.0.0-02569B?logo=flutter&logoColor=white" alt="Flutter" />
   <img src="https://img.shields.io/badge/Dart-%3E%3D3.0.0-0175C2?logo=dart&logoColor=white" alt="Dart" />
-  <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Web-lightgrey" alt="Platform" />
+  <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Windows%20%7C%20macOS-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/github/v/release/rizona27/fundlink?label=version&color=blue" alt="Version" />
 </p>
 
@@ -91,7 +91,7 @@ SQLCipher 全库加密的 SQLite 数据库，完全离线、数据不出设备�
 - **AI 直连**：LLM 调用从客户端直连，不经过任何中间服务器
 
 ### 用户体验
-- iOS / Android / Windows / macOS / Linux / Web 全平台
+- iOS / Android / Windows / macOS 四端
 - 浅色 / 深色 / 跟随系统主题；三档文字大小（小/标准/大）
 - Cupertino 设计语言，原生动画交互；统一对话框 / 选择弹窗 / 错误视图 / 分步指示组件
 - 桌面端双列布局（>1000px）、键盘快捷键（Cmd/Ctrl+F 搜索、R 刷新、Esc 收起）
@@ -125,7 +125,7 @@ SQLCipher 全库加密的 SQLite 数据库，完全离线、数据不出设备�
 | macOS | `.dmg` | 拖入 Applications |
 
 **系统要求**：iOS 13+ · Android 7.0+ · macOS 11+ · Windows 10+。
-Linux 与 Web 为同一套 Flutter 代码的源码级支持，不随 Releases 提供预编译包。
+Web 版以源码方式提供（SQLite WASM + IndexedDB，数据层与原生一致），需自行构建，不随 Releases 提供预编译包。
 
 首次启动即为空账本，不需要注册或登录；卸载重装前请用「导出数据 → 完整备份」留档。
 

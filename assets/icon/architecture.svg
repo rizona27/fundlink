@@ -60,8 +60,7 @@
     <rect class="pill" x="48" y="172" width="202" height="36" rx="18"/><text class="pt" x="149" y="195" text-anchor="middle">Android</text>
     <rect class="pill" x="48" y="220" width="202" height="36" rx="18"/><text class="pt" x="149" y="243" text-anchor="middle">macOS</text>
     <rect class="pill" x="48" y="268" width="202" height="36" rx="18"/><text class="pt" x="149" y="291" text-anchor="middle">Windows</text>
-    <rect class="pill" x="48" y="316" width="202" height="36" rx="18"/><text class="pt" x="149" y="339" text-anchor="middle">Linux</text>
-    <rect class="pill" x="48" y="364" width="202" height="36" rx="18"/><text class="pt" x="149" y="387" text-anchor="middle">Web</text>
+    <rect class="pill" x="48" y="316" width="202" height="36" rx="18"/><text class="pt" x="149" y="339" text-anchor="middle">Web</text>
   </g>
 
   <!-- ═══ 中列：应用核心 ═══ -->
@@ -101,10 +100,10 @@
   <text class="t3" x="934" y="382">净值 / 估值 / 行情 · 只读拉取</text>
 
   <!-- ═══ 连接线 ═══ -->
-  <path class="line" d="M 250 262 L 322 262"/>
-  <circle class="dot" cx="250" cy="262" r="3"/>
-  <rect class="tagbox" x="256" y="234" width="60" height="20" rx="10"/>
-  <text class="tag" x="286" y="248" text-anchor="middle">原生渲染</text>
+  <path class="line" d="M 250 238 L 322 238"/>
+  <circle class="dot" cx="250" cy="238" r="3"/>
+  <rect class="tagbox" x="256" y="210" width="60" height="20" rx="10"/>
+  <text class="tag" x="286" y="224" text-anchor="middle">原生渲染</text>
 
   <path class="line" d="M 830 162 L 902 162"/>
   <circle class="dot" cx="830" cy="162" r="3"/>
